@@ -1,20 +1,21 @@
 import Link from 'next/link'
 
-const Header = () => {
+export default function Header() {
   return (
     <header className="bg-gray-800 text-white p-4">
       <nav className="container mx-auto flex justify-between items-center">
         <Link href="/" className="text-xl font-bold">
-          Your Logo
+          Model Hub
         </Link>
-        <ul className="flex space-x-4">
-          <li><Link href="/">Home</Link></li>
-          <li><Link href="/about">About</Link></li>
-          <li><Link href="/contact">Contact</Link></li>
-        </ul>
+        <div>
+          <Link href="/model-catalog" className="mr-4">
+            Model Catalog
+          </Link>
+          <Link href="/inference-endpoints">
+            Inference Endpoints
+          </Link>
+        </div>
       </nav>
     </header>
-  )
+  );
 }
-
-export default Header

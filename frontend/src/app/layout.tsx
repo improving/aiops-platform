@@ -1,26 +1,21 @@
-import Header from '../components/Header'
-import Footer from '../components/Footer'
-import "./globals.css";
+import './globals.css';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Your App Name',
-  description: 'Your app description',
-}
+  title: 'Model Hub',
+  description: 'Explore and deploy AI models',
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body className="flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-grow">
-          {children}
-        </main>
-        <Footer />
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
-  )
+  );
 }
