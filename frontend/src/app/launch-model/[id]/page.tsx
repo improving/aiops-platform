@@ -16,20 +16,35 @@ interface Engine {
   helm_chart_repo: string;
 }
 
+interface Host {
+  hostname: string;
+  cpu_vendor: string;
+  cpu_memory: number;
+  cpu_cores: number;
+  cuda_driver_version: string;
+  cuda_runtime_version: string;
+  gpu_count: number;
+  gpu_memory: number;
+  gpu_model: string;
+  gpu_replicas: number;
+  gpu_sharing_strategy: string;
+}
+
 export default function LaunchModel({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [formData, setFormData] = useState({
-    acceleratorType: '',
-    acceleratorCount: 1,
+    hostId: '',
     engineId: '',
   });
   const [envVars, setEnvVars] = useState<EnvVar[]>([{ name: '', value: '' }]);
   const [secrets, setSecrets] = useState<EnvVar[]>([{ name: '', value: '' }]);
   const [engines, setEngines] = useState<Engine[]>([]);
+  const [hosts, setHosts] = useState<Host[]>([]);
 
   useEffect(() => {
     fetchEngines();
+    fetchHosts();
   }, []);
 
   const fetchEngines = async () => {
@@ -42,6 +57,19 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       setEngines(data);
     } catch (error) {
       console.error('Error fetching engines:', error);
+    }
+  };
+
+  const fetchHosts = async () => {
+    try {
+      const response = await fetch('/api/v1alpha1/hosts');
+      if (!response.ok) {
+        throw new Error('Failed to fetch hosts');
+      }
+      const data = await response.json();
+      setHosts(data);
+    } catch (error) {
+      console.error('Error fetching hosts:', error);
     }
   };
 
@@ -90,7 +118,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       <Header />
       <main className="flex-grow container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Launch Model</h1>
-        <form onSubmit={handleSubmit} className="max-w-lg mx-auto">
+        <form onSubmit={handleSubmit} className="max-w-6xl mx-auto">
           <div className="mb-4">
             <div className="flex border-b">
               {tabs.map((tab) => (
@@ -110,30 +138,53 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
           {activeTab === 'accelerators' && (
             <div>
-              <select
-                name="acceleratorType"
-                value={formData.acceleratorType}
-                onChange={handleInputChange}
-                className="w-full p-2 border rounded mb-2"
-              >
-                <option value="">Select Accelerator Type</option>
-                <option value="GPU">GPU</option>
-                <option value="TPU">TPU</option>
-                <option value="FPGA">FPGA</option>
-              </select>
-              <input
-                type="number"
-                name="acceleratorCount"
-                value={formData.acceleratorCount}
-                onChange={handleInputChange}
-                min="1"
-                className="w-full p-2 border rounded mb-4"
-                placeholder="Number of accelerators"
-              />
+              <h2 className="text-xl font-bold mb-4">Select Accelerator</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {hosts.map((host) => (
+                  <div
+                    key={host.hostname}
+                    className={`bg-white shadow-lg rounded-lg overflow-hidden cursor-pointer transition duration-300 ease-in-out ${
+                      formData.hostId === host.hostname ? 'ring-2 ring-blue-500' : 'hover:shadow-xl'
+                    }`}
+                    onClick={() => setFormData((prev) => ({ ...prev, hostId: host.hostname }))}
+                  >
+                    <div className="p-6">
+                      <h3 className="text-2xl font-bold mb-2">
+                        {host.gpu_model && host.gpu_model !== 'N/A' ? host.gpu_model : host.cpu_vendor}
+                      </h3>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {host.gpu_count > 0 && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                            {host.gpu_count} GPU
+                          </span>
+                        )}
+                        {host.gpu_memory > 0 && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                            {(host.gpu_memory / 1024).toFixed(1)} GB GPU Memory
+                          </span>
+                        )}
+                        {host.cpu_cores > 0 && (
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                            {host.cpu_cores} CPU Cores
+                          </span>
+                        )}
+                      </div>
+                      {host.cpu_cores > 0 && (
+                        <p className="text-sm text-gray-600 mb-4">
+                          CPU: {host.cpu_vendor} - {(host.cpu_memory / 1024).toFixed(1)} GB Memory
+                        </p>
+                      )}
+                      {/* {host.cuda_driver_version && (
+                        <p className="text-sm text-gray-600">CUDA Driver: {host.cuda_driver_version}</p>
+                      )} */}
+                    </div>
+                  </div>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={handleNext}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded mt-6 transition duration-300 ease-in-out"
               >
                 Next
               </button>
