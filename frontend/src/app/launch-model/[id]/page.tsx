@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -9,16 +9,41 @@ const tabs = ['accelerators', 'deployConfig', 'envVars'];
 
 type EnvVar = { name: string; value: string };
 
+interface Engine {
+  id: string;
+  name: string;
+  description: string;
+  helm_chart_repo: string;
+}
+
 export default function LaunchModel({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [formData, setFormData] = useState({
     acceleratorType: '',
     acceleratorCount: 1,
-    deploymentType: '',
+    engineId: '',
   });
   const [envVars, setEnvVars] = useState<EnvVar[]>([{ name: '', value: '' }]);
   const [secrets, setSecrets] = useState<EnvVar[]>([{ name: '', value: '' }]);
+  const [engines, setEngines] = useState<Engine[]>([]);
+
+  useEffect(() => {
+    fetchEngines();
+  }, []);
+
+  const fetchEngines = async () => {
+    try {
+      const response = await fetch('/api/v1alpha1/engines');
+      if (!response.ok) {
+        throw new Error('Failed to fetch engines');
+      }
+      const data = await response.json();
+      setEngines(data);
+    } catch (error) {
+      console.error('Error fetching engines:', error);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,16 +143,17 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
           {activeTab === 'deployConfig' && (
             <div>
               <select
-                name="deploymentType"
-                value={formData.deploymentType}
+                name="engineId"
+                value={formData.engineId}
                 onChange={handleInputChange}
                 className="w-full p-2 border rounded mb-4"
               >
-                <option value="">Select Deployment Type</option>
-                <option value="TGI">TGI</option>
-                <option value="VLLM">VLLM</option>
-                <option value="Triton">Triton</option>
-                <option value="Custom">Custom</option>
+                <option value="">Select Engine</option>
+                {engines.map((engine) => (
+                  <option key={engine.id} value={engine.id}>
+                    {engine.name}
+                  </option>
+                ))}
               </select>
               <button
                 type="button"

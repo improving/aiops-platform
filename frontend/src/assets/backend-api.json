@@ -1,0 +1,371 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "FastAPI", "version": "0.1.0" },
+  "paths": {
+    "/v1alpha1/models": {
+      "get": {
+        "summary": "Get Models",
+        "operationId": "get_models_v1alpha1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": { "$ref": "#/components/schemas/Model" },
+                  "type": "array",
+                  "title": "Response Get Models V1Alpha1 Models Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/engines": {
+      "get": {
+        "summary": "Get Engines",
+        "operationId": "get_engines_v1alpha1_engines_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": { "$ref": "#/components/schemas/Engine" },
+                  "type": "array",
+                  "title": "Response Get Engines V1Alpha1 Engines Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/hosts": {
+      "get": {
+        "summary": "Get Hosts",
+        "operationId": "get_hosts_v1alpha1_hosts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": { "$ref": "#/components/schemas/Host" },
+                  "type": "array",
+                  "title": "Response Get Hosts V1Alpha1 Hosts Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/inferenceInstance": {
+      "get": {
+        "summary": "List Inference Instances",
+        "operationId": "list_inference_instances_v1alpha1_inferenceInstance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": { "$ref": "#/components/schemas/InferenceInstance" },
+                  "type": "array",
+                  "title": "Response List Inference Instances V1Alpha1 Inferenceinstance Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Inference Instance",
+        "operationId": "create_inference_instance_v1alpha1_inferenceInstance_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/InferenceInstance" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InferenceInstance" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/inferenceInstance/{id}": {
+      "get": {
+        "summary": "Get Inference Instance",
+        "operationId": "get_inference_instance_v1alpha1_inferenceInstance__id__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Id" },
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InferenceInstance" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Inference Instance",
+        "operationId": "delete_inference_instance_v1alpha1_inferenceInstance__id__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Id" },
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Inference Instance",
+        "operationId": "update_inference_instance_v1alpha1_inferenceInstance__id__patch",
+        "parameters": [
+          {
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Id" },
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/InferenceInstance" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InferenceInstance" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Engine": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "name": { "type": "string", "title": "Name", "default": "" },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "helm_chart_repo": {
+            "type": "string",
+            "title": "Helm Chart Repo",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Engine"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": { "$ref": "#/components/schemas/ValidationError" },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Host": {
+        "properties": {
+          "hostname": { "type": "string", "title": "Hostname" },
+          "cpu_vendor": { "type": "string", "title": "Cpu Vendor" },
+          "cpu_memory": { "type": "integer", "title": "Cpu Memory" },
+          "cpu_cores": { "type": "integer", "title": "Cpu Cores" },
+          "cuda_driver_version": {
+            "type": "string",
+            "title": "Cuda Driver Version"
+          },
+          "cuda_runtime_version": {
+            "type": "string",
+            "title": "Cuda Runtime Version"
+          },
+          "gpu_count": { "type": "integer", "title": "Gpu Count" },
+          "gpu_memory": { "type": "integer", "title": "Gpu Memory" },
+          "gpu_model": { "type": "string", "title": "Gpu Model" },
+          "gpu_replicas": { "type": "integer", "title": "Gpu Replicas" },
+          "gpu_sharing_strategy": {
+            "type": "string",
+            "title": "Gpu Sharing Strategy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hostname",
+          "cpu_vendor",
+          "cpu_memory",
+          "cpu_cores",
+          "cuda_driver_version",
+          "cuda_runtime_version",
+          "gpu_count",
+          "gpu_memory",
+          "gpu_model",
+          "gpu_replicas",
+          "gpu_sharing_strategy"
+        ],
+        "title": "Host"
+      },
+      "InferenceInstance": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "model": { "$ref": "#/components/schemas/Model" },
+          "engine": { "$ref": "#/components/schemas/Engine" },
+          "host": { "type": "string", "title": "Host" },
+          "config": {
+            "$ref": "#/components/schemas/InferenceInstanceConfigParams"
+          },
+          "endpoint": { "type": "string", "title": "Endpoint", "default": "" },
+          "healthEndpoint": {
+            "type": "string",
+            "title": "Healthendpoint",
+            "default": ""
+          },
+          "metricsEndpoint": {
+            "type": "string",
+            "title": "Metricsendpoint",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": ["model", "engine", "host", "config"],
+        "title": "InferenceInstance"
+      },
+      "InferenceInstanceConfigParams": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "maxInputLength": { "type": "integer", "title": "Maxinputlength" },
+          "maxTokens": { "type": "integer", "title": "Maxtokens" },
+          "maxBatchPrefillTokens": {
+            "type": "integer",
+            "title": "Maxbatchprefilltokens"
+          },
+          "maxBatchTotalTokens": {
+            "type": "integer",
+            "title": "Maxbatchtotaltokens"
+          },
+          "quantization": { "type": "string", "title": "Quantization" },
+          "image": { "type": "string", "title": "Image" }
+        },
+        "type": "object",
+        "required": [
+          "maxInputLength",
+          "maxTokens",
+          "maxBatchPrefillTokens",
+          "maxBatchTotalTokens",
+          "quantization",
+          "image"
+        ],
+        "title": "InferenceInstanceConfigParams"
+      },
+      "Model": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "name": { "type": "string", "title": "Name", "default": "" },
+          "modelId": { "type": "string", "title": "Modelid", "default": "" },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "category": { "type": "string", "title": "Category", "default": "" },
+          "subcategory": {
+            "type": "string",
+            "title": "Subcategory",
+            "default": ""
+          },
+          "size": { "type": "integer", "title": "Size", "default": 0 }
+        },
+        "type": "object",
+        "title": "Model"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
