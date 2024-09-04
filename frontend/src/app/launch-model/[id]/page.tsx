@@ -73,12 +73,47 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Here you would typically send the form data to your backend
-    console.log('Form submitted:', { ...formData, envVars, secrets });
-    // Redirect to the inference endpoint details page
-    router.push(`/inference-endpoints/${params.id}`);
+    
+    const payload = {
+      model: {
+        id: params.id, // This is the model ID from the URL
+      },
+      engine: {
+        id: formData.engineId,
+      },
+      host: formData.hostId,
+      config: {
+        maxInputLength: 0,
+        maxTokens: 0,
+        maxBatchPrefillTokens: 0,
+        maxBatchTotalTokens: 0,
+        quantization: "",
+        image: ""
+      }, // Config with default values as per the instruction
+    };
+
+    try {
+      const response = await fetch('/api/v1alpha1/inferenceInstance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create inference instance');
+      }
+
+      const data = await response.json();
+      // Redirect to the individual inference endpoint page
+      router.push(`/inference-endpoints/${data.id}`);
+    } catch (error) {
+      console.error('Error creating inference instance:', error);
+      // Handle error (e.g., show an error message to the user)
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
