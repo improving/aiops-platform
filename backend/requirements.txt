@@ -1,5 +1,10 @@
 fastapi>=0.95.2
 uvicorn==0.22.0
-motor==2.5.0
-pydantic==1.10.0
+# motor==2.5.0
+pydantic==2.8.2
 kubernetes>=30.1.0
+PyYAML>=6.0
+uuid
+sqlalchemy==2.0.33
+requests>=2.28.0
+pyhelm3==0.4.0

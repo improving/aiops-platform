@@ -1,0 +1,30 @@
+from pydantic import BaseModel, Field
+from typing import Optional
+import uuid
+from .model import ModelSchema
+from .engine import EngineSchema
+
+class InferenceInstanceConfigParamsSchema(BaseModel):
+    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
+    maxInputLength: Optional[int] = None
+    maxTokens: Optional[int] = None
+    maxBatchPrefillTokens: Optional[int] = None
+    maxBatchTotalTokens: Optional[int] = None
+    quantization: Optional[str] = None
+    image: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class InferenceInstanceSchema(BaseModel):
+    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
+    model: ModelSchema
+    engine: EngineSchema
+    host: str
+    config: Optional[InferenceInstanceConfigParamsSchema] = None
+    endpoint: Optional[str] = None
+    healthEndpoint: Optional[str] = None
+    metricsEndpoint: Optional[str] = None
+
+    class Config:
+        from_attributes = True

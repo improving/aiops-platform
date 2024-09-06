@@ -1,101 +1,67 @@
-import sqlite3
-import os
 import csv
 import uuid
-
-def get_db_connection():
-    conn = sqlite3.connect('database.db')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-# Function to generate a new UUID
-def generate_uuid():
-    return str(uuid.uuid4())
+from .database import SessionLocal, engine, Base
+from api.models import DBModel
+from api.engines import DBEngine
+from api.inference_instance import DBInferenceInstance, DBInferenceInstanceConfigParams
 
 def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    Base.metadata.create_all(bind=engine)
+    load_initial_data()
 
-    # Create models table with all fields
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS models (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        modelId TEXT,
-        description TEXT,
-        category TEXT,
-        subcategory TEXT,
-        size INTEGER,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
+def load_initial_data():
+    db = SessionLocal()
+    try:
+        # Load models
+        if db.query(DBModel).count() == 0:
+            with open('raw_data/models.csv', 'r') as f:
+                csv_reader = csv.DictReader(f)
+                for row in csv_reader:
+                    model = DBModel(
+                        id=uuid.uuid4(),
+                        name=row['name'],
+                        modelId=row['modelId'],
+                        description=row['description'],
+                        category=row['category'],
+                        subcategory=row['subcategory'],
+                        size=int(row['size'])
+                    )
+                    db.add(model)
 
-    # Create engines table with all fields
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS engines (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        description TEXT,
-        helm_chart_repo TEXT,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
+        # Load engines
+        if db.query(DBEngine).count() == 0:
+            with open('raw_data/engines.csv', 'r') as f:
+                csv_reader = csv.DictReader(f)
+                for row in csv_reader:
+                    engine = DBEngine(
+                        id=uuid.uuid4(),
+                        name=row['name'],
+                        description=row['description'],
+                        helm_chart_repo=row['helm_chart_repo'],
+                        helm_chart_name=row['helm_chart_name']
+                    )
+                    db.add(engine)
 
-    # Create inference_instance_config_params table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS inference_instance_config_params (
-        id TEXT PRIMARY KEY,
-        maxInputLength INTEGER,
-        maxTokens INTEGER,
-        maxBatchPrefillTokens INTEGER,
-        maxBatchTotalTokens INTEGER,
-        quantization TEXT,
-        image TEXT,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
+        db.commit()
+    except Exception as e:
+        print(f"An error occurred while loading initial data: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
-    # Create inference_instances table with all fields
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS inference_instances (
-        id TEXT PRIMARY KEY,
-        model_id TEXT,
-        engine_id TEXT,
-        host TEXT,
-        endpoint TEXT,
-        healthEndpoint TEXT,
-        metricsEndpoint TEXT,
-        inference_instance_config_params_id TEXT,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (model_id) REFERENCES models (id),
-        FOREIGN KEY (engine_id) REFERENCES engines (id),
-        FOREIGN KEY (inference_instance_config_params_id) REFERENCES inference_instance_config_params (id)
-    )
-    """)
+def reload_data():
+    db = SessionLocal()
+    try:
+        # Clear existing data
+        db.query(DBEngine).delete()
+        db.query(DBModel).delete()
 
-    # Insert data from CSV files
-    raw_data_dir = 'raw_data'
-    for filename in os.listdir(raw_data_dir):
-        if filename.endswith('.csv'):
-            with open(os.path.join(raw_data_dir, filename), 'r') as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    if filename == 'models.csv':
-                        cursor.execute("""
-                        INSERT OR IGNORE INTO models (id, name, modelId, description, category, subcategory, size)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (generate_uuid(), row['name'], row['modelId'], row['description'], row['category'], row['subcategory'], row['size']))
-                    elif filename == 'engines.csv':
-                        cursor.execute("""
-                        INSERT OR IGNORE INTO engines (id, name, description, helm_chart_repo)
-                        VALUES (?, ?, ?, ?)
-                        """, (generate_uuid(), row['name'], row['description'], row['helm_chart_repo']))
+        # Reload data
+        load_initial_data()
 
-    conn.commit()
-    conn.close()
-
-# init_db()
+        print("Data reloaded successfully")
+    except Exception as e:
+        print(f"An error occurred while reloading data: {e}")
+        db.rollback()
+    finally:
+        db.close()

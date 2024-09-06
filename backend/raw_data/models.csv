@@ -1,2 +1,11 @@
 name,modelId,description,category,subcategory,size
-Llama 3.1,meta-llama/Meta-Llama-3.1-8B-Instruct,Llama 3.1 is a large language model,LLM,Text Generation,8192,
+Llama 3.1 8B Instruct,meta-llama/Meta-Llama-3.1-8B-Instruct,Llama 3.1 is a large language model,LLM,Text Generation,8192,
+BGE large,BAAI/bge-large-en-v1.5,BAAI/bge-large-en-v1.5 is a large language model,Sentence Embeddings,Embedding,8192,
+BGE Reranker,BAAI/bge-reranker-large,BAAI/bge-reranker-large is a large language model,Sentence Ranking,Reranking,8192,
+Llama 3.1 8B,meta-llama/Meta-Llama-3.1-8B,meta-llama/Meta-Llama-3.1-8B is a large language model,LLM,Text Generation,8192,
+Llama 3 8B,meta-llama/Meta-Llama-3-8B,meta-llama/Meta-Llama-3-8B is a large language model,LLM,Text Generation,8192,
+Llama 3 Instruct 8B,meta-llama/Meta-Llama-3-8B-Instruct,meta-llama/Meta-Llama-3-8B-Instruct is a large language model,LLM,Text Generation,8192,
+Llama Prompt Guard 86M,meta-llama/Prompt-Guard-86M,meta-llama/Prompt-Guard-86M is a large language model,LLM,Text Generation,8192,
+Phi 1.5,microsoft/phi-1_5,microsoft/phi-1_5 is a large language model,SLM,Text Generation,4096,
+Phi 3 mini 4k,microsoft/Phi-3-mini-4k-instruct,microsoft/Phi-3-mini-4k-instruct is a small language model,SLM,Text Generation,4096,
+Qwen2 7B Instruct,Qwen/Qwen2-7B-Instruct,Qwen/Qwen2-7B-Instruct is a large language model,LLM,Text Generation,8192,
