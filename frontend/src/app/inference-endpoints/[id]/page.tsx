@@ -1,9 +1,27 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 interface InferenceInstance {
   id: string;
@@ -21,9 +39,14 @@ interface InferenceInstance {
   metricsEndpoint: string;
 }
 
-export default function InferenceEndpointDetails({ params }: { params: { id: string } }) {
+export default function InferenceEndpointDetails({
+  params,
+}: {
+  params: { id: string };
+}) {
   const router = useRouter();
-  const [inferenceInstance, setInferenceInstance] = useState<InferenceInstance | null>(null);
+  const [inferenceInstance, setInferenceInstance] =
+    useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,34 +56,37 @@ export default function InferenceEndpointDetails({ params }: { params: { id: str
 
   const fetchInferenceInstance = async () => {
     try {
-      const response = await fetch(`/api/v1alpha1/inferenceInstance/${params.id}`);
+      const response = await fetch(
+        `/api/v1alpha1/inferenceInstance/${params.id}`
+      );
       if (!response.ok) {
-        throw new Error('Failed to fetch inference instance');
+        throw new Error("Failed to fetch inference instance");
       }
       const data = await response.json();
       setInferenceInstance(data);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching inference instance:', error);
-      setError('Failed to load inference instance details');
+      console.error("Error fetching inference instance:", error);
+      setError("Failed to load inference instance details");
       setLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this inference endpoint?')) {
-      try {
-        const response = await fetch(`/api/v1alpha1/inferenceInstance/${params.id}`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          throw new Error('Failed to delete inference instance');
+    try {
+      const response = await fetch(
+        `/api/v1alpha1/inferenceInstance/${params.id}`,
+        {
+          method: "DELETE",
         }
-        router.push('/inference-endpoints');
-      } catch (error) {
-        console.error('Error deleting inference instance:', error);
-        setError('Failed to delete inference instance');
+      );
+      if (!response.ok) {
+        throw new Error("Failed to delete inference instance");
       }
+      router.push("/inference-endpoints");
+    } catch (error) {
+      console.error("Error deleting inference instance:", error);
+      setError("Failed to delete inference instance");
     }
   };
 
@@ -81,22 +107,69 @@ export default function InferenceEndpointDetails({ params }: { params: { id: str
       <Header />
       <main className="flex-grow container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Inference Endpoint Details</h1>
-        <div className="bg-white shadow-lg rounded-lg p-6">
-          <h2 className="text-2xl font-bold mb-4">{inferenceInstance.model.name}</h2>
-          <p className="mb-2"><strong>ID:</strong> {inferenceInstance.id}</p>
-          <p className="mb-2"><strong>Model ID:</strong> {inferenceInstance.model.id}</p>
-          <p className="mb-2"><strong>Engine:</strong> {inferenceInstance.engine.name}</p>
-          <p className="mb-2"><strong>Host:</strong> {inferenceInstance.host}</p>
-          <p className="mb-2"><strong>Endpoint:</strong> {inferenceInstance.endpoint}</p>
-          <p className="mb-2"><strong>Health Endpoint:</strong> {inferenceInstance.healthEndpoint}</p>
-          <p className="mb-2"><strong>Metrics Endpoint:</strong> {inferenceInstance.metricsEndpoint}</p>
-          <button
-            onClick={handleDelete}
-            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded mt-4"
-          >
-            Delete Inference Endpoint
-          </button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>{inferenceInstance.model.name}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>ID</Label>
+                <span>{inferenceInstance.id || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Model ID</Label>
+                <span>{inferenceInstance.model.id || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Engine</Label>
+                <span>{inferenceInstance.engine.name || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Host</Label>
+                <span>{inferenceInstance.host || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Endpoint</Label>
+                <span>{inferenceInstance.endpoint || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Health Endpoint</Label>
+                <span>{inferenceInstance.healthEndpoint || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Metrics Endpoint</Label>
+                <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="destructive">Delete Inference Endpoint</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    Are you sure you want to delete this inference endpoint?
+                  </DialogTitle>
+                  <DialogDescription>
+                    This action cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDelete}
+                  >
+                    Delete
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </CardFooter>
+        </Card>
       </main>
       <Footer />
     </div>

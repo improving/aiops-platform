@@ -1,7 +1,7 @@
 export default function Footer() {
   return (
-    <footer className="bg-gray-800 text-white p-4 mt-8">
-      <div className="container mx-auto text-center">
+    <footer className="bg-background border-t py-4 mt-8">
+      <div className="container mx-auto text-center text-muted-foreground">
         <p>&copy; 2023 Model Hub. All rights reserved.</p>
       </div>
     </footer>

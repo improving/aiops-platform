@@ -1,9 +1,18 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 interface InferenceInstance {
   id: string;
@@ -30,16 +39,16 @@ export default function InferenceEndpoints() {
 
   const fetchEndpoints = async () => {
     try {
-      const response = await fetch('/api/v1alpha1/inferenceInstance');
+      const response = await fetch("/api/v1alpha1/inferenceInstance");
       if (!response.ok) {
-        throw new Error('Failed to fetch inference instances');
+        throw new Error("Failed to fetch inference instances");
       }
       const data = await response.json();
       setEndpoints(data);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching inference instances:', error);
-      setError('Failed to load inference instances');
+      console.error("Error fetching inference instances:", error);
+      setError("Failed to load inference instances");
       setLoading(false);
     }
   };
@@ -59,13 +68,12 @@ export default function InferenceEndpoints() {
         <h1 className="text-3xl font-bold mb-8">Inference Endpoints</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {endpoints.map((endpoint) => (
-            <Link
-              key={endpoint.id}
-              href={`/inference-endpoints/${endpoint.id}`}
-              className="bg-white shadow-lg rounded-lg overflow-hidden hover:shadow-xl transition duration-300 ease-in-out"
-            >
-              <div className="p-6">
-                <h2 className="text-2xl font-bold mb-2">{endpoint.model.name}</h2>
+            <Card key={endpoint.id}>
+              <CardHeader>
+                <CardTitle>{endpoint.model.name}</CardTitle>
+                <CardDescription>ID: {endpoint.id}</CardDescription>
+              </CardHeader>
+              <CardContent>
                 <div className="flex flex-wrap gap-2 mb-3">
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                     {endpoint.engine.name}
@@ -75,20 +83,15 @@ export default function InferenceEndpoints() {
                   </span>
                 </div>
                 <p className="text-sm text-gray-600 mb-2">
-                  <strong>ID:</strong> {endpoint.id}
-                </p>
-                <p className="text-sm text-gray-600 mb-2">
                   <strong>Endpoint:</strong> {endpoint.endpoint}
                 </p>
-                {/* <Link
-                  href={`/model-catalog/${endpoint.model.id}`}
-                  className="text-blue-500 hover:text-blue-600 transition duration-300 ease-in-out"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  View Model Details
-                </Link> */}
-              </div>
-            </Link>
+              </CardContent>
+              <CardFooter>
+                <Link href={`/inference-endpoints/${endpoint.id}`} passHref>
+                  <Button>View Details</Button>
+                </Link>
+              </CardFooter>
+            </Card>
           ))}
         </div>
       </main>
