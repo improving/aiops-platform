@@ -1,0 +1,64 @@
+replicaCount: {{ replicaCount | default(1) }}
+model: {{ model | default("mistralai/Mistral-7B-Instruct-v0.1") }}
+servedModelName: {{ servedModelName | default("") }}
+quantization: {{ quantization | default("") }}
+dtype: {{ dtype | default("") }}
+gpuMemoryUtilization: {{ gpuMemoryUtilization | default("") }}
+maxModelLen: {{ maxModelLen | default("") }}
+chatTemplate: {{ chatTemplate | default("") }}
+
+readManyPVC:
+  enabled: {{ readManyPVC.enabled | default(false) }}
+  sourcePVC: {{ readManyPVC.sourcePVC | default("") }}
+  accessModes:
+  - {{ readManyPVC.accessModes[0] | default("ReadOnlyMany") }}
+  mountPath: {{ readManyPVC.mountPath | default("/model") }}
+  size: {{ readManyPVC.size | default("30Gi") }}
+  storageClass: {{ readManyPVC.storageClass | default("") }}
+
+deploymentAnnotations: {{ deploymentAnnotations | default({}) }}
+
+resources:
+  requests:
+    cpu: {{ resources.requests.cpu | default("2") }}
+    memory: {{ resources.requests.memory | default("4Gi") }}
+
+env: {{ env | default({}) }}
+port: {{ port | default(8080) }}
+
+nodeSelector: {{ nodeSelector | default({}) }}
+
+image:
+  repository: {{ image.repository | default("substratusai/vllm") }}
+  pullPolicy: {{ image.pullPolicy | default("IfNotPresent") }}
+  tag: {{ image.tag | default("") }}
+
+service:
+  type: {{ service.type | default("ClusterIP") }}
+  port: {{ service.port | default(80) }}
+
+ingress:
+  enabled: {{ ingress.enabled | default(false) }}
+  className: {{ ingress.className | default("") }}
+  annotations: {{ ingress.annotations | default({}) }}
+  hosts:
+    - host: {{ ingress.hosts[0].host | default("chart-example.local") }}
+      paths:
+        - path: {{ ingress.hosts[0].paths[0].path | default("/") }}
+          pathType: {{ ingress.hosts[0].paths[0].pathType | default("ImplementationSpecific") }}
+  tls: {{ ingress.tls | default([]) }}
+
+tolerations: {{ tolerations | default([]) }}
+
+affinity: {{ affinity | default({}) }}
+
+volumes:
+  - name: {{ volumes[0].name | default("model") }}
+    hostPath:
+      path: {{ volumes[0].hostPath.path | default("/model") }}
+
+volumeMounts:
+  - name: {{ volumeMounts[0].name | default("model") }}
+    mountPath: {{ volumeMounts[0].mountPath | default("/model") }}
+
+runtimeClassName: {{ runtimeClassName | default(None) }}

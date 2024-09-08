@@ -4,6 +4,8 @@ import kubernetes
 from kubernetes import client, config
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
+from jinja2 import Environment, FileSystemLoader
+import yaml
 import os
 import base64
 
@@ -14,6 +16,7 @@ class TGIController(Controller):
         self.core_v1_api = client.CoreV1Api()
         self.namespace = "tgi"
         self.helm = HelmClient()
+        self.jinja_env = Environment(loader=FileSystemLoader('templates'))
 
     def _get_chart_name(self, instance: InferenceInstanceSchema):
         return f"tgi-{str(instance.model.id)[-8:]}-{str(instance.engine.id)[-8:]}-{str(instance.id)[-4:]}"
@@ -44,49 +47,39 @@ class TGIController(Controller):
                 raise
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
-        # Prepare the values to be passed to the Helm chart
-        env_values = [
-            {"name": "MAX_INPUT_LENGTH", "value": str(instance.config.maxInputLength)} if instance.config and instance.config.maxInputLength else [],
-            {"name": "MAX_TOTAL_TOKENS", "value": str(instance.config.maxTokens)} if instance.config and instance.config.maxTokens else  [],
-            {"name": "MAX_BATCH_PREFILL_TOKENS", "value": str(instance.config.maxBatchPrefillTokens)} if instance.config and instance.config.maxBatchPrefillTokens else  [],
-            {"name": "MAX_BATCH_TOTAL_TOKENS", "value": str(instance.config.maxBatchTotalTokens)} if instance.config and instance.config.maxBatchTotalTokens else  [],
-            {"name": "QUANTIZATION", "value": instance.config.quantization} if instance.config and instance.config.quantization else  [],
-            {
-                "name": "HF_API_TOKEN",
-                "valueFrom": {
-                    "secretKeyRef": {
-                        "name": "hf-api-token",
-                        "key": "HF_API_TOKEN"
-                    }
-                }
-            }
-        ]
-        env_values = [value for value in env_values if value]
-
-        values = {
-            "config": {
-                "modelID": str(instance.model.modelId)
+        template = self.jinja_env.get_template('tgi-values.yaml.jinja')
+        
+        context = {
+            "nodeSelector": {
+                "hostname": instance.host
             },
-            "env": env_values,
+            "config": {
+                "modelID": instance.model.modelId
+            },
+            "env": {
+                "MAX_INPUT_TOKENS": str(instance.config.maxInputLength) if instance.config else "",
+                "MAX_TOTAL_TOKENS": str(instance.config.maxTokens) if instance.config else "",
+                "HF_HUB_OFFLINE": "1"
+            },
+            "resources": {
+                "limits": {"gpu": 1},
+                "requests": {"gpu": 1}
+            },
             "service": {
                 "type": "LoadBalancer",
                 "port": 80
             },
-            "volumes": [
-                {
-                    "name": "hf-cache",
-                    "persistentVolumeClaim": {
-                        "claimName": "hf-cache"
-                    }
-                }
-            ],
-            "volumeMounts": [
-                {
-                    "name": "hf-cache",
-                    "mountPath": "/data"
-                }
-            ]
+            "volumeMounts": {
+                "hf_cache": {"mountPath": "/data"}
+            },
+            "volumes": {
+                "hf_cache": {"claimName": "hf-cache"},
+                "shm": {"sizeLimit": "1Gi"}
+            }
         }
+        
+        rendered_yaml = template.render(context)
+        values = yaml.safe_load(rendered_yaml)
         return values
 
     async def _add_and_update_helm_repo(self, instance: InferenceInstanceSchema):
@@ -122,15 +115,14 @@ class TGIController(Controller):
         chart = await self._add_and_update_helm_repo(instance)
         
         chart_name = self._get_chart_name(instance)
-        # values = await self._prepare_helm_values(instance)
+        values = await self._prepare_helm_values(instance)
         
         try:
             await self.helm.install_or_upgrade_release(
                 release_name=chart_name,
                 chart=chart,
                 namespace=self.namespace,
-                reuse_values=True,
-                # values=values
+                values=values
             )
             print(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:
@@ -147,7 +139,5 @@ class TGIController(Controller):
         except ReleaseNotFoundError:
             print(f"Release not found: {chart_name}")
         except Exception as e:
-            # print error with traceback
-            import traceback
             traceback.print_exc()
             raise Exception(f"Helm uninstall failed: {str(e)}")

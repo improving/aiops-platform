@@ -10,6 +10,7 @@ from kubernetes import client, config
 from pyhelm3 import Client as HelmClient
 from pyhelm3 import Chart
 from pyhelm3.errors import ReleaseNotFoundError
+from jinja2 import Environment, FileSystemLoader
 
 class NIMController(Controller):
     def __init__(self):
@@ -17,30 +18,55 @@ class NIMController(Controller):
         self.api_instance = client.CustomObjectsApi()
         self.namespace = "nim"
         self.helm = HelmClient()
+        self.jinja_env = Environment(loader=FileSystemLoader('templates'))
 
     def _get_chart_name(self, instance: InferenceInstanceSchema):
         return f"nim-{str(instance.model.id)[-8:]}-{str(instance.engine.id)[-8:]}-{str(instance.id)[-4:]}"
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
-        # Prepare the values to be passed to the Helm chart
-        values = {
+        template = self.jinja_env.get_template('nim-llm-values.yaml.jinja')
+        
+        context = {
             "model": {
-                "name": instance.model.name,
-                "modelId": instance.model.modelId,
+                "ngcAPISecret": "ngc-api-nim-llm",
+                "ngcAPIKey": os.environ.get("NGC_API_KEY", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
             },
-            "config": {
-                "maxInputLength": instance.config.maxInputLength if instance.config else None,
-                "maxTokens": instance.config.maxTokens if instance.config else None,
-                "maxBatchPrefillTokens": instance.config.maxBatchPrefillTokens if instance.config else None,
-                "maxBatchTotalTokens": instance.config.maxBatchTotalTokens if instance.config else None,
-                "quantization": instance.config.quantization if instance.config else None,
-                "image": instance.config.image if instance.config else None,
+            "persistence": {
+                "enabled": True,
+                "existingClaim": "nim-pvc"
             },
-            "host": instance.host,
-            "endpoint": instance.endpoint,
-            "healthEndpoint": instance.healthEndpoint,
-            "metricsEndpoint": instance.metricsEndpoint,
+            "image": {
+                "repository": instance.config.image.split(":")[0] if instance.config and instance.config.image else "nvcr.io/nim/meta/llama3-8b-instruct",
+                "tag": instance.config.image.split(":")[1] if instance.config and instance.config.image and ":" in instance.config.image else "1.0.3"
+            },
+            "service": {
+                "type": "LoadBalancer",
+                "port": 80
+            },
+            "metrics": {
+                "enabled": True,
+                "serviceMonitor": {
+                    "enabled": True,
+                    "additionalLabels": {
+                        "release": "prometheus"
+                    }
+                }
+            },
+            "resources": {
+                "limits": {
+                    "gpu": 1
+                },
+                "requests": {
+                    "gpu": 1
+                }
+            },
+            "nodeSelector": {
+                "hostname": instance.host
+            }
         }
+        
+        rendered_yaml = template.render(context)
+        values = yaml.safe_load(rendered_yaml)
         return values
 
     async def _download_chart(self, instance: InferenceInstanceSchema):
@@ -66,7 +92,7 @@ class NIMController(Controller):
         chart_path = await self._download_chart(instance)
         chart = await self.helm.get_chart(chart_path)
         chart_name = self._get_chart_name(instance)
-        # values = await self._prepare_helm_values(instance)
+        values = await self._prepare_helm_values(instance)
         
         try:
             await self.helm.install_or_upgrade_release(
@@ -74,7 +100,7 @@ class NIMController(Controller):
                 chart=chart,
                 namespace=self.namespace,
                 create_namespace=True,
-                # values=values
+                values=values
             )
             print(f"Helm install succeeded for chart: {chart_name}")
         except Exception as e:
@@ -86,15 +112,14 @@ class NIMController(Controller):
         chart_path = await self._download_chart(instance)
         
         chart_name = self._get_chart_name(instance)
-        # values = await self._prepare_helm_values(instance)
+        values = await self._prepare_helm_values(instance)
         
         try:
-            self.helm.install_or_upgrade_release(
+            await self.helm.install_or_upgrade_release(
                 release_name=chart_name,
                 chart=chart_path,
                 namespace=self.namespace,
-                reuse_values=True,
-                # values=values
+                values=values
             )
             print(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:
@@ -113,7 +138,6 @@ class NIMController(Controller):
         except ReleaseNotFoundError:
             print(f"Release not found: {chart_name}")
         except Exception as e:
-            # print error with traceback
             import traceback
             traceback.print_exc()
             raise Exception(f"Helm uninstall failed: {str(e)}")

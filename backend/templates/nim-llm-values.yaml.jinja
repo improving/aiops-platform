@@ -1,0 +1,31 @@
+model:
+  ngcAPISecret: {{ model.ngcAPISecret | default("ngc-api-nim-llm") }}
+  ngcAPIKey: {{ model.ngcAPIKey | default("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") }}
+
+persistence:
+  enabled: {{ persistence.enabled | default(true) }}
+  existingClaim: {{ persistence.existingClaim | default("nim-pvc") }}
+
+image:
+  repository: {{ image.repository | default("nvcr.io/nim/meta/llama3-8b-instruct") }}
+  tag: {{ image.tag | default("1.0.3") }}
+
+service:
+  type: {{ service.type | default("LoadBalancer") }}
+  port: {{ service.port | default(80) }}
+
+metrics:
+  enabled: {{ metrics.enabled | default(true) }}
+  serviceMonitor:
+    enabled: {{ metrics.serviceMonitor.enabled | default(true) }}
+    additionalLabels:
+      release: {{ metrics.serviceMonitor.additionalLabels.release | default("prometheus") }}
+
+resources:
+  limits:
+    gpu: {{ resources.limits.gpu | default(1) }}
+  requests:
+    gpu: {{ resources.requests.gpu | default(1) }}
+
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}

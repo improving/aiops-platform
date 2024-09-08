@@ -1,0 +1,68 @@
+nodeSelector:
+  kubernetes.io/hostname: gpu-node-3
+
+config:
+  modelID: "Qwen/Qwen2-7B-Instruct"
+
+env:
+  - name: MAX_INPUT_TOKENS
+    value: "6144"
+  - name: MAX_TOTAL_TOKENS
+    value: "8192"
+  - name: HF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-api-token
+        key: HF_API_TOKEN
+  - name: HF_HUB_OFFLINE
+    value: "1"
+
+resources:
+  limits:
+    nvidia.com/gpu: 1
+  requests:
+    nvidia.com/gpu: 1
+
+strategy:
+  type: Recreate
+
+service:
+  type: LoadBalancer
+  port: 80
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: prometheus
+
+volumeMounts:
+  - name: hf-cache
+    mountPath: /data
+
+volumes:
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: hf-cache
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: "1Gi"
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 2
+  successThreshold: 1
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 2
+  successThreshold: 1
+  failureThreshold: 4
