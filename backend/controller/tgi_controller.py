@@ -14,7 +14,7 @@ class TGIController(Controller):
         config.load_kube_config()
         self.api_instance = client.CustomObjectsApi()
         self.core_v1_api = client.CoreV1Api()
-        self.namespace = "tgi"
+        self.namespace = "ai-stack"
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader('templates'))
 
@@ -57,8 +57,6 @@ class TGIController(Controller):
                 "modelID": instance.model.modelId
             },
             "env": {
-                "MAX_INPUT_TOKENS": str(instance.config.maxInputLength) if instance.config else "",
-                "MAX_TOTAL_TOKENS": str(instance.config.maxTokens) if instance.config else "",
                 "HF_HUB_OFFLINE": "1"
             },
             "resources": {
@@ -75,8 +73,24 @@ class TGIController(Controller):
             "volumes": {
                 "hf_cache": {"claimName": "hf-cache"},
                 "shm": {"sizeLimit": "1Gi"}
+            },
+            "strategy": {},
+            "serviceMonitor": {
+                "additionalLabels": {}
+            },
+            "livenessProbe": {
+                "httpGet": {},
+            },
+            "readinessProbe": {
+                "httpGet": {},
             }
         }
+        
+        if instance.config and instance.config.maxInputLength:
+            context["env"]["MAX_INPUT_TOKENS"] = str(instance.config.maxInputLength)
+        
+        if instance.config and instance.config.maxTokens:
+            context["env"]["MAX_TOTAL_TOKENS"] = str(instance.config.maxTokens)
         
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
@@ -139,5 +153,6 @@ class TGIController(Controller):
         except ReleaseNotFoundError:
             print(f"Release not found: {chart_name}")
         except Exception as e:
+            import traceback
             traceback.print_exc()
             raise Exception(f"Helm uninstall failed: {str(e)}")
