@@ -25,6 +25,7 @@ class InferenceInstanceSchema(BaseModel):
     endpoint: Optional[str] = None
     healthEndpoint: Optional[str] = None
     metricsEndpoint: Optional[str] = None
+    ready: Optional[bool] = False
 
     class Config:
         from_attributes = True

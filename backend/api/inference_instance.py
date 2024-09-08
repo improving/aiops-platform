@@ -2,9 +2,13 @@ import os
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 import uuid
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, or_
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session, relationship
+from sqlalchemy.future import select
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from controller.base_controller import Controller
 from .database import Base, get_db
 from .models import DBModel
 from .engines import DBEngine
@@ -12,6 +16,8 @@ from .controller_utils import get_controller
 from schemas.inference_instance import InferenceInstanceSchema, InferenceInstanceConfigParamsSchema
 from schemas.model import ModelSchema
 from schemas.engine import EngineSchema
+from kubernetes import client, config
+from api.database import SessionLocal
 
 router = APIRouter()
 
@@ -44,16 +50,122 @@ class DBInferenceInstance(Base):
     config = relationship("DBInferenceInstanceConfigParams")
 
 @router.get("/v1alpha1/inferenceInstance", response_model=List[InferenceInstanceSchema])
-def list_inference_instances(db: Session = Depends(get_db)):
+async def list_inference_instances(db: Session = Depends(get_db)):
     instances = db.query(DBInferenceInstance).all()
+    config.load_kube_config()
+    core_v1_api = client.CoreV1Api()
+    for instance in instances:
+        instance_ready = await check_pod_readiness(instance, core_v1_api, db)
+        instance.ready = instance_ready
     return instances
 
 @router.get("/v1alpha1/inferenceInstance/{id}", response_model=InferenceInstanceSchema)
-def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
+async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
     instance = db.query(DBInferenceInstance).filter(DBInferenceInstance.id == id).first()
     if not instance:
         raise HTTPException(status_code=404, detail="Inference instance not found")
-    return instance
+
+    config.load_kube_config()
+    core_v1_api = client.CoreV1Api()
+
+    instance_ready = await check_pod_readiness(instance, core_v1_api, db)
+
+    # Construct the full InferenceInstanceSchema for the response
+    full_instance = InferenceInstanceSchema(
+        id=instance.id,
+        model=ModelSchema.model_validate(instance.model),
+        engine=EngineSchema.model_validate(instance.engine),
+        host=instance.host,
+        config=InferenceInstanceConfigParamsSchema.model_validate(instance.config) if instance.config else None,
+        endpoint=instance.endpoint,
+        healthEndpoint=instance.healthEndpoint,
+        metricsEndpoint=instance.metricsEndpoint,
+        ready=instance_ready
+    )
+
+    return full_instance
+
+async def update_all_instance_endpoints():
+    db = SessionLocal()
+    try:
+        # Query for instances without populated endpoints
+        instances = db.query(DBInferenceInstance).filter(or_(DBInferenceInstance.endpoint == None, DBInferenceInstance.endpoint == '')).all()
+
+        for instance in instances:
+            await update_instance_endpoints(instance, db)
+    finally:
+        db.close()
+
+async def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
+    print(f"Updating endpoints for instance {instance.id}")
+    engine = db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Associated engine not found")
+
+    controller = await get_controller(engine.name)
+    service_name = controller._get_service_name(instance)
+
+    config.load_kube_config()
+    core_v1_api = client.CoreV1Api()
+
+    try:
+        # Get the service information
+        service = core_v1_api.read_namespaced_service(name=service_name, namespace=controller.namespace)
+
+        # Get the service IP and port
+        if service.spec.type == "LoadBalancer":
+            ip = service.status.load_balancer.ingress[0].ip if service.status.load_balancer.ingress else None
+        else:
+            ip = service.spec.cluster_ip
+
+        port = service.spec.ports[0].port if service.spec.ports else None
+
+        if ip and port:
+            # Update the instance endpoint
+            instance.endpoint = f"http://{ip}:{port}"
+            instance.healthEndpoint = f"http://{ip}:{port}/health"
+            instance.metricsEndpoint = f"http://{ip}:{port}/metrics"
+
+            # Update the database
+            db.commit()
+        else:
+            print(f"Warning: Could not determine IP or port for service {service_name}")
+
+    except client.exceptions.ApiException as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error getting service information: {e}")
+    # Don't raise an exception here, as we still want to return the instance information
+
+async def check_pod_readiness(instance: DBInferenceInstance, core_v1_api: client.CoreV1Api, db: Session):
+    # Get the associated engine
+    engine = db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
+    if not engine:
+        raise HTTPException(status_code=404, detail="Associated engine not found")
+
+    controller = await get_controller(engine.name)
+    chart_name = controller._get_chart_name(instance)
+
+    # Check pod readiness
+    try:
+        # Define pod labels based on the engine type
+        pod_labels = controller._get_pod_labels(instance)
+
+        # Query pods
+        pods = core_v1_api.list_namespaced_pod(namespace=controller.namespace, label_selector=pod_labels)
+
+        # Check if any pod is ready
+        instance_ready = any(
+            pod.status.phase == 'Running' and 
+            all(container.ready for container in pod.status.container_statuses)
+            for pod in pods.items
+        )
+    except client.exceptions.ApiException as e:
+        print(f"Error checking pod readiness: {e}")
+        instance_ready = False
+    
+    return instance_ready
+    
 
 @router.post("/v1alpha1/inferenceInstance", response_model=InferenceInstanceSchema)
 async def create_inference_instance(instance: InferenceInstanceSchema, db: Session = Depends(get_db)):
@@ -93,10 +205,10 @@ async def create_inference_instance(instance: InferenceInstanceSchema, db: Sessi
     # Construct the full InferenceInstanceSchema for the response and controller
     full_instance = InferenceInstanceSchema(
         id=db_instance.id,
-        model=ModelSchema.from_orm(model),
-        engine=EngineSchema.from_orm(engine),
+        model=ModelSchema.model_validate(model),
+        engine=EngineSchema.model_validate(engine),
         host=db_instance.host,
-        config=InferenceInstanceConfigParamsSchema.from_orm(db_config) if db_config else None,
+        config=InferenceInstanceConfigParamsSchema.model_validate(db_config) if db_config else None,
         endpoint=db_instance.endpoint,
         healthEndpoint=db_instance.healthEndpoint,
         metricsEndpoint=db_instance.metricsEndpoint
@@ -165,3 +277,12 @@ async def delete_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)
     db.commit()
 
     return {"detail": "Inference instance deleted"}
+
+# Initialize the scheduler
+scheduler = AsyncIOScheduler()
+
+# Schedule the update_all_instance_endpoints function to run every 5 seconds
+scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
+
+# Start the scheduler
+scheduler.start()
