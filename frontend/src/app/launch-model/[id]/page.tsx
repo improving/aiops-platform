@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
+import { useToast } from "@/components/hooks/use-toast";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -60,37 +61,48 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [secrets, setSecrets] = useState<EnvVar[]>([{ name: "", value: "" }]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
+  const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
+    const fetchEngines = async () => {
+      try {
+        const response = await fetch("/api/v1alpha1/engines");
+        if (!response.ok) {
+          const errorData = await response.json(); // Get error details
+          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+        }
+        const data = await response.json();
+        setEngines(data);
+      } catch (error: any) {
+        toast({
+          // Show toast on error
+          title: "Error Fetching Engines",
+          description: error.message,
+        });
+        console.error("Error fetching engines:", error);
+      }
+    };
+    const fetchHosts = async () => {
+      try {
+        const response = await fetch("/api/v1alpha1/hosts");
+        if (!response.ok) {
+          const errorData = await response.json(); // Get error details
+          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+        }
+        const data = await response.json();
+        setHosts(data);
+      } catch (error: any) {
+        toast({
+          // Show toast on error
+          title: "Error Fetching Hosts",
+          description: error.message,
+        });
+        console.error("Error fetching hosts:", error);
+      }
+    };
     fetchEngines();
     fetchHosts();
-  }, []);
-
-  const fetchEngines = async () => {
-    try {
-      const response = await fetch("/api/v1alpha1/engines");
-      if (!response.ok) {
-        throw new Error("Failed to fetch engines");
-      }
-      const data = await response.json();
-      setEngines(data);
-    } catch (error) {
-      console.error("Error fetching engines:", error);
-    }
-  };
-
-  const fetchHosts = async () => {
-    try {
-      const response = await fetch("/api/v1alpha1/hosts");
-      if (!response.ok) {
-        throw new Error("Failed to fetch hosts");
-      }
-      const data = await response.json();
-      setHosts(data);
-    } catch (error) {
-      console.error("Error fetching hosts:", error);
-    }
-  };
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,15 +135,20 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create inference instance");
+        const errorData = await response.json(); // Get error details
+        throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
       }
 
       const data = await response.json();
       // Redirect to the individual inference endpoint page
       router.push(`/inference-endpoints/${data.id}`);
-    } catch (error) {
+    } catch (error: any) {
+      toast({
+        // Show toast on error
+        title: "Error Creating Inference Instance",
+        description: error.message,
+      });
       console.error("Error creating inference instance:", error);
-      // Handle error (e.g., show an error message to the user)
     }
   };
 

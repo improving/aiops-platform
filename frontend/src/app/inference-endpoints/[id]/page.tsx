@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
+import { TrashIcon } from "@radix-ui/react-icons";
 import {
   Dialog,
   DialogContent,
@@ -146,7 +147,10 @@ export default function InferenceEndpointDetails({
           <CardFooter>
             <Dialog>
               <DialogTrigger asChild>
-                <Button variant="destructive">Delete Inference Endpoint</Button>
+                <Button variant="destructive">
+                  <TrashIcon className="mr-2 w-4 h-4"/>
+                  Delete Inference Endpoint
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -163,6 +167,7 @@ export default function InferenceEndpointDetails({
                     variant="destructive"
                     onClick={handleDelete}
                   >
+                    <TrashIcon className="mr-2 w-4 h-4"/>
                     Delete
                   </Button>
                 </DialogFooter>
