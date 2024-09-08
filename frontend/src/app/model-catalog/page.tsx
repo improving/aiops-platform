@@ -21,6 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { RocketIcon } from "@radix-ui/react-icons";
 
 interface Model {
   id: string;
@@ -144,7 +145,10 @@ export default function ModelCatalog() {
               </CardContent>
               <CardFooter>
                 <Link href={`/launch-model/${model.id}`} passHref>
-                  <Button>Launch</Button>
+                  <Button>
+                    <RocketIcon className="mr-2 w-4 h-4" />
+                    Launch
+                  </Button>
                 </Link>
               </CardFooter>
             </Card>

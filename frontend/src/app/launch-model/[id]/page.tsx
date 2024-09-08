@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -222,8 +223,26 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                         </CardHeader>
                         <CardContent>
                           <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                              Host: {host.hostname || "N/A"}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {host.cpu_cores > 0 && (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                                {host.cpu_cores} CPU Cores
+                              </span>
+                            )}
+                            {host.cpu_cores > 0 && (
+                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                                CPU: {host.cpu_vendor} -{" "}
+                                {(host.cpu_memory / 1024).toFixed(1)} GB Memory
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-3">
                             {host.gpu_count > 0 && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
                                 {host.gpu_count} GPU
                               </span>
                             )}
@@ -233,18 +252,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                                 Memory
                               </span>
                             )}
-                            {host.cpu_cores > 0 && (
-                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                                {host.cpu_cores} CPU Cores
-                              </span>
-                            )}
                           </div>
-                          {host.cpu_cores > 0 && (
-                            <p className="text-sm text-gray-600 mb-4">
-                              CPU: {host.cpu_vendor} -{" "}
-                              {(host.cpu_memory / 1024).toFixed(1)} GB Memory
-                            </p>
-                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -252,6 +260,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                 </CardContent>
                 <CardFooter>
                   <Button type="button" onClick={handleNext}>
+                    <ThickArrowRightIcon className="mr-2 w-4 h-4" />
                     Next
                   </Button>
                 </CardFooter>
@@ -284,6 +293,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                 </CardContent>
                 <CardFooter>
                   <Button type="button" onClick={handleNext}>
+                    <ThickArrowRightIcon className="mr-2 w-4 h-4" />
                     Next
                   </Button>
                 </CardFooter>
@@ -353,7 +363,10 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                   </Button>
                 </CardContent>
                 <CardFooter>
-                  <Button type="submit">Create Inference Endpoint</Button>
+                  <Button type="submit">
+                    <RocketIcon className="mr-2 w-4 h-4" />
+                    Create Inference Endpoint
+                  </Button>
                 </CardFooter>
               </Card>
             </TabsContent>
