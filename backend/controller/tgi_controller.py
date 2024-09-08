@@ -20,6 +20,12 @@ class TGIController(Controller):
 
     def _get_chart_name(self, instance: InferenceInstanceSchema):
         return f"tgi-{str(instance.model.id)[-8:]}-{str(instance.engine.id)[-8:]}-{str(instance.id)[-4:]}"
+    
+    def _get_service_name(self, instance: InferenceInstanceSchema):
+        return f"{self._get_chart_name(instance)}-text-generation-inference"
+    
+    def _get_pod_labels(self, instance: InferenceInstanceSchema):
+        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name=text-generation-inference"
 
     async def _create_hf_api_token_secret(self):
         secret_name = "hf-api-token"

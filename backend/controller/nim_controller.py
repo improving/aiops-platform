@@ -16,12 +16,18 @@ class NIMController(Controller):
     def __init__(self):
         config.load_kube_config()
         self.api_instance = client.CustomObjectsApi()
-        self.namespace = "nim"
+        self.namespace = "ai-stack"
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader('templates'))
 
     def _get_chart_name(self, instance: InferenceInstanceSchema):
         return f"nim-{str(instance.model.id)[-8:]}-{str(instance.engine.id)[-8:]}-{str(instance.id)[-4:]}"
+    
+    def _get_service_name(self, instance: InferenceInstanceSchema):
+        return f"{self._get_chart_name(instance)}-nim-llm"
+
+    def _get_pod_labels(self, instance: InferenceInstanceSchema):
+        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name=nim-llm"
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
         template = self.jinja_env.get_template('nim-llm-values.yaml.jinja')
@@ -29,10 +35,10 @@ class NIMController(Controller):
         context = {
             "model": {
                 "ngcAPISecret": "ngc-api-nim-llm",
-                "ngcAPIKey": os.environ.get("NGC_API_KEY", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+                "ngcAPIKey": os.environ.get("NGC_API_KEY", os.environ.get("NGC_API_TOKEN"))
             },
             "persistence": {
-                "enabled": True,
+                "enabled": False,
                 "existingClaim": "nim-pvc"
             },
             "image": {
@@ -67,6 +73,7 @@ class NIMController(Controller):
         
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
+        print(f"nim values: {values}")
         return values
 
     async def _download_chart(self, instance: InferenceInstanceSchema):
@@ -96,11 +103,11 @@ class NIMController(Controller):
         
         try:
             await self.helm.install_or_upgrade_release(
-                release_name=chart_name,
-                chart=chart,
+                chart_name,
+                chart,
+                values,
                 namespace=self.namespace,
-                create_namespace=True,
-                values=values
+                create_namespace=True
             )
             print(f"Helm install succeeded for chart: {chart_name}")
         except Exception as e:
@@ -110,16 +117,15 @@ class NIMController(Controller):
 
     async def upgrade(self, instance: InferenceInstanceSchema):
         chart_path = await self._download_chart(instance)
-        
         chart_name = self._get_chart_name(instance)
         values = await self._prepare_helm_values(instance)
         
         try:
             await self.helm.install_or_upgrade_release(
-                release_name=chart_name,
-                chart=chart_path,
-                namespace=self.namespace,
-                values=values
+                chart_name,
+                chart_path,
+                values,
+                namespace=self.namespace
             )
             print(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:

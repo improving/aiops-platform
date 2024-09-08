@@ -11,49 +11,57 @@ class VLLMController(Controller):
     def __init__(self):
         config.load_kube_config()
         self.api_instance = client.CustomObjectsApi()
-        self.namespace = "vllm"
+        self.namespace = "ai-stack"
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader('templates'))
 
     def _get_chart_name(self, instance: InferenceInstanceSchema):
         return f"vllm-{str(instance.model.id)[-8:]}-{str(instance.engine.id)[-8:]}-{str(instance.id)[-4:]}"
+    
+    def _get_service_name(self, instance: InferenceInstanceSchema):
+        return f"{self._get_chart_name(instance)}"
+    
+    def _get_pod_labels(self, instance: InferenceInstanceSchema):
+        return f"app.kubernetes.io/instance={self._get_chart_name},app.kubernetes.io/name=vllm"
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
         template = self.jinja_env.get_template('vllm-values.yaml.jinja')
         
-        # Prepare the context for the template
         context = {
             "model": instance.model.modelId,
-            "servedModelName": instance.model.name,
-            "quantization": instance.config.quantization if instance.config else "",
-            "maxModelLen": instance.config.maxTokens if instance.config else "",
-            "image": {
-                "repository": instance.config.image.split(":")[0] if instance.config and instance.config.image else "",
-                "tag": instance.config.image.split(":")[1] if instance.config and instance.config.image and ":" in instance.config.image else "latest"
-            },
-            "env": [
-                {"name": "MODEL_ID", "value": str(instance.model.id)},
-                {"name": "MAX_INPUT_LENGTH", "value": str(instance.config.maxInputLength) if instance.config else ""},
-                {"name": "MAX_TOTAL_TOKENS", "value": str(instance.config.maxTokens) if instance.config else ""},
-                {"name": "MAX_BATCH_PREFILL_TOKENS", "value": str(instance.config.maxBatchPrefillTokens) if instance.config else ""},
-                {"name": "MAX_BATCH_TOTAL_TOKENS", "value": str(instance.config.maxBatchTotalTokens) if instance.config else ""},
-            ],
+            # "servedModelName": instance.model.modelId,
+            "image": {},
             "service": {
-                "type": "ClusterIP",
-                "port": 8080
+                "type": "LoadBalancer",
             },
-            "ingress": {
-                "enabled": True,
-                "hosts": [{"host": instance.host, "paths": [{"path": "/", "pathType": "ImplementationSpecific"}]}]
+            "env": {},
+            # Add empty objects for non-leaf parameters
+            "readManyPVC": {
+                "accessModes": [],
+            },
+            "resources": {
+                "requests": {},
+                "limits": {},
+            },
+            "volumes": {
+                "hf_cache": {
+                    "claimName": "hf-cache"
+                }
+            },
+            "volumeMounts": {
+                "hf_cache": {
+                    "mountPath": "/model"  # has to be /model to match the image (local image path)
+                }
             }
         }
+
+        if instance.config and instance.config.quantization:
+            context["quantization"] = str(instance.config.quantization.lower())
+            context["dtype"] = "auto"
         
-        # Render the template
         rendered_yaml = template.render(context)
-        
-        # Parse the rendered YAML
         values = yaml.safe_load(rendered_yaml)
-        print(f"values: {values}")
+        print(f"vllm values: {values}")
         
         return values
 
@@ -69,17 +77,16 @@ class VLLMController(Controller):
     async def install(self, instance: InferenceInstanceSchema):
         print(f"instance inside vllm_controller: {instance}")
         chart = await self._add_and_update_helm_repo(instance)
-        
         chart_name = self._get_chart_name(instance)
         values = await self._prepare_helm_values(instance)
         
         try:
             await self.helm.install_or_upgrade_release(
-                release_name=chart_name,
-                chart=chart,
+                chart_name,
+                chart,
+                values,
                 namespace=self.namespace,
-                create_namespace=True,
-                values=values
+                create_namespace=True
             )
             print(f"Helm install succeeded for chart: {chart_name}")
         except Exception as e:
@@ -87,16 +94,15 @@ class VLLMController(Controller):
 
     async def upgrade(self, instance: InferenceInstanceSchema):
         chart = await self._add_and_update_helm_repo(instance)
-        
         chart_name = self._get_chart_name(instance)
         values = await self._prepare_helm_values(instance)
         
         try:
             await self.helm.install_or_upgrade_release(
-                release_name=chart_name,
-                chart=chart,
-                namespace=self.namespace,
-                values=values
+                chart_name,
+                chart,
+                values,
+                namespace=self.namespace
             )
             print(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:

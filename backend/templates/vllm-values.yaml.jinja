@@ -22,8 +22,18 @@ resources:
   requests:
     cpu: {{ resources.requests.cpu | default("2") }}
     memory: {{ resources.requests.memory | default("4Gi") }}
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+  limits:
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
 
-env: {{ env | default({}) }}
+env:
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-api-token
+        key: HF_API_TOKEN
+  - name: HF_HUB_OFFLINE
+    value: "{{ env.HF_HUB_OFFLINE | default('0') }}"
 port: {{ port | default(8080) }}
 
 nodeSelector: {{ nodeSelector | default({}) }}
@@ -37,28 +47,17 @@ service:
   type: {{ service.type | default("ClusterIP") }}
   port: {{ service.port | default(80) }}
 
-ingress:
-  enabled: {{ ingress.enabled | default(false) }}
-  className: {{ ingress.className | default("") }}
-  annotations: {{ ingress.annotations | default({}) }}
-  hosts:
-    - host: {{ ingress.hosts[0].host | default("chart-example.local") }}
-      paths:
-        - path: {{ ingress.hosts[0].paths[0].path | default("/") }}
-          pathType: {{ ingress.hosts[0].paths[0].pathType | default("ImplementationSpecific") }}
-  tls: {{ ingress.tls | default([]) }}
-
 tolerations: {{ tolerations | default([]) }}
 
 affinity: {{ affinity | default({}) }}
 
 volumes:
-  - name: {{ volumes[0].name | default("model") }}
-    hostPath:
-      path: {{ volumes[0].hostPath.path | default("/model") }}
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: {{ volumes.hf_cache.claimName | default("hf-cache") }}
 
 volumeMounts:
-  - name: {{ volumeMounts[0].name | default("model") }}
-    mountPath: {{ volumeMounts[0].mountPath | default("/model") }}
+  - name: hf-cache
+    mountPath: {{ volumeMounts.hf_cache.mountPath | default("/model") }}
 
-runtimeClassName: {{ runtimeClassName | default(None) }}
+runtimeClassName: {{ runtimeClassName | default("null") }}

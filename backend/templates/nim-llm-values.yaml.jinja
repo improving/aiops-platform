@@ -3,7 +3,7 @@ model:
   ngcAPIKey: {{ model.ngcAPIKey | default("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") }}
 
 persistence:
-  enabled: {{ persistence.enabled | default(true) }}
+  enabled: {{ persistence.enabled | default(false) }}
   existingClaim: {{ persistence.existingClaim | default("nim-pvc") }}
 
 image:
@@ -23,9 +23,9 @@ metrics:
 
 resources:
   limits:
-    gpu: {{ resources.limits.gpu | default(1) }}
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
   requests:
-    gpu: {{ resources.requests.gpu | default(1) }}
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
 
 nodeSelector:
   kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}
