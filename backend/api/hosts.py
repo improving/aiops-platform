@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from kubernetes import client, config
+from kubernetes import client
 from typing import List, Dict
+from .kubernetes_utils import load_kubernetes_config
 
 router = APIRouter()
 
@@ -20,7 +21,8 @@ class Host(BaseModel):
     gpu_sharing_strategy: str
 
 # Load Kubernetes configuration
-config.load_kube_config()  # Use load_incluster_config() if running inside a pod
+config_source = load_kubernetes_config()
+print(f"Loaded Kubernetes configuration from: {config_source}")
 
 # API to get host information
 @router.get("/v1alpha1/hosts", response_model=List[Host])

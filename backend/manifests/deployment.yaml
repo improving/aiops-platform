@@ -16,7 +16,7 @@ spec:
         app: aiops-backend
     spec:
       containers:
-      - image: ghcr.io/infracloudio/aiops-backend
+      - image: ghcr.io/infracloudio/aiops-backend:main
         name: aiops-backend
         imagePullPolicy: IfNotPresent
         ports:

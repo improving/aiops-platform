@@ -1,15 +1,17 @@
 from .base_controller import Controller
 from schemas.inference_instance import InferenceInstanceSchema
 import kubernetes
-from kubernetes import client, config
+from kubernetes import client
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 from jinja2 import Environment, FileSystemLoader
 import yaml
+from api.kubernetes_utils import load_kubernetes_config
 
 class VLLMController(Controller):
     def __init__(self):
-        config.load_kube_config()
+        config_source = load_kubernetes_config()
+        print(f"Loaded Kubernetes configuration from: {config_source}")
         self.api_instance = client.CustomObjectsApi()
         self.namespace = "ai-stack"
         self.helm = HelmClient()
