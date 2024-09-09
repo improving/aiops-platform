@@ -133,6 +133,10 @@ export default function InferenceEndpointDetails({
                 <span>{inferenceInstance.host || "N/A"}</span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Ready</Label>
+                <span>{inferenceInstance.ready ? "Yes" : "No"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Endpoint</Label>
                 <span className="flex items-center">
                   {inferenceInstance.ready ? (
