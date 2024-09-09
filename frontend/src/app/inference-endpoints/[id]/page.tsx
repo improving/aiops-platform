@@ -117,12 +117,8 @@ export default function InferenceEndpointDetails({
           <CardContent>
             <div className="grid gap-4">
               <div className="grid grid-cols-2 items-center gap-4">
-                <Label>ID</Label>
-                <span>{inferenceInstance.id || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Model ID</Label>
-                <span>{inferenceInstance.model.id || "N/A"}</span>
+                <Label>Model</Label>
+                <span>{inferenceInstance.model.name || "N/A"}</span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Engine</Label>
