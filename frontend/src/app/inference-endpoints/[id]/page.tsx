@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { TrashIcon } from "@radix-ui/react-icons";
+import { TrashIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,7 @@ interface InferenceInstance {
   endpoint: string;
   healthEndpoint: string;
   metricsEndpoint: string;
+  ready: boolean;
 }
 
 export default function InferenceEndpointDetails({
@@ -52,26 +53,27 @@ export default function InferenceEndpointDetails({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const fetchInferenceInstance = async () => {
+      try {
+        const response = await fetch(
+          `/api/v1alpha1/inferenceInstance/${params.id}`
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch inference instance");
+        }
+        const data = await response.json();
+        setInferenceInstance(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching inference instance:", error);
+        setError("Failed to load inference instance details");
+        setLoading(false);
+      }
+    };
     fetchInferenceInstance();
   }, [params.id]);
 
-  const fetchInferenceInstance = async () => {
-    try {
-      const response = await fetch(
-        `/api/v1alpha1/inferenceInstance/${params.id}`
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch inference instance");
-      }
-      const data = await response.json();
-      setInferenceInstance(data);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching inference instance:", error);
-      setError("Failed to load inference instance details");
-      setLoading(false);
-    }
-  };
+
 
   const handleDelete = async () => {
     try {
@@ -132,7 +134,28 @@ export default function InferenceEndpointDetails({
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Endpoint</Label>
-                <span>{inferenceInstance.endpoint || "N/A"}</span>
+                <span className="flex items-center">
+                  {inferenceInstance.ready ? (
+                    <span className="text-green-500">
+                      {inferenceInstance.endpoint || "N/A"}
+                    </span>
+                  ) : (
+                    <span className="text-red-500">
+                      {inferenceInstance.endpoint || "N/A"}
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        inferenceInstance.endpoint || ""
+                      )
+                    }
+                    className="ml-2"
+                  >
+                    <ClipboardCopyIcon className="mr-2 w-4 h-4" />
+                  </Button>
+                </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Health Endpoint</Label>
@@ -148,7 +171,7 @@ export default function InferenceEndpointDetails({
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="destructive">
-                  <TrashIcon className="mr-2 w-4 h-4"/>
+                  <TrashIcon className="mr-2 w-4 h-4" />
                   Delete Inference Endpoint
                 </Button>
               </DialogTrigger>
@@ -167,7 +190,7 @@ export default function InferenceEndpointDetails({
                     variant="destructive"
                     onClick={handleDelete}
                   >
-                    <TrashIcon className="mr-2 w-4 h-4"/>
+                    <TrashIcon className="mr-2 w-4 h-4" />
                     Delete
                   </Button>
                 </DialogFooter>

@@ -14,7 +14,11 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EyeOpenIcon, RocketIcon } from "@radix-ui/react-icons";
+import {
+  EyeOpenIcon,
+  RocketIcon,
+  ClipboardCopyIcon,
+} from "@radix-ui/react-icons";
 import {
   Select,
   SelectContent,
@@ -36,6 +40,7 @@ interface InferenceInstance {
   };
   host: string;
   endpoint: string;
+  ready: boolean;
 }
 
 export default function InferenceEndpoints() {
@@ -53,7 +58,9 @@ export default function InferenceEndpoints() {
         const response = await fetch("/api/v1alpha1/inferenceInstance");
         if (!response.ok) {
           const errorData = await response.json(); // Get error details
-          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+          throw new Error(
+            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
+          );
         }
         const data = await response.json();
         setEndpoints(data);
@@ -184,7 +191,25 @@ export default function InferenceEndpoints() {
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 mb-2">
-                      <strong>Endpoint:</strong> {endpoint.endpoint}
+                      <strong>Endpoint: </strong>
+                      {endpoint.ready ? (
+                        <span className="text-green-500">
+                          {endpoint.endpoint || "N/A"}
+                        </span>
+                      ) : (
+                        <span className="text-red-500">
+                          {endpoint.endpoint || "N/A"}
+                        </span>
+                      )}
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          navigator.clipboard.writeText(endpoint.endpoint || "")
+                        }
+                        className="ml-2"
+                      >
+                        <ClipboardCopyIcon />
+                      </Button>
                     </p>
                   </CardContent>
                   <CardFooter>
