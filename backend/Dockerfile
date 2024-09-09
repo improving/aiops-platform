@@ -5,8 +5,12 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # Copy the required files
-COPY app.py .
 COPY api/ ./api/
+COPY controller/ ./controller/
+COPY templates/ ./templates/
+COPY schemas/ ./schemas/
+COPY app.py .
+COPY database.db .
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt

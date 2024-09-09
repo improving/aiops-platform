@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: aiops-backend
+  name: aiops-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-backend
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: aiops-backend
+    spec:
+      containers:
+      - image: ghcr.io/infracloudio/aiops-backend
+        name: aiops-backend
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 1Gi
+      nodeSelector:
+        kubernetes.io/hostname: gpu-node-4
