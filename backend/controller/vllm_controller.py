@@ -24,7 +24,7 @@ class VLLMController(Controller):
         return f"{self._get_chart_name(instance)}"
     
     def _get_pod_labels(self, instance: InferenceInstanceSchema):
-        return f"app.kubernetes.io/instance={self._get_chart_name},app.kubernetes.io/name=vllm"
+        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name=vllm"
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
         template = self.jinja_env.get_template('vllm-values.yaml.jinja')

@@ -148,7 +148,6 @@ async def check_pod_readiness(instance: DBInferenceInstance, core_v1_api: client
         raise HTTPException(status_code=404, detail="Associated engine not found")
 
     controller = await get_controller(engine.name)
-    chart_name = controller._get_chart_name(instance)
 
     # Check pod readiness
     try:
@@ -165,6 +164,8 @@ async def check_pod_readiness(instance: DBInferenceInstance, core_v1_api: client
             for pod in pods.items
         )
     except client.exceptions.ApiException as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error checking pod readiness: {e}")
         instance_ready = False
     

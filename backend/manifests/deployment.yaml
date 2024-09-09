@@ -18,7 +18,7 @@ spec:
       containers:
       - image: ghcr.io/infracloudio/aiops-backend:main
         name: aiops-backend
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         resources:
