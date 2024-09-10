@@ -63,8 +63,9 @@ async def list_inference_instances(db: Session = Depends(get_db)):
         logger.info(f"Loaded Kubernetes configuration from: {config_source}")
         core_v1_api = client.CoreV1Api()
         for instance in instances:
-            instance_ready = await check_pod_readiness(instance, core_v1_api, db)
+            instance_ready, instance_status = await check_pod_status_and_readiness(instance, core_v1_api, db)
             instance.ready = instance_ready
+            instance.status = instance_status
         return instances
     except Exception as e:
         logger.exception(f"Error in list_inference_instances: {str(e)}")
@@ -82,7 +83,7 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
         logger.info(f"Loaded Kubernetes configuration from: {config_source}")
         core_v1_api = client.CoreV1Api()
 
-        instance_ready = await check_pod_readiness(instance, core_v1_api, db)
+        instance_ready, instance_status = await check_pod_status_and_readiness(instance, core_v1_api, db)
 
         full_instance = InferenceInstanceSchema(
             id=instance.id,
@@ -93,7 +94,8 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             endpoint=instance.endpoint,
             healthEndpoint=instance.healthEndpoint,
             metricsEndpoint=instance.metricsEndpoint,
-            ready=instance_ready
+            ready=instance_ready,
+            status=instance_status
         )
 
         return full_instance
@@ -284,7 +286,7 @@ async def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
         logger.exception(f"Error getting service information: {e}")
     # Don't raise an exception here, as we still want to return the instance information
 
-async def check_pod_readiness(instance: DBInferenceInstance, core_v1_api: client.CoreV1Api, db: Session):
+async def check_pod_status_and_readiness(instance: DBInferenceInstance, core_v1_api: client.CoreV1Api, db: Session):
     # Get the associated engine
     engine = db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
     if not engine:
@@ -306,11 +308,14 @@ async def check_pod_readiness(instance: DBInferenceInstance, core_v1_api: client
             all(container.ready for container in pod.status.container_statuses)
             for pod in pods.items
         )
+
+        instance_status = pods.items[0].status.phase
     except client.exceptions.ApiException as e:
-        logger.exception(f"Error checking pod readiness: {e}")
+        logger.exception(f"Error checking pod status and readiness: {e}")
         instance_ready = False
-    
-    return instance_ready
+        instance_status = "Unknown"
+
+    return instance_ready, instance_status
     
 
 # Initialize the scheduler

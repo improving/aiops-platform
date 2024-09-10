@@ -20,6 +20,7 @@ COPY controller/ ./controller/
 COPY templates/ ./templates/
 COPY schemas/ ./schemas/
 COPY app.py .
+COPY logger.py .
 COPY database.db .
 COPY requirements.txt .
 
