@@ -4,6 +4,16 @@ FROM python:3.9-slim
 # Set the working directory in the container
 WORKDIR /app
 
+# Install necessary dependencies and Helm
+RUN apt-get update && \
+    apt-get install -y curl apt-transport-https gnupg2 && \
+    curl https://baltocdn.com/helm/signing.asc | apt-key add - && \
+    echo "deb https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list && \
+    apt-get update && \
+    apt-get install -y helm && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy the required files
 COPY api/ ./api/
 COPY controller/ ./controller/

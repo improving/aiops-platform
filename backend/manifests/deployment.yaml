@@ -16,9 +16,20 @@ spec:
         app: aiops-backend
     spec:
       containers:
-      - image: ghcr.io/infracloudio/aiops-backend:main
-        name: aiops-backend
+      - name: aiops-backend
+        image: ghcr.io/infracloudio/aiops-backend:main
         imagePullPolicy: Always
+        env:
+        - name: HF_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-api-token
+              key: HF_API_TOKEN
+        - name: NGC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ngc-api-key
+              key: NGC_API_KEY
         ports:
         - containerPort: 8000
         resources:
@@ -28,5 +39,6 @@ spec:
           limits:
             cpu: 1
             memory: 1Gi
+      serviceAccountName: aiops-backend-sa
       nodeSelector:
         kubernetes.io/hostname: gpu-node-4
