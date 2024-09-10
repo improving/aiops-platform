@@ -1,3 +1,4 @@
+import traceback
 from .base_controller import Controller
 from schemas.inference_instance import InferenceInstanceSchema
 import kubernetes
@@ -9,11 +10,13 @@ import yaml
 import os
 import base64
 from api.kubernetes_utils import load_kubernetes_config
+from logger import setup_logger
 
 class TGIController(Controller):
     def __init__(self):
         config_source = load_kubernetes_config()
-        print(f"Loaded Kubernetes configuration from: {config_source}")
+        self.logger = setup_logger(__name__)
+        self.logger.info(f"Loaded Kubernetes configuration from: {config_source}")
         self.api_instance = client.CustomObjectsApi()
         self.core_v1_api = client.CoreV1Api()
         self.namespace = "ai-stack"
@@ -47,11 +50,12 @@ class TGIController(Controller):
 
         try:
             self.core_v1_api.create_namespaced_secret(self.namespace, secret)
-            print(f"Secret '{secret_name}' created successfully")
+            self.logger.info(f"Secret '{secret_name}' created successfully")
         except kubernetes.client.exceptions.ApiException as e:
             if e.status == 409:
-                print(f"Secret '{secret_name}' already exists")
+                self.logger.info(f"Secret '{secret_name}' already exists")
             else:
+                self.logger.exception(f"Failed to create secret '{secret_name}': {str(e)}")
                 raise
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
@@ -109,12 +113,12 @@ class TGIController(Controller):
         chart_name = instance.engine.helm_chart_name
 
         chart = await self.helm.get_chart(chart_name, repo = repo_url)
-        print(f"fetched chart: {chart_name} from {repo_url}")
+        self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
         
         return chart
 
     async def install(self, instance: InferenceInstanceSchema):
-        print(f"instance inside tgi_controller: {instance}")
+        self.logger.info(f"instance inside tgi_controller: {instance}")
         await self._create_hf_api_token_secret()
         chart = await self._add_and_update_helm_repo(instance)
         
@@ -129,8 +133,9 @@ class TGIController(Controller):
                 namespace=self.namespace,
                 create_namespace=True,
             )
-            print(f"Helm install succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm install succeeded for chart: {chart_name}")
         except Exception as e:
+            self.logger.exception(f"Helm install failed: {str(e)}")
             raise Exception(f"Helm install failed: {str(e)}")
 
     async def upgrade(self, instance: InferenceInstanceSchema):
@@ -146,7 +151,7 @@ class TGIController(Controller):
                 namespace=self.namespace,
                 values=values
             )
-            print(f"Helm upgrade succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:
             raise Exception(f"Helm upgrade failed: {str(e)}")
 
@@ -155,12 +160,11 @@ class TGIController(Controller):
         
         try:
             revision = await self.helm.get_current_revision(chart_name, namespace=self.namespace)
-            print(f"Current revision: {revision}")
+            self.logger.info(f"Current revision: {revision}")
             await revision.release.uninstall(wait=True)
-            print(f"Helm uninstall succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm uninstall succeeded for chart: {chart_name}")
         except ReleaseNotFoundError:
-            print(f"Release not found: {chart_name}")
+            self.logger.error(f"Release not found: {chart_name}")
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            self.logger.exception(f"Helm uninstall failed: {str(e)}")
             raise Exception(f"Helm uninstall failed: {str(e)}")

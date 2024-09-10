@@ -1,22 +1,23 @@
 import os
-import subprocess
 import yaml
 import tempfile
 import requests
+import traceback
 from .base_controller import Controller
 from schemas.inference_instance import InferenceInstanceSchema
 import kubernetes
 from kubernetes import client
 from pyhelm3 import Client as HelmClient
-from pyhelm3 import Chart
 from pyhelm3.errors import ReleaseNotFoundError
 from jinja2 import Environment, FileSystemLoader
 from api.kubernetes_utils import load_kubernetes_config
+from logger import setup_logger
 
 class NIMController(Controller):
     def __init__(self):
         config_source = load_kubernetes_config()
-        print(f"Loaded Kubernetes configuration from: {config_source}")
+        self.logger = setup_logger(__name__)
+        self.logger.info(f"Loaded Kubernetes configuration from: {config_source}")
         self.api_instance = client.CustomObjectsApi()
         self.namespace = "nim"
         self.helm = HelmClient()
@@ -75,7 +76,7 @@ class NIMController(Controller):
         
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
-        print(f"nim values: {values}")
+        self.logger.info(f"nim values: {values}")
         return values
 
     async def _download_chart(self, instance: InferenceInstanceSchema):
@@ -90,6 +91,7 @@ class NIMController(Controller):
 
         response = requests.get(chart_url, headers=headers)
         if response.status_code != 200:
+            self.logger.error(f"Failed to download chart: {response.status_code} {response.text}")
             raise Exception(f"Failed to download chart: {response.status_code} {response.text}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.tgz') as temp_file:
@@ -97,7 +99,7 @@ class NIMController(Controller):
             return temp_file.name
 
     async def install(self, instance: InferenceInstanceSchema):
-        print(f"instance inside nim_controller: {instance}")
+        self.logger.info(f"instance inside nim_controller: {instance}")
         chart_path = await self._download_chart(instance)
         chart = await self.helm.get_chart(chart_path)
         chart_name = self._get_chart_name(instance)
@@ -111,8 +113,9 @@ class NIMController(Controller):
                 namespace=self.namespace,
                 create_namespace=True
             )
-            print(f"Helm install succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm install succeeded for chart: {chart_name}")
         except Exception as e:
+            self.logger.exception(f"Helm install failed: {str(e)}")
             raise Exception(f"Helm install failed: {str(e)}")
         finally:
             os.unlink(chart_path)  # Clean up the temporary file
@@ -129,8 +132,9 @@ class NIMController(Controller):
                 values,
                 namespace=self.namespace
             )
-            print(f"Helm upgrade succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:
+            self.logger.exception(f"Helm upgrade failed: {str(e)}")
             raise Exception(f"Helm upgrade failed: {str(e)}")
         finally:
             os.unlink(chart_path)  # Clean up the temporary file
@@ -140,12 +144,12 @@ class NIMController(Controller):
         
         try:
             revision = await self.helm.get_current_revision(chart_name, namespace=self.namespace)
-            print(f"Current revision: {revision}")
+            self.logger.info(f"Current revision: {revision}")
             await revision.release.uninstall(wait=True)
-            print(f"Helm uninstall succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm uninstall succeeded for chart: {chart_name}")
         except ReleaseNotFoundError:
-            print(f"Release not found: {chart_name}")
+            self.logger.error(f"Release not found: {chart_name}")
+            raise Exception(f"Release not found: {chart_name}")
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            self.logger.exception(f"Helm uninstall failed: {str(e)}")
             raise Exception(f"Helm uninstall failed: {str(e)}")

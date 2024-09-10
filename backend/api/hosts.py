@@ -3,6 +3,9 @@ from pydantic import BaseModel, Field
 from kubernetes import client
 from typing import List, Dict
 from .kubernetes_utils import load_kubernetes_config
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 router = APIRouter()
 
@@ -22,7 +25,7 @@ class Host(BaseModel):
 
 # Load Kubernetes configuration
 config_source = load_kubernetes_config()
-print(f"Loaded Kubernetes configuration from: {config_source}")
+logger.info(f"Loaded Kubernetes configuration from: {config_source}")
 
 # API to get host information
 @router.get("/v1alpha1/hosts", response_model=List[Host])

@@ -4,6 +4,9 @@ from .database import SessionLocal, engine, Base
 from api.models import DBModel
 from api.engines import DBEngine
 from api.inference_instance import DBInferenceInstance, DBInferenceInstanceConfigParams
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
@@ -44,7 +47,7 @@ def load_initial_data():
 
         db.commit()
     except Exception as e:
-        print(f"An error occurred while loading initial data: {e}")
+        logger.error(f"An error occurred while loading initial data: {e}")
         db.rollback()
     finally:
         db.close()
@@ -59,9 +62,9 @@ def reload_data():
         # Reload data
         load_initial_data()
 
-        print("Data reloaded successfully")
+        logger.info("Data reloaded successfully")
     except Exception as e:
-        print(f"An error occurred while reloading data: {e}")
+        logger.error(f"An error occurred while reloading data: {e}")
         db.rollback()
     finally:
         db.close()

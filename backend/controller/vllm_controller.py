@@ -1,3 +1,4 @@
+import traceback
 from .base_controller import Controller
 from schemas.inference_instance import InferenceInstanceSchema
 import kubernetes
@@ -7,11 +8,13 @@ from pyhelm3.errors import ReleaseNotFoundError
 from jinja2 import Environment, FileSystemLoader
 import yaml
 from api.kubernetes_utils import load_kubernetes_config
+from logger import setup_logger
 
 class VLLMController(Controller):
     def __init__(self):
         config_source = load_kubernetes_config()
-        print(f"Loaded Kubernetes configuration from: {config_source}")
+        self.logger = setup_logger(__name__)
+        self.logger.info(f"Loaded Kubernetes configuration from: {config_source}")
         self.api_instance = client.CustomObjectsApi()
         self.namespace = "ai-stack"
         self.helm = HelmClient()
@@ -63,7 +66,7 @@ class VLLMController(Controller):
         
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
-        print(f"vllm values: {values}")
+        self.logger.info(f"vllm values: {values}")
         
         return values
 
@@ -72,12 +75,12 @@ class VLLMController(Controller):
         chart_name = instance.engine.helm_chart_name
 
         chart = await self.helm.get_chart(chart_name, repo = repo_url)
-        print(f"fetched chart: {chart_name} from {repo_url}")
+        self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
         
         return chart
 
     async def install(self, instance: InferenceInstanceSchema):
-        print(f"instance inside vllm_controller: {instance}")
+        self.logger.info(f"instance inside vllm_controller: {instance}")
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_chart_name(instance)
         values = await self._prepare_helm_values(instance)
@@ -90,8 +93,9 @@ class VLLMController(Controller):
                 namespace=self.namespace,
                 create_namespace=True
             )
-            print(f"Helm install succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm install succeeded for chart: {chart_name}")
         except Exception as e:
+            self.logger.exception(f"Helm install failed: {str(e)}")
             raise Exception(f"Helm install failed: {str(e)}")
 
     async def upgrade(self, instance: InferenceInstanceSchema):
@@ -106,8 +110,9 @@ class VLLMController(Controller):
                 values,
                 namespace=self.namespace
             )
-            print(f"Helm upgrade succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:
+            self.logger.exception(f"Helm upgrade failed: {str(e)}")
             raise Exception(f"Helm upgrade failed: {str(e)}")
 
     async def remove(self, instance: InferenceInstanceSchema):
@@ -115,13 +120,11 @@ class VLLMController(Controller):
         
         try:
             revision = await self.helm.get_current_revision(chart_name, namespace=self.namespace)
-            print(f"Current revision: {revision}")
+            self.logger.info(f"Current revision: {revision}")
             await revision.release.uninstall(wait=True)
-            print(f"Helm uninstall succeeded for chart: {chart_name}")
+            self.logger.info(f"Helm uninstall succeeded for chart: {chart_name}")
         except ReleaseNotFoundError:
-            print(f"Release not found: {chart_name}")
+            self.logger.error(f"Release not found: {chart_name}")
         except Exception as e:
-            # print error with traceback
-            import traceback
-            traceback.print_exc()
+            self.logger.exception(f"Helm uninstall failed: {str(e)}")
             raise Exception(f"Helm uninstall failed: {str(e)}")
