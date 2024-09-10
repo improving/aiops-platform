@@ -39,6 +39,7 @@ interface InferenceInstance {
   healthEndpoint: string;
   metricsEndpoint: string;
   ready: boolean;
+  status: string;
 }
 
 export default function InferenceEndpointDetails({
@@ -72,8 +73,6 @@ export default function InferenceEndpointDetails({
     };
     fetchInferenceInstance();
   }, [params.id]);
-
-
 
   const handleDelete = async () => {
     try {
@@ -131,6 +130,10 @@ export default function InferenceEndpointDetails({
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Ready</Label>
                 <span>{inferenceInstance.ready ? "Yes" : "No"}</span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Status</Label>
+                <span>{inferenceInstance.status || "N/A"}</span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Endpoint</Label>

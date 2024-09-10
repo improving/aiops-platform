@@ -41,6 +41,7 @@ interface InferenceInstance {
   host: string;
   endpoint: string;
   ready: boolean;
+  status: string;
 }
 
 export default function InferenceEndpoints() {
@@ -195,7 +196,7 @@ export default function InferenceEndpoints() {
                         </span>
                       ) : (
                         <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
-                          In Progress
+                          {endpoint.status || "In Progress"}
                         </span>
                       )}
                     </div>
