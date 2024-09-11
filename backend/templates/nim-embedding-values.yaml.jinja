@@ -1,0 +1,47 @@
+image:
+  repository: {{ image.repository | default("nvcr.io/nim/nvidia/nv-embedqa-mistral-7b-v2") }}
+  tag: {{ image.tag | default("1.0.1") }}
+  pullPolicy: {{ image.pullPolicy | default("IfNotPresent") }}
+
+persistence:
+  existingClaimName: {{ persistence.existingClaimName | default("nim-pvc") }}
+  createPV: {{ persistence.createPV | default(false) }}
+
+imagePullSecrets:
+  nvcrimagepullsecret: {{ imagePullSecrets.nvcrimagepullsecret | default(true) }}
+
+imagePullSecret:
+  registry: {{ imagePullSecret.registry | default("nvcr.io") }}
+  name: {{ imagePullSecret.name | default("registry-secret") }}
+  create: {{ imagePullSecret.create | default(false) }}
+  username: {{ imagePullSecret.username | default('$oauthtoken') }}
+  password: {{ imagePullSecret.password | default("") }}
+
+metrics:
+  enabled: {{ metrics.enabled | default(true) }}
+
+nemo:
+  userID: {{ nemo.userID | default("65534") }}
+  groupID: {{ nemo.groupID | default("65534") }}
+
+service:
+  type: {{ service.type | default("LoadBalancer") }}
+  http_port: {{ service.http_port | default(8080) }}
+  grpc_port: {{ service.grpc_port | default(null) }}
+  nodePort: {{ service.nodePort | default(null) }}
+  annotations: {{ service.annotations | default({}) }}
+
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}
+
+resources:
+  limits:
+    ephemeral-storage: {{ resources.limits.ephemeral_storage | default("28Gi") }}
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
+    memory: {{ resources.limits.memory | default("32Gi") }}
+    cpu: {{ resources.limits.cpu | default("16000m") }}
+  requests:
+    ephemeral-storage: {{ resources.requests.ephemeral_storage | default("28Gi") }}
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+    memory: {{ resources.requests.memory | default("16Gi") }}
+    cpu: {{ resources.requests.cpu | default("4000m") }}

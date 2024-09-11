@@ -1,0 +1,43 @@
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}
+
+config:
+  modelID: {{ config.modelID | default("BAAI/bge-reranker-large") }}
+
+env:
+  - name: MAX_CLIENT_BATCH_SIZE
+    value: "{{ env.MAX_CLIENT_BATCH_SIZE | default('1024') }}"
+  - name: RUST_BACKTRACE
+    value: "{{ env.RUST_BACKTRACE | default('full') }}"
+  - name: HF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-api-token
+        key: HF_API_TOKEN
+
+resources:
+  limits:
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
+  requests:
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+
+strategy:
+  type: {{ strategy.type | default("Recreate") }}
+
+service:
+  type: {{ service.type | default("LoadBalancer") }}
+  port: {{ service.port | default(80) }}
+
+serviceMonitor:
+  enabled: {{ serviceMonitor.enabled | default(true) }}
+  additionalLabels:
+    release: {{ serviceMonitor.additionalLabels.release | default("prometheus") }}
+
+volumeMounts:
+  - name: hf-cache
+    mountPath: {{ volumeMounts.hf_cache.mountPath | default("/data") }}
+
+volumes:
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: {{ volumes.hf_cache.claimName | default("hf-cache") }}

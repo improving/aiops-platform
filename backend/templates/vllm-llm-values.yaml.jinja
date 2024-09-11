@@ -40,7 +40,8 @@ env:
     value: "{{ maxModelLen | default('4192') }}"
 port: {{ port | default(8080) }}
 
-nodeSelector: {{ nodeSelector | default({}) }}
+nodeSelector: 
+  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-3") }}
 
 image:
   repository: {{ image.repository | default("substratusai/vllm") }}

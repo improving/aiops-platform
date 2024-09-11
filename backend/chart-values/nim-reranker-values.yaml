@@ -1,0 +1,31 @@
+image:
+  repository: nvcr.io/nim/nvidia/nv-rerankqa-mistral-4b-v3
+  tag: 1.0.2
+  pullPolicy: IfNotPresent
+persistence:
+  existingClaimName: nim-pvc
+  createPV: false
+metrics:
+  enabled: true
+nemo:
+  userID: "65534"
+  groupID: "65534"
+service:
+  type: LoadBalancer
+  http_port: 8080
+  grpc_port: null
+  nodePort: null
+  annotations: {}
+nodeSelector:
+  kubernetes.io/hostname: gpu-node-1
+resources:
+  limits:
+    ephemeral-storage: 28Gi
+    nvidia.com/gpu: 1
+    memory: 32Gi
+    cpu: "16000m"
+  requests:
+    ephemeral-storage: 28Gi
+    nvidia.com/gpu: 1
+    memory: 16Gi
+    cpu: "4000m"
