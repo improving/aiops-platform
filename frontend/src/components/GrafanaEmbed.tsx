@@ -35,7 +35,9 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
 
       setIframeUrl(url.toString());
     } catch (err) {
-      setError('Failed to construct dashboard URL');
+      console.log("grafanaEndpoint", grafanaEndpoint, "dashboardID", dashboardID, "panelID", panelID, "orgID", orgID, "queryParams", queryParams);
+      console.error('Error constructing dashboard URL:', err);
+      setError('Failed to construct dashboard URL' );
     }
   }, [grafanaEndpoint, dashboardID, panelID, orgID, queryParams]);
 

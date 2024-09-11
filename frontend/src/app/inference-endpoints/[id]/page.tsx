@@ -45,7 +45,7 @@ interface InferenceInstance {
 }
 
 interface GrafanaEmbedPanel {
-  grafanaEndpoint: string;
+  grafanaEndpoint: string | null;
   dashboardID: string;
   panelID: string;
   orgID: string;
@@ -56,7 +56,7 @@ interface GrafanaEmbedPanel {
 
 const mockGrafanaPanels: GrafanaEmbedPanel[] = [
   {
-    grafanaEndpoint: "",
+    grafanaEndpoint: null,
     dashboardID: "cds3su97jm1hce",
     panelID: "12",
     orgID: "1",
@@ -70,7 +70,7 @@ const mockGrafanaPanels: GrafanaEmbedPanel[] = [
     queryParams: {},
   },
   {
-    grafanaEndpoint: "",
+    grafanaEndpoint: "http://192.0.2.202",
     dashboardID: "cds3su97jm1hce",
     panelID: "10",
     orgID: "1",
@@ -262,7 +262,15 @@ export default function InferenceEndpointDetails({
                   {mockGrafanaPanels.map((panel, index) => (
                     <GrafanaEmbed
                       key={index}
-                      grafanaEndpoint={panel.grafanaEndpoint || process.env.GRAFANA_URL || ""} // Ensure a string fallback
+                      grafanaEndpoint={
+                        panel.grafanaEndpoint &&
+                        panel.grafanaEndpoint.trim() !== ""
+                          ? panel.grafanaEndpoint
+                          : process.env.GRAFANA_URL &&
+                            process.env.GRAFANA_URL.trim() !== ""
+                          ? process.env.GRAFANA_URL
+                          : "http://192.0.2.202"
+                      } // Ensure a string fallback
                       dashboardID={panel.dashboardID}
                       panelID={panel.panelID}
                       orgID={panel.orgID}
