@@ -23,6 +23,8 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import GrafanaEmbed from "@/components/GrafanaEmbed";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface InferenceInstance {
   id: string;
@@ -42,6 +44,47 @@ interface InferenceInstance {
   status: string;
 }
 
+interface GrafanaEmbedPanel {
+  grafanaEndpoint: string;
+  dashboardID: string;
+  panelID: string;
+  orgID: string;
+  queryParams: {
+    [key: string]: string;
+  };
+}
+
+const mockGrafanaPanels: GrafanaEmbedPanel[] = [
+  {
+    grafanaEndpoint: "",
+    dashboardID: "cds3su97jm1hce",
+    panelID: "12",
+    orgID: "1",
+    queryParams: {},
+  },
+  {
+    grafanaEndpoint: "",
+    dashboardID: "cds3su97jm1hce",
+    panelID: "14",
+    orgID: "1",
+    queryParams: {},
+  },
+  {
+    grafanaEndpoint: "",
+    dashboardID: "cds3su97jm1hce",
+    panelID: "10",
+    orgID: "1",
+    queryParams: {},
+  },
+  {
+    grafanaEndpoint: "",
+    dashboardID: "cds3su97jm1hce",
+    panelID: "16",
+    orgID: "1",
+    queryParams: {},
+  },
+];
+
 export default function InferenceEndpointDetails({
   params,
 }: {
@@ -52,6 +95,7 @@ export default function InferenceEndpointDetails({
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [grafanaPanels, setGrafanaPanels] = useState<GrafanaEmbedPanel[]>([]);
 
   useEffect(() => {
     const fetchInferenceInstance = async () => {
@@ -109,98 +153,127 @@ export default function InferenceEndpointDetails({
       <Header />
       <main className="flex-grow container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Inference Endpoint Details</h1>
-        <Card>
-          <CardHeader>
-            <CardTitle>{inferenceInstance.model.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4">
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Model</Label>
-                <span>{inferenceInstance.model.name || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Engine</Label>
-                <span>{inferenceInstance.engine.name || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Host</Label>
-                <span>{inferenceInstance.host || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Ready</Label>
-                <span>{inferenceInstance.ready ? "Yes" : "No"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Status</Label>
-                <span>{inferenceInstance.status || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Endpoint</Label>
-                <span className="flex items-center">
-                  {inferenceInstance.ready ? (
-                    <span className="text-green-500">
-                      {inferenceInstance.endpoint || "N/A"}
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
+          </TabsList>
+          <TabsContent value="details">
+            <Card>
+              <CardHeader>
+                <CardTitle>{inferenceInstance.model.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4">
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Model</Label>
+                    <span>{inferenceInstance.model.name || "N/A"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Engine</Label>
+                    <span>{inferenceInstance.engine.name || "N/A"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Host</Label>
+                    <span>{inferenceInstance.host || "N/A"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Ready</Label>
+                    <span>{inferenceInstance.ready ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Status</Label>
+                    <span>{inferenceInstance.status || "N/A"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Endpoint</Label>
+                    <span className="flex items-center">
+                      {inferenceInstance.ready ? (
+                        <span className="text-green-500">
+                          {inferenceInstance.endpoint || "N/A"}
+                        </span>
+                      ) : (
+                        <span className="text-red-500">
+                          {inferenceInstance.endpoint || "N/A"}
+                        </span>
+                      )}
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          navigator.clipboard.writeText(
+                            inferenceInstance.endpoint || ""
+                          )
+                        }
+                        className="ml-2"
+                      >
+                        <ClipboardCopyIcon className="mr-2 w-4 h-4" />
+                      </Button>
                     </span>
-                  ) : (
-                    <span className="text-red-500">
-                      {inferenceInstance.endpoint || "N/A"}
-                    </span>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        inferenceInstance.endpoint || ""
-                      )
-                    }
-                    className="ml-2"
-                  >
-                    <ClipboardCopyIcon className="mr-2 w-4 h-4" />
-                  </Button>
-                </span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Health Endpoint</Label>
-                <span>{inferenceInstance.healthEndpoint || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Metrics Endpoint</Label>
-                <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="destructive">
-                  <TrashIcon className="mr-2 w-4 h-4" />
-                  Delete Inference Endpoint
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>
-                    Are you sure you want to delete this inference endpoint?
-                  </DialogTitle>
-                  <DialogDescription>
-                    This action cannot be undone.
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={handleDelete}
-                  >
-                    <TrashIcon className="mr-2 w-4 h-4" />
-                    Delete
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </CardFooter>
-        </Card>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Health Endpoint</Label>
+                    <span>{inferenceInstance.healthEndpoint || "N/A"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 items-center gap-4">
+                    <Label>Metrics Endpoint</Label>
+                    <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="destructive">
+                      <TrashIcon className="mr-2 w-4 h-4" />
+                      Delete Inference Endpoint
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>
+                        Are you sure you want to delete this inference endpoint?
+                      </DialogTitle>
+                      <DialogDescription>
+                        This action cannot be undone.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleDelete}
+                      >
+                        <TrashIcon className="mr-2 w-4 h-4" />
+                        Delete
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardFooter>
+            </Card>
+          </TabsContent>
+          <TabsContent value="dashboards">
+            <Card>
+              <CardHeader>
+                <CardTitle>Dashboards</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {mockGrafanaPanels.map((panel, index) => (
+                    <GrafanaEmbed
+                      key={index}
+                      grafanaEndpoint={panel.grafanaEndpoint || process.env.GRAFANA_URL || ""} // Ensure a string fallback
+                      dashboardID={panel.dashboardID}
+                      panelID={panel.panelID}
+                      orgID={panel.orgID}
+                      queryParams={panel.queryParams}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
       <Footer />
     </div>
