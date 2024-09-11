@@ -1,4 +1,4 @@
-name,description,helm_chart_repo,helm_chart_name
-TGI,TGI is a library for running inference on models,https://infracloudio.github.io/charts,text-generation-inference
-NIM,NIM is a library for running inference on models,https://helm.ngc.nvidia.com/nim/charts/,nim-llm-1.1.2.tgz
-vLLM,vLLM is a library for running inference on models,https://substratusai.github.io/helm,vllm
+name,llm_support,embedding_support,reranking_support
+HuggingFace,true,true,true
+NIM,true,true,true
+vLLM,true,,

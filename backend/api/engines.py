@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 import uuid
-from sqlalchemy import Column, String
+from sqlalchemy import Column, String, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 from .database import Base, get_db
@@ -15,9 +15,9 @@ class DBEngine(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
-    description = Column(String)
-    helm_chart_repo = Column(String, nullable=False)
-    helm_chart_name = Column(String, nullable=False)
+    llm_support = Column(Boolean, nullable=False)
+    embedding_support = Column(Boolean, nullable=False)
+    reranking_support = Column(Boolean, nullable=False)
 
 # API to get engine information
 @router.get("/v1alpha1/engines", response_model=List[EngineSchema])

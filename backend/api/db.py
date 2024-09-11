@@ -1,5 +1,9 @@
 import csv
 import uuid
+
+from sqlalchemy import Boolean
+
+from api.engine_charts import DBEngineCharts
 from .database import SessionLocal, engine, Base
 from api.models import DBModel
 from api.engines import DBEngine
@@ -16,8 +20,11 @@ def load_initial_data():
     db = SessionLocal()
     try:
         # Load models
+        logger.info("Loading models")
         if db.query(DBModel).count() == 0:
             with open('raw_data/models.csv', 'r') as f:
+                logger.info("Loading models")
+                logger.info(f"Loading models from {f}")
                 csv_reader = csv.DictReader(f)
                 for row in csv_reader:
                     model = DBModel(
@@ -39,11 +46,25 @@ def load_initial_data():
                     engine = DBEngine(
                         id=uuid.uuid4(),
                         name=row['name'],
-                        description=row['description'],
-                        helm_chart_repo=row['helm_chart_repo'],
-                        helm_chart_name=row['helm_chart_name']
+                        llm_support=bool(row['llm_support']),
+                        embedding_support=bool(row['embedding_support']),
+                        reranking_support=bool(row['reranking_support'])
                     )
                     db.add(engine)
+
+        # Load engine charts
+        if db.query(DBEngineCharts).count() == 0:
+            with open('raw_data/engine_charts.csv', 'r') as f:
+                csv_reader = csv.DictReader(f)
+                for row in csv_reader:
+                    engine_chart = DBEngineCharts(
+                        id=uuid.uuid4(),
+                        engine=row['engine'],
+                        chart_type=row['chart_type'],
+                        chart_repo=row['chart_repo'],
+                        chart_name=row['chart_name']
+                    )
+                    db.add(engine_chart)
 
         db.commit()
     except Exception as e:
@@ -56,8 +77,12 @@ def reload_data():
     db = SessionLocal()
     try:
         # Clear existing data
+        db.query(DBInferenceInstanceConfigParams).delete()
+        db.query(DBInferenceInstance).delete()
         db.query(DBEngine).delete()
         db.query(DBModel).delete()
+        db.query(DBEngineCharts).delete()
+        db.commit()
 
         # Reload data
         load_initial_data()
@@ -66,5 +91,28 @@ def reload_data():
     except Exception as e:
         logger.error(f"An error occurred while reloading data: {e}")
         db.rollback()
+        raise e
     finally:
         db.close()
+
+def refresh_db():
+    db = SessionLocal()
+    try:
+        db.query(DBInferenceInstanceConfigParams).delete()
+        db.query(DBInferenceInstance).delete()
+        db.query(DBEngine).delete()
+        db.query(DBModel).delete()
+        db.query(DBEngineCharts).delete()
+        db.commit()
+        
+        # Delete all tables
+        Base.metadata.drop_all(bind=engine)
+
+        # Reload tables and data
+        init_db()
+
+        logger.info("Data refreshed successfully")
+    except Exception as e:
+        logger.error(f"An error occurred while refreshing data: {e}")
+        db.rollback()
+        raise e

@@ -1,0 +1,8 @@
+engine,chart_type,chart_repo,chart_name
+HuggingFace,llm,https://infracloudio.github.io/charts,text-generation-inference
+HuggingFace,embedding,https://infracloudio.github.io/charts,text-embedding-inference
+HuggingFace,reranker,https://infracloudio.github.io/charts,text-embedding-inference
+NIM,llm,https://helm.ngc.nvidia.com/nim/charts/,nim-llm-1.1.2.tgz
+NIM,embedding,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-embedding-nim-1.0.0.tgz
+NIM,reranker,https://helm.ngc.nvidia.com/nim/charts/,text-reranking-nim-1.0.0.tgz
+vLLM,llm,https://substratusai.github.io/helm,vllm
