@@ -1,8 +1,8 @@
-from controller import TGIController, NIMController, VLLMController
+from controller import HuggingFaceController, NIMController, VLLMController
 
 async def get_controller(engine_name: str):
-    if engine_name.lower() == "tgi":
-        return TGIController()
+    if engine_name.lower() == "HuggingFace":
+        return HuggingFaceController()
     elif engine_name.lower() == "nim":
         return NIMController()
     elif engine_name.lower() == "vllm":
