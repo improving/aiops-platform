@@ -200,6 +200,44 @@
         }
       }
     },
+    "/v1alpha1/inferenceInstance/{id}/dashboards": {
+      "get": {
+        "summary": "Get Inference Instance Dashboards",
+        "operationId": "get_inference_instance_dashboards_v1alpha1_inferenceInstance__id__dashboards_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InferenceInstanceDashboardsSchema"
+                  },
+                  "title": "Response Get Inference Instance Dashboards V1Alpha1 Inferenceinstance  Id  Dashboards Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1alpha1/hosts": {
       "get": {
         "summary": "Get Hosts",
@@ -253,6 +291,18 @@
           }
         }
       }
+    },
+    "/refresh-db": {
+      "post": {
+        "summary": "Refresh Db Endpoint",
+        "operationId": "refresh_db_endpoint_refresh_db_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -264,17 +314,17 @@
             "anyOf": [{ "type": "string" }, { "type": "null" }],
             "title": "Name"
           },
-          "description": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Description"
+          "llm_support": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Llm Support"
           },
-          "helm_chart_repo": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Helm Chart Repo"
+          "embedding_support": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Embedding Support"
           },
-          "helm_chart_name": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Helm Chart Name"
+          "reranking_support": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Reranking Support"
           }
         },
         "type": "object",
@@ -368,6 +418,32 @@
         "type": "object",
         "title": "InferenceInstanceConfigParamsSchema"
       },
+      "InferenceInstanceDashboardsSchema": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "dashboard_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Dashboard Id"
+          },
+          "dashboard_name": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Dashboard Name"
+          },
+          "panel_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Panel Id"
+          },
+          "panel_name": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Panel Name"
+          },
+          "org_id": { "type": "string", "title": "Org Id" },
+          "query_params": { "type": "string", "title": "Query Params" }
+        },
+        "type": "object",
+        "required": ["id", "org_id", "query_params"],
+        "title": "InferenceInstanceDashboardsSchema"
+      },
       "InferenceInstanceSchema": {
         "properties": {
           "id": {
@@ -404,6 +480,10 @@
             "anyOf": [{ "type": "boolean" }, { "type": "null" }],
             "title": "Ready",
             "default": false
+          },
+          "status": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Status"
           }
         },
         "type": "object",

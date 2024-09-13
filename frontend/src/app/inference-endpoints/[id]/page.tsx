@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -25,6 +25,19 @@ import {
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandInput,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ChevronDownIcon } from "@radix-ui/react-icons";
+import { CommandList } from "cmdk";
 
 interface InferenceInstance {
   id: string;
@@ -44,45 +57,28 @@ interface InferenceInstance {
   status: string;
 }
 
-interface GrafanaEmbedPanel {
-  grafanaEndpoint: string | null;
-  dashboardID: string;
-  panelID: string;
-  orgID: string;
+interface InferenceInstanceDashboard {
+  id: string;
+  dashboard_id: string | null;
+  dashboard_name: string | null;
+  panel_id: string | null;
+  panel_name: string | null;
+  org_id: string;
   queryParams: {
     [key: string]: string;
   };
 }
 
-const mockGrafanaPanels: GrafanaEmbedPanel[] = [
-  {
-    grafanaEndpoint: null,
-    dashboardID: "cds3su97jm1hce",
-    panelID: "12",
-    orgID: "1",
-    queryParams: {},
-  },
-  {
-    grafanaEndpoint: "",
-    dashboardID: "cds3su97jm1hce",
-    panelID: "14",
-    orgID: "1",
-    queryParams: {},
-  },
-  {
-    grafanaEndpoint: "http://192.0.2.202",
-    dashboardID: "cds3su97jm1hce",
-    panelID: "10",
-    orgID: "1",
-    queryParams: {},
-  },
-  {
-    grafanaEndpoint: "",
-    dashboardID: "cds3su97jm1hce",
-    panelID: "16",
-    orgID: "1",
-    queryParams: {},
-  },
+const timeRangeOptions = [
+  { label: "Last 5 minutes", value: 5 * 60 * 1000 },
+  { label: "Last 15 minutes", value: 15 * 60 * 1000 },
+  { label: "Last 30 minutes", value: 30 * 60 * 1000 },
+  { label: "Last 1 hour", value: 60 * 60 * 1000 },
+  { label: "Last 3 hours", value: 3 * 60 * 60 * 1000 },
+  { label: "Last 6 hours", value: 6 * 60 * 60 * 1000 },
+  { label: "Last 12 hours", value: 12 * 60 * 60 * 1000 },
+  { label: "Last 24 hours", value: 24 * 60 * 60 * 1000 },
+  { label: "Last 2 days", value: 2 * 24 * 60 * 60 * 1000 },
 ];
 
 export default function InferenceEndpointDetails({
@@ -95,7 +91,11 @@ export default function InferenceEndpointDetails({
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [grafanaPanels, setGrafanaPanels] = useState<GrafanaEmbedPanel[]>([]);
+  const [dashboards, setDashboards] = useState<InferenceInstanceDashboard[]>([]);
+  const [selectedTimeRange, setSelectedTimeRange] = useState(
+    timeRangeOptions[0]
+  );
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const fetchInferenceInstance = async () => {
@@ -116,6 +116,21 @@ export default function InferenceEndpointDetails({
       }
     };
     fetchInferenceInstance();
+
+    const fetchDashboards = async () => {
+      try {
+        const response = await fetch(`/api/v1alpha1/inferenceInstance/${params.id}/dashboards`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch dashboards");
+        }
+        const data = await response.json();
+        setDashboards(data);
+      } catch (error) {
+        console.error("Error fetching dashboards:", error);
+        setError("Failed to load dashboards");
+      }
+    };
+    fetchDashboards();
   }, [params.id]);
 
   const handleDelete = async () => {
@@ -135,6 +150,11 @@ export default function InferenceEndpointDetails({
       setError("Failed to delete inference instance");
     }
   };
+  const timeRangeParams = useMemo(() => {
+    const to = Date.now();
+    const from = to - selectedTimeRange.value;
+    return { from: from.toString(), to: to.toString() };
+  }, [selectedTimeRange]);
 
   if (loading) {
     return <div>Loading...</div>;
@@ -258,23 +278,57 @@ export default function InferenceEndpointDetails({
                 <CardTitle>Dashboards</CardTitle>
               </CardHeader>
               <CardContent>
+                <div className="mb-4">
+                  <Popover open={open} onOpenChange={setOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={open}
+                        className="w-[200px] justify-between"
+                      >
+                        {selectedTimeRange.label}
+                        <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0">
+                      <Command>
+                        <CommandInput
+                          placeholder="Search time range..."
+                          className="h-9"
+                        />
+                        <CommandList>
+                          <CommandGroup>
+                            {timeRangeOptions.map((option) => (
+                              <CommandItem
+                                key={option.value}
+                                value={option.value.toString()}
+                                onSelect={() => {
+                                  setSelectedTimeRange(option);
+                                  setOpen(false);
+                                }}
+                              >
+                                {option.label}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {mockGrafanaPanels.map((panel, index) => (
+                  {dashboards.map((dashboard) => (
                     <GrafanaEmbed
-                      key={index}
-                      grafanaEndpoint={
-                        panel.grafanaEndpoint &&
-                        panel.grafanaEndpoint.trim() !== ""
-                          ? panel.grafanaEndpoint
-                          : process.env.GRAFANA_URL &&
-                            process.env.GRAFANA_URL.trim() !== ""
-                          ? process.env.GRAFANA_URL
-                          : "http://192.0.2.202"
-                      } // Ensure a string fallback
-                      dashboardID={panel.dashboardID}
-                      panelID={panel.panelID}
-                      orgID={panel.orgID}
-                      queryParams={panel.queryParams}
+                      key={dashboard.id}
+                      grafanaEndpoint={process.env.NEXT_PUBLIC_GRAFANA_URL || "http://192.0.2.202"}
+                      dashboardID={dashboard.dashboard_id || ""}
+                      panelID={dashboard.panel_id || ""}
+                      orgID={dashboard.org_id}
+                      queryParams={{
+                        ...dashboard.queryParams,
+                        ...timeRangeParams,
+                      }}
                     />
                   ))}
                 </div>

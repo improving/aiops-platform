@@ -4,4 +4,4 @@ metadata:
   name: aiops-frontend-configmap
 data:
   AIOPS_BACKEND_URL: http://aiops-backend.aiops.svc.cluster.local:8000
-  GRAFANA_URL: http://192.0.2.202
+  NEXT_PUBLIC_GRAFANA_URL: http://192.0.2.202
