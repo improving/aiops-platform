@@ -1,7 +1,13 @@
+fullnameOverride: {{ fullnameOverride | default("") }}
+
 image:
   repository: {{ image.repository | default("nvcr.io/nim/nvidia/nv-rerankqa-mistral-4b-v3") }}
   tag: {{ image.tag | default("1.0.2") }}
   pullPolicy: {{ image.pullPolicy | default("IfNotPresent") }}
+
+imagePullSecret:
+  create: {{ imagePullSecret.create | default(false) }}
+  name: {{ imagePullSecret.name | default("nvcrimagepullsecret") }}
 
 persistence:
   existingClaimName: {{ persistence.existingClaimName | default("nim-pvc") }}

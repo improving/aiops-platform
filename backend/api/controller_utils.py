@@ -1,7 +1,7 @@
 from controller import HuggingFaceController, NIMController, VLLMController
 
 async def get_controller(engine_name: str):
-    if engine_name.lower() == "HuggingFace":
+    if engine_name.lower() == "huggingface":
         return HuggingFaceController()
     elif engine_name.lower() == "nim":
         return NIMController()

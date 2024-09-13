@@ -1,10 +1,7 @@
-import os
 import yaml
-import tempfile
-import requests
 from abc import ABC, abstractmethod
+from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
-import kubernetes
 from kubernetes import client
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
@@ -27,17 +24,19 @@ class Controller(ABC):
         # name = <engine_name>-<instance_id_first_8_chars>
         return f"{instance.engine.name.lower()}-{str(instance.id)[:8]}"
 
-    def _get_service_name(self, instance: InferenceInstanceSchema):
-        return f"{self._get_chart_name(instance)}"
+    def _get_service_name(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
+        return f"{self._get_chart_name(instance)}-{engineChart.chart_name}"
 
-    def _get_pod_labels(self, instance: InferenceInstanceSchema):
-        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name={instance.engine.name.lower()}"
+    def _get_pod_labels(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
+        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name={engineChart.chart_name}"
 
-    async def _prepare_helm_values(self, instance: InferenceInstanceSchema):
-        template = self.jinja_env.get_template(f'{instance.engine.name.lower()}-values.yaml.jinja')
+    async def _prepare_helm_values(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
+        template = self.jinja_env.get_template(f'{instance.engine.name.lower()}-{instance.model.category}-values.yaml.jinja')
         
         context = self._get_base_context(instance)
-        context.update(self._get_engine_specific_context(instance))
+        self.logger.info(f"Base context: {context}")
+        self.logger.info(f"Engine specific context: {self._get_engine_specific_context(instance, engineChart)}")
+        context.update(self._get_engine_specific_context(instance, engineChart))
         
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
@@ -66,23 +65,23 @@ class Controller(ABC):
         }
 
     @abstractmethod
-    def _get_engine_specific_context(self, instance: InferenceInstanceSchema):
+    def _get_engine_specific_context(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         pass
 
-    async def _add_and_update_helm_repo(self, instance: InferenceInstanceSchema):
-        repo_url = instance.engine.helm_chart_repo
-        chart_name = instance.engine.helm_chart_name
+    async def _add_and_update_helm_repo(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
+        repo_url = engineChart.chart_repo
+        chart_name = engineChart.chart_name
 
         chart = await self.helm.get_chart(chart_name, repo=repo_url)
         self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
         
         return chart
 
-    async def install(self, instance: InferenceInstanceSchema):
+    async def install(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         self.logger.debug(f"Installing instance: {instance}")
-        chart = await self._add_and_update_helm_repo(instance)
+        chart = await self._add_and_update_helm_repo(instance, engineChart)
         chart_name = self._get_chart_name(instance)
-        values = await self._prepare_helm_values(instance)
+        values = await self._prepare_helm_values(instance, engineChart)
         
         try:
             await self.helm.install_or_upgrade_release(
@@ -100,10 +99,10 @@ class Controller(ABC):
     def _unlink_downloaded_chart(self, instance: InferenceInstanceSchema):
         return
 
-    async def upgrade(self, instance: InferenceInstanceSchema):
-        chart = await self._add_and_update_helm_repo(instance)
+    async def upgrade(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
+        chart = await self._add_and_update_helm_repo(instance, engineChart)
         chart_name = self._get_chart_name(instance)
-        values = await self._prepare_helm_values(instance)
+        values = await self._prepare_helm_values(instance, engineChart)
         
         try:
             await self.helm.install_or_upgrade_release(
@@ -117,7 +116,7 @@ class Controller(ABC):
             self.logger.exception(f"Helm upgrade failed: {str(e)}")
             raise Exception(f"Helm upgrade failed: {str(e)}")
 
-    async def remove(self, instance: InferenceInstanceSchema):
+    async def uninstall(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         chart_name = self._get_chart_name(instance)
         
         try:

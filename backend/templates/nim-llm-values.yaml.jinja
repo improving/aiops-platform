@@ -1,6 +1,5 @@
 model:
-  ngcAPISecret: {{ model.ngcAPISecret | default("ngc-api-nim-llm") }}
-  ngcAPIKey: {{ model.ngcAPIKey | default("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") }}
+  ngcAPISecret: {{ model.ngcAPISecret | default("ngc-api") }}
 
 persistence:
   enabled: {{ persistence.enabled | default(false) }}
@@ -9,6 +8,9 @@ persistence:
 image:
   repository: {{ image.repository | default("nvcr.io/nim/meta/llama3-8b-instruct") }}
   tag: {{ image.tag | default("1.0.3") }}
+
+imagePullSecrets:
+  - name: {{ imagePullSecret.name | default("nvcrimagepullsecret") }}
 
 service:
   type: {{ service.type | default("LoadBalancer") }}

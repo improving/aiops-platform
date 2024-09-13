@@ -1,3 +1,5 @@
+fullnameOverride: {{ fullnameOverride | default("") }}
+
 image:
   repository: {{ image.repository | default("nvcr.io/nim/nvidia/nv-embedqa-mistral-7b-v2") }}
   tag: {{ image.tag | default("1.0.1") }}
@@ -7,15 +9,9 @@ persistence:
   existingClaimName: {{ persistence.existingClaimName | default("nim-pvc") }}
   createPV: {{ persistence.createPV | default(false) }}
 
-imagePullSecrets:
-  nvcrimagepullsecret: {{ imagePullSecrets.nvcrimagepullsecret | default(true) }}
-
 imagePullSecret:
-  registry: {{ imagePullSecret.registry | default("nvcr.io") }}
-  name: {{ imagePullSecret.name | default("registry-secret") }}
   create: {{ imagePullSecret.create | default(false) }}
-  username: {{ imagePullSecret.username | default('$oauthtoken') }}
-  password: {{ imagePullSecret.password | default("") }}
+  name: {{ imagePullSecret.name | default("nvcrimagepullsecret") }}
 
 metrics:
   enabled: {{ metrics.enabled | default(true) }}

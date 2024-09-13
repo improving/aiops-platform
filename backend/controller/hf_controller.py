@@ -4,6 +4,7 @@ from .base_controller import Controller
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from schemas.inference_instance import InferenceInstanceSchema
+from schemas.engine_charts import EngineChartsSchema
 
 class HuggingFaceController(Controller):
     def _get_engine_specific_context(self, instance: InferenceInstanceSchema):
@@ -15,6 +16,7 @@ class HuggingFaceController(Controller):
                 "HF_HUB_OFFLINE": "1"
             },
             "volumes": {
+                "hf_cache": {"claimName": "hf-cache"},
                 "shm": {"sizeLimit": "1Gi"}
             },
             "strategy": {},
@@ -37,9 +39,9 @@ class HuggingFaceController(Controller):
         
         return context
 
-    async def install(self, instance: InferenceInstanceSchema):
+    async def install(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         await self._create_hf_api_token_secret()
-        await super().install(instance)
+        await super().install(instance, engineChart)
 
     async def _create_hf_api_token_secret(self):
         secret_name = "hf-api-token"

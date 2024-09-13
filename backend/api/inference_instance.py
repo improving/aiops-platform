@@ -3,11 +3,12 @@ import traceback
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 import uuid
-from sqlalchemy import Column, Integer, String, ForeignKey, or_
+from sqlalchemy import Column, Integer, String, ForeignKey, and_, or_
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy.future import select
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from api.engine_charts import DBEngineCharts
 from logger import setup_logger
 
 from controller.base_controller import Controller
@@ -115,6 +116,10 @@ async def create_inference_instance(instance: InferenceInstanceSchema, db: Sessi
         if not model or not engine:
             logger.error(f"Model or Engine not found: model_id={instance.model.id}, engine_id={instance.engine.id}")
             raise HTTPException(status_code=404, detail="Model or Engine not found")
+        
+        engine_chart = db.query(DBEngineCharts).filter(and_(DBEngineCharts.engine == engine.name, DBEngineCharts.chart_type == model.category)).first()
+        if not engine_chart:
+            logger.error(f"Model Engine combination is invalid: model: {model.name}, engine: {engine.name}")
 
         HF_API_TOKEN = os.environ.get("HF_API_TOKEN")
         NGC_API_KEY = os.environ.get("NGC_API_KEY")
@@ -157,7 +162,7 @@ async def create_inference_instance(instance: InferenceInstanceSchema, db: Sessi
         controller = await get_controller(engine.name)
 
         try:
-            await controller.install(full_instance)
+            await controller.install(full_instance, engine_chart)
         except Exception as e:
             db.delete(db_instance)
             db.delete(db_config)
@@ -191,10 +196,25 @@ async def update_inference_instance(id: uuid.UUID, updated_instance: InferenceIn
         db.commit()
         db.refresh(db_instance)
 
-        controller = await get_controller(db_instance.engine.name)
+        model = db.query(DBModel).filter(DBModel.id == db_instance.model_id).first()
+        engine = db.query(DBEngine).filter(DBEngine.id == db_instance.engine_id).first()
+        engine_chart = db.query(DBEngineCharts).filter(and_(DBEngineCharts.engine == engine.name, DBEngineCharts.chart_type == model.category)).first()
+
+        full_instance = InferenceInstanceSchema(
+            id=db_instance.id,
+            model=ModelSchema.model_validate(model),
+            engine=EngineSchema.model_validate(engine),
+            host=db_instance.host,
+            config=InferenceInstanceConfigParamsSchema.model_validate(db_instance.config) if db_instance.config else None,
+            endpoint=db_instance.endpoint,
+            healthEndpoint=db_instance.healthEndpoint,
+            metricsEndpoint=db_instance.metricsEndpoint
+        )
+
+        controller = await get_controller(engine.name)
 
         try:
-            await controller.upgrade(db_instance)
+            await controller.upgrade(full_instance, engine_chart)
         except Exception as e:
             logger.exception(f"Failed to upgrade Helm chart: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to upgrade Helm chart: {str(e)}")
@@ -215,10 +235,25 @@ async def delete_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)
             logger.error(f"Inference instance not found: {id}")
             raise HTTPException(status_code=404, detail="Inference instance not found")
 
-        controller = await get_controller(db_instance.engine.name)
+        model = db.query(DBModel).filter(DBModel.id == db_instance.model_id).first()
+        engine = db.query(DBEngine).filter(DBEngine.id == db_instance.engine_id).first()
+        engine_chart = db.query(DBEngineCharts).filter(and_(DBEngineCharts.engine == engine.name, DBEngineCharts.chart_type == model.category)).first()
+
+        full_instance = InferenceInstanceSchema(
+            id=db_instance.id,
+            model=ModelSchema.model_validate(model),
+            engine=EngineSchema.model_validate(engine),
+            host=db_instance.host,
+            config=InferenceInstanceConfigParamsSchema.model_validate(db_instance.config) if db_instance.config else None,
+            endpoint=db_instance.endpoint,
+            healthEndpoint=db_instance.healthEndpoint,
+            metricsEndpoint=db_instance.metricsEndpoint
+        )
+
+        controller = await get_controller(engine.name)
 
         try:
-            await controller.remove(db_instance)
+            await controller.uninstall(full_instance, engine_chart)
         except Exception as e:
             logger.exception(f"Failed to remove Helm chart: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to remove Helm chart: {str(e)}")
@@ -251,9 +286,13 @@ async def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
     engine = db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Associated engine not found")
+    
+    engine_chart = db.query(DBEngineCharts).filter(and_(DBEngineCharts.engine == engine.name, DBEngineCharts.chart_type == instance.model.category)).first()
+    if not engine_chart:
+        raise HTTPException(status_code=404, detail="Associated engine chart not found")
 
     controller = await get_controller(engine.name)
-    service_name = controller._get_service_name(instance)
+    service_name = controller._get_service_name(instance, engine_chart)
 
     config_source = load_kubernetes_config()
     logger.info(f"Loaded Kubernetes configuration from: {config_source}")
@@ -291,13 +330,17 @@ async def check_pod_status_and_readiness(instance: DBInferenceInstance, core_v1_
     engine = db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
     if not engine:
         raise HTTPException(status_code=404, detail="Associated engine not found")
+    
+    engine_chart = db.query(DBEngineCharts).filter(and_(DBEngineCharts.engine == engine.name, DBEngineCharts.chart_type == instance.model.category)).first()
+    if not engine_chart:
+        raise HTTPException(status_code=404, detail="Associated engine chart not found")
 
     controller = await get_controller(engine.name)
 
     # Check pod readiness
     try:
         # Define pod labels based on the engine type
-        pod_labels = controller._get_pod_labels(instance)
+        pod_labels = controller._get_pod_labels(instance, engine_chart)
 
         # Query pods
         pods = core_v1_api.list_namespaced_pod(namespace=controller.namespace, label_selector=pod_labels)
@@ -309,7 +352,28 @@ async def check_pod_status_and_readiness(instance: DBInferenceInstance, core_v1_
             for pod in pods.items
         )
 
-        instance_status = pods.items[0].status.phase
+        if pods.items:
+            pod = pods.items[0]
+            status = pod.status.container_statuses[0]
+            if pod.status.init_container_statuses:
+                initContainerStatus = pod.status.init_container_statuses[0]
+                if not initContainerStatus.state.terminated:
+                    logger.info(f"Using init container status")
+                    status = initContainerStatus
+                else:
+                    logger.info(f"Using container status")
+
+            logger.info(f"Pod Name: {pod.metadata.name}, Status: {status}")
+            if not status.started and status.state.waiting:
+                instance_status = status.state.waiting.reason
+            elif not status.started and status.state.terminated:
+                instance_status = "Terminated"
+            elif status.started or (not status.started and status.state.running.started_at):
+                instance_status = "Running"
+            else:
+                instance_status = status.state
+        else:
+            instance_status = "Unknown"
     except client.exceptions.ApiException as e:
         logger.exception(f"Error checking pod status and readiness: {e}")
         instance_ready = False
