@@ -3,6 +3,7 @@ import uuid
 
 from sqlalchemy import Boolean
 
+from api.engine_chart_dashboards import DBEngineChartDashboards
 from api.engine_charts import DBEngineCharts
 from .database import SessionLocal, engine, Base
 from api.models import DBModel
@@ -44,7 +45,7 @@ def load_initial_data():
                 csv_reader = csv.DictReader(f)
                 for row in csv_reader:
                     engine = DBEngine(
-                        id=uuid.uuid4(),
+                        id=uuid.UUID(row['id']),
                         name=row['name'],
                         llm_support=bool(row['llm_support']),
                         embedding_support=bool(row['embedding_support']),
@@ -58,13 +59,29 @@ def load_initial_data():
                 csv_reader = csv.DictReader(f)
                 for row in csv_reader:
                     engine_chart = DBEngineCharts(
-                        id=uuid.uuid4(),
+                        id=uuid.UUID(row['id']),
                         engine=row['engine'],
                         chart_type=row['chart_type'],
                         chart_repo=row['chart_repo'],
                         chart_name=row['chart_name']
                     )
                     db.add(engine_chart)
+        
+        # Load engine chart dashboards
+        if db.query(DBEngineChartDashboards).count() == 0:
+            with open('raw_data/engine_chart_dashboards.csv', 'r') as f:
+                csv_reader = csv.DictReader(f)
+                for row in csv_reader:
+                    engine_chart_dashboard = DBEngineChartDashboards(
+                        id=uuid.uuid4(),
+                        dashboard_id=row['dashboard_id'],
+                        dashboard_name=row['dashboard_name'],
+                        engine_id=uuid.UUID(row['engine_id']),
+                        engine_chart_id=uuid.UUID(row['engine_chart_id']),
+                        panel_id=row['panel_id'],
+                        panel_name=row['panel_name']
+                    )
+                    db.add(engine_chart_dashboard)
 
         db.commit()
     except Exception as e:

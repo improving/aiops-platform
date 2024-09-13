@@ -1,8 +1,8 @@
-engine,chart_type,chart_repo,chart_name
-HuggingFace,llm,https://infracloudio.github.io/charts,text-generation-inference
-HuggingFace,embedding,https://infracloudio.github.io/charts,text-embeddings-inference
-HuggingFace,reranker,https://infracloudio.github.io/charts,text-embeddings-inference
-NIM,llm,https://helm.ngc.nvidia.com/nim/charts/,nim-llm-1.1.2.tgz
-NIM,embedding,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-embedding-nim-1.0.0.tgz
-NIM,reranker,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-reranking-nim-1.0.0.tgz
-vLLM,llm,https://substratusai.github.io/helm,vllm
+id,engine,chart_type,chart_repo,chart_name
+e9795fd9799c497590896fb53e41dc38,HuggingFace,llm,https://infracloudio.github.io/charts,text-generation-inference
+794056a0b5e64bd7af44575e0b21aced,HuggingFace,embedding,https://infracloudio.github.io/charts,text-embeddings-inference
+85c46e83b6374eb6a8f781f3a304e50b,HuggingFace,reranker,https://infracloudio.github.io/charts,text-embeddings-inference
+2e7b6e243ef94dc1a05c8cb361bc25a9,NIM,llm,https://helm.ngc.nvidia.com/nim/charts/,nim-llm-1.1.2.tgz
+5bd61360a6a74b0a8be39174ab189bc6,NIM,embedding,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-embedding-nim-1.0.0.tgz
+5485c874e3bf454b8ddf86959777c4a5,NIM,reranker,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-reranking-nim-1.0.0.tgz
+3dcd1b5b97574775a11eedfa7708bfc3,vLLM,llm,https://substratusai.github.io/helm,vllm

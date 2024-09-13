@@ -8,10 +8,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy.future import select
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from api.engine_chart_dashboards import DBEngineChartDashboards
 from api.engine_charts import DBEngineCharts
+from api.inference_instance_dashboards import InferenceInstanceDashboards
 from logger import setup_logger
 
 from controller.base_controller import Controller
+from schemas.inference_instance_dashboards import InferenceInstanceDashboardsSchema
 from .database import Base, get_db
 from .models import DBModel
 from .engines import DBEngine
@@ -27,6 +30,9 @@ router = APIRouter()
 
 # Initialize the logger
 logger = setup_logger(__name__)
+
+# Static org_id for all dashboards
+org_id = "1"
 
 # SQLAlchemy models
 class DBInferenceInstanceConfigParams(Base):
@@ -107,6 +113,34 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
         logger.exception(f"Error in get_inference_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.get("/v1alpha1/inferenceInstance/{id}/dashboards", response_model=List[InferenceInstanceDashboardsSchema])
+async def get_inference_instance_dashboards(id: uuid.UUID, db: Session = Depends(get_db)):
+    try:
+        db_instance_dashboards = db.query(InferenceInstanceDashboards).filter(InferenceInstanceDashboards.inference_instance_id == id).all()
+
+        if not db_instance_dashboards:
+            return []
+        
+        instance_dashboard_list = []
+        for db_instance_dashboard in db_instance_dashboards:
+            instance_dashboard = InferenceInstanceDashboardsSchema(
+                id=db_instance_dashboard.id,
+                org_id=db_instance_dashboard.org_id,
+                query_params=db_instance_dashboard.query_params
+            )
+            chart_dashboard = db.query(DBEngineChartDashboards).filter(DBEngineChartDashboards.id == db_instance_dashboard.engine_chart_dashboard_id).first()
+            if chart_dashboard:
+                instance_dashboard.dashboard_id = chart_dashboard.dashboard_id
+                instance_dashboard.dashboard_name = chart_dashboard.dashboard_name
+                instance_dashboard.panel_id = chart_dashboard.panel_id
+                instance_dashboard.panel_name = chart_dashboard.panel_name
+            instance_dashboard_list.append(instance_dashboard)
+
+        return instance_dashboard_list
+    except Exception as e:
+        logger.exception(f"Error in get_inference_instance_dashboards: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @router.post("/v1alpha1/inferenceInstance", response_model=InferenceInstanceSchema)
 async def create_inference_instance(instance: InferenceInstanceSchema, db: Session = Depends(get_db)):
     try:
@@ -169,6 +203,12 @@ async def create_inference_instance(instance: InferenceInstanceSchema, db: Sessi
             db.commit()
             logger.exception(f"Failed to install Helm chart: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to install Helm chart: {str(e)}")
+        
+        try:
+            await create_instance_dashboards(full_instance, engine_chart, db)
+        except Exception as e:
+            logger.exception(f"Failed to create dashboards: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to create dashboards: {str(e)}")
 
         return full_instance
     except HTTPException:
@@ -238,6 +278,7 @@ async def delete_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)
         model = db.query(DBModel).filter(DBModel.id == db_instance.model_id).first()
         engine = db.query(DBEngine).filter(DBEngine.id == db_instance.engine_id).first()
         engine_chart = db.query(DBEngineCharts).filter(and_(DBEngineCharts.engine == engine.name, DBEngineCharts.chart_type == model.category)).first()
+        instance_dashboards = db.query(InferenceInstanceDashboards).filter(InferenceInstanceDashboards.inference_instance_id == id).all()
 
         full_instance = InferenceInstanceSchema(
             id=db_instance.id,
@@ -262,6 +303,14 @@ async def delete_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)
         db.delete(db_instance)
         db.commit()
 
+        try:
+            if instance_dashboards:
+                for dashboard in instance_dashboards:
+                    db.delete(dashboard)
+                db.commit()
+        except Exception as e:
+            logger.exception(f"Error deleting dashboards: {e}")
+
         return {"detail": "Inference instance deleted"}
     except HTTPException:
         logger.exception("HTTPException in delete_inference_instance")
@@ -269,6 +318,36 @@ async def delete_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)
     except Exception as e:
         logger.exception(f"Error in delete_inference_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+async def create_instance_dashboards(instance: InferenceInstanceSchema, engine_chart: DBEngineCharts, db: Session):
+    try:
+        engine_chart_dashboards = db.query(DBEngineChartDashboards).filter(and_(DBEngineChartDashboards.engine_id == instance.engine.id, 
+                                                                                DBEngineChartDashboards.engine_chart_id == engine_chart.id)).all()
+        if not engine_chart_dashboards:
+            logger.error(f"No dashboards found for engine chart: {engine_chart.id}")
+            return
+
+        for chart_dashboard in engine_chart_dashboards:
+            controller = await get_controller(instance.engine.name)
+            namespace = controller.namespace
+            service_name = controller._get_service_name(instance, engine_chart)
+            query_params = {
+                "var-namespace": namespace,
+                "var-service": service_name,
+            }
+            inference_instance_dashboard = InferenceInstanceDashboards(
+                id = uuid.uuid4(),
+                inference_instance_id=instance.id,
+                engine_chart_dashboard_id=chart_dashboard.id,
+                org_id=org_id,
+                query_params=str(query_params)
+            )
+            db.add(inference_instance_dashboard)
+        
+        db.commit()
+    except Exception as e:
+        logger.exception(f"Error creating instance dashboards: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating instance dashboards: {e}")
 
 async def update_all_instance_endpoints():
     db = SessionLocal()

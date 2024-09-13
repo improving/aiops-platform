@@ -1,0 +1,17 @@
+dashboard_id,dashboard_name,engine_id,engine_chart_id,panel_id,panel_name
+RHSk7EL4kdqsd,Text Generation Inference,551d8d806b004907b8a844f4df5b7da1,e9795fd9799c497590896fb53e41dc38,49,Time to first token
+RHSk7EL4kdqsd,Text Generation Inference,551d8d806b004907b8a844f4df5b7da1,e9795fd9799c497590896fb53e41dc38,45,"Throughput (generated tok/s)"
+RHSk7EL4kdqsd,Text Generation Inference,551d8d806b004907b8a844f4df5b7da1,e9795fd9799c497590896fb53e41dc38,48,Number of tokens per prompt
+RHSk7EL4kdqsd,Text Generation Inference,551d8d806b004907b8a844f4df5b7da1,e9795fd9799c497590896fb53e41dc38,30,Number of generated tokens per request
+RHSk7EL4kdqbc,Text Embedding Inference,551d8d806b004907b8a844f4df5b7da1,794056a0b5e64bd7af44575e0b21aced,13,E2E Latency
+RHSk7EL4kdqbc,Text Embedding Inference,551d8d806b004907b8a844f4df5b7da1,794056a0b5e64bd7af44575e0b21aced,45,Latency quantiles
+RHSk7EL4kdqbc,Text Embedding Inference,551d8d806b004907b8a844f4df5b7da1,794056a0b5e64bd7af44575e0b21aced,44,Tokenization Duration quantiles
+RHSk7EL4kdqbc,Text Embedding Inference,551d8d806b004907b8a844f4df5b7da1,794056a0b5e64bd7af44575e0b21aced,6,Queue Duration quantiles
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,f2fd8a4a5cfa4c40b8348cf8d86343fc,2e7b6e243ef94dc1a05c8cb361bc25a9,9,E2E Request Latency
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,f2fd8a4a5cfa4c40b8348cf8d86343fc,2e7b6e243ef94dc1a05c8cb361bc25a9,8,Token Throughput
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,f2fd8a4a5cfa4c40b8348cf8d86343fc,2e7b6e243ef94dc1a05c8cb361bc25a9,5,Time To First Token Latency
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,f2fd8a4a5cfa4c40b8348cf8d86343fc,2e7b6e243ef94dc1a05c8cb361bc25a9,10,Time Per Output Token Latency
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,49faea0e40a84e14832b10d494f6bae0,3dcd1b5b97574775a11eedfa7708bfc3,9,E2E Request Latency
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,49faea0e40a84e14832b10d494f6bae0,3dcd1b5b97574775a11eedfa7708bfc3,8,Token Throughput
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,49faea0e40a84e14832b10d494f6bae0,3dcd1b5b97574775a11eedfa7708bfc3,5,Time To First Token Latency
+b281712d-8bff-41ef-9f3f-71ad43c05e9b,vLLM,49faea0e40a84e14832b10d494f6bae0,3dcd1b5b97574775a11eedfa7708bfc3,10,Time Per Output Token Latency
