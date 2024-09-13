@@ -1,3 +1,4 @@
+import json
 import os
 import traceback
 from fastapi import APIRouter, HTTPException, Depends
@@ -126,7 +127,7 @@ async def get_inference_instance_dashboards(id: uuid.UUID, db: Session = Depends
             instance_dashboard = InferenceInstanceDashboardsSchema(
                 id=db_instance_dashboard.id,
                 org_id=db_instance_dashboard.org_id,
-                query_params=db_instance_dashboard.query_params
+                query_params=json.loads(db_instance_dashboard.query_params)
             )
             chart_dashboard = db.query(DBEngineChartDashboards).filter(DBEngineChartDashboards.id == db_instance_dashboard.engine_chart_dashboard_id).first()
             if chart_dashboard:
@@ -340,7 +341,7 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema, engine_c
                 inference_instance_id=instance.id,
                 engine_chart_dashboard_id=chart_dashboard.id,
                 org_id=org_id,
-                query_params=str(query_params)
+                query_params=json.dumps(query_params)
             )
             db.add(inference_instance_dashboard)
         

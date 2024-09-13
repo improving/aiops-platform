@@ -9,7 +9,7 @@ class InferenceInstanceDashboardsSchema(BaseModel):
     panel_id: Optional[str] = None
     panel_name: Optional[str] = None
     org_id: str
-    query_params: str
+    query_params: dict
 
     class Config:
         from_attributes = True

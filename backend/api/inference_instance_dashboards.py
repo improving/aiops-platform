@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from .database import Base
 
 class InferenceInstanceDashboards(Base):
@@ -10,4 +10,4 @@ class InferenceInstanceDashboards(Base):
     inference_instance_id = Column(UUID(as_uuid=True), ForeignKey('inference_instances.id'))
     engine_chart_dashboard_id = Column(UUID(as_uuid=True), ForeignKey('engine_chart_dashboards.id'))
     org_id = Column(String)
-    query_params = Column(String)
+    query_params = Column(JSON)
