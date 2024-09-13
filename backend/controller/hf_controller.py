@@ -7,7 +7,7 @@ from schemas.inference_instance import InferenceInstanceSchema
 from schemas.engine_charts import EngineChartsSchema
 
 class HuggingFaceController(Controller):
-    def _get_engine_specific_context(self, instance: InferenceInstanceSchema):
+    def _get_engine_specific_context(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         context = {
             "config": {
                 "modelID": instance.model.modelId

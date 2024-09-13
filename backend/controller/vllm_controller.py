@@ -1,8 +1,9 @@
 from .base_controller import Controller
 from schemas.inference_instance import InferenceInstanceSchema
+from schemas.engine_charts import EngineChartsSchema
 
 class VLLMController(Controller):
-    def _get_engine_specific_context(self, instance: InferenceInstanceSchema):
+    def _get_engine_specific_context(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         context = {
             "model": instance.model.modelId,
             "image": {},
