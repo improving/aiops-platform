@@ -15,11 +15,11 @@ class NIMController(Controller):
     
     def _get_service_name(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         chart_name_without_version_and_extension = '-'.join(os.path.splitext(engineChart.chart_name)[0].rsplit('-', 1)[:-1])
-        return f"{self._get_chart_name(instance)}-{chart_name_without_version_and_extension}"
+        return f"{self._get_release_name(instance)}-{chart_name_without_version_and_extension}"
 
     def _get_pod_labels(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         chart_name_without_version_and_extension = '-'.join(os.path.splitext(engineChart.chart_name)[0].rsplit('-', 1)[:-1])
-        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name={chart_name_without_version_and_extension}"
+        return f"app.kubernetes.io/instance={self._get_release_name(instance)},app.kubernetes.io/name={chart_name_without_version_and_extension}"
     
     def _get_engine_specific_context(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         self.logger.info(f"Loading engine specific context for {engineChart.chart_name}")
@@ -69,7 +69,7 @@ class NIMController(Controller):
         }
 
     def _get_downloaded_chart_name(self, instance: InferenceInstanceSchema):
-        return f"{os.path.join(tempfile.gettempdir(), self._get_chart_name(instance))}.tgz"
+        return f"{os.path.join(tempfile.gettempdir(), self._get_release_name(instance))}.tgz"
     
     async def _add_and_update_helm_repo(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         chart_path = await self._download_chart(instance, engineChart)

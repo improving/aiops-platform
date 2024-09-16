@@ -20,15 +20,15 @@ class Controller(ABC):
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader('templates'))
 
-    def _get_chart_name(self, instance: InferenceInstanceSchema):
+    def _get_release_name(self, instance: InferenceInstanceSchema):
         # name = <engine_name>-<instance_id_first_8_chars>
         return f"{instance.engine.name.lower()}-{str(instance.id)[:8]}"
 
     def _get_service_name(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
-        return f"{self._get_chart_name(instance)}-{engineChart.chart_name}"
+        return f"{self._get_release_name(instance)}-{engineChart.chart_name}"
 
     def _get_pod_labels(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
-        return f"app.kubernetes.io/instance={self._get_chart_name(instance)},app.kubernetes.io/name={engineChart.chart_name}"
+        return f"app.kubernetes.io/instance={self._get_release_name(instance)},app.kubernetes.io/name={engineChart.chart_name}"
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         template = self.jinja_env.get_template(f'{instance.engine.name.lower()}-{instance.model.category}-values.yaml.jinja')
@@ -80,7 +80,7 @@ class Controller(ABC):
     async def install(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         self.logger.debug(f"Installing instance: {instance}")
         chart = await self._add_and_update_helm_repo(instance, engineChart)
-        chart_name = self._get_chart_name(instance)
+        chart_name = self._get_release_name(instance)
         values = await self._prepare_helm_values(instance, engineChart)
         
         try:
@@ -101,7 +101,7 @@ class Controller(ABC):
 
     async def upgrade(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
         chart = await self._add_and_update_helm_repo(instance, engineChart)
-        chart_name = self._get_chart_name(instance)
+        chart_name = self._get_release_name(instance)
         values = await self._prepare_helm_values(instance, engineChart)
         
         try:
@@ -117,7 +117,7 @@ class Controller(ABC):
             raise Exception(f"Helm upgrade failed: {str(e)}")
 
     async def uninstall(self, instance: InferenceInstanceSchema, engineChart: EngineChartsSchema):
-        chart_name = self._get_chart_name(instance)
+        chart_name = self._get_release_name(instance)
         
         try:
             revision = await self.helm.get_current_revision(chart_name, namespace=self.namespace)
