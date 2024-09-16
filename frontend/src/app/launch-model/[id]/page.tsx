@@ -32,8 +32,11 @@ type EnvVar = { name: string; value: string };
 interface Engine {
   id: string;
   name: string;
-  description: string;
-  helm_chart_repo: string;
+  llm_support: boolean;
+  embedding_support: boolean;
+  reranking_support: boolean;
+  prompt_guard_support: boolean;
+  vector_db_support: boolean;
 }
 
 interface Host {
@@ -50,6 +53,12 @@ interface Host {
   gpu_sharing_strategy: string;
 }
 
+interface Model {
+  id: string;
+  name: string;
+  category: "llm" | "embedding" | "reranker" | "prompt_guard" | "vector_db";
+}
+
 export default function LaunchModel({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("accelerators");
@@ -61,6 +70,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [secrets, setSecrets] = useState<EnvVar[]>([{ name: "", value: "" }]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
+  const [model, setModel] = useState<Model | null>(null);
+  const [filteredEngines, setFilteredEngines] = useState<Engine[]>([]);
   const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
@@ -100,9 +111,49 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         console.error("Error fetching hosts:", error);
       }
     };
+    const fetchModel = async () => {
+      try {
+        const response = await fetch(`/api/v1alpha1/models/${params.id}`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+        }
+        const data = await response.json();
+        setModel(data);
+      } catch (error: any) {
+        toast({
+          title: "Error Fetching Model",
+          description: error.message,
+        });
+        console.error("Error fetching model:", error);
+      }
+    };
     fetchEngines();
     fetchHosts();
-  }, [toast]);
+    fetchModel();
+  }, [params.id, toast]);
+
+  useEffect(() => {
+    if (model && engines.length > 0) {
+      const filtered = engines.filter(engine => {
+        switch (model.category) {
+          case "llm":
+            return engine.llm_support;
+          case "embedding":
+            return engine.embedding_support;
+          case "reranker":
+            return engine.reranking_support;
+          case "prompt_guard":
+            return engine.prompt_guard_support;
+          case "vector_db":
+            return engine.vector_db_support;
+          default:
+            return false;
+        }
+      });
+      setFilteredEngines(filtered);
+    }
+  }, [model, engines]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,7 +351,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                       <SelectValue placeholder="Select Engine" />
                     </SelectTrigger>
                     <SelectContent>
-                      {engines.map((engine) => (
+                      {filteredEngines.map((engine) => (
                         <SelectItem key={engine.id} value={engine.id}>
                           {engine.name}
                         </SelectItem>
