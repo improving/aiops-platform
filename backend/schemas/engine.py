@@ -7,9 +7,11 @@ from pydantic import BaseModel
 class EngineSchema(BaseModel):
     id: uuid.UUID
     name: Optional[str] = None
-    llm_support: Optional[bool] = None
-    embedding_support: Optional[bool] = None
-    reranking_support: Optional[bool] = None
+    llm_support: Optional[bool] = False
+    embedding_support: Optional[bool] = False
+    reranking_support: Optional[bool] = False
+    prompt_guard_support: Optional[bool] = False
+    vector_db_support: Optional[bool] = False
 
     class Config:
         from_attributes = True
