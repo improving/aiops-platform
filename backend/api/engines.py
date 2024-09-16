@@ -22,6 +22,8 @@ class DBEngine(Base):
     llm_support = Column(Boolean, nullable=False)
     embedding_support = Column(Boolean, nullable=False)
     reranking_support = Column(Boolean, nullable=False)
+    prompt_guard_support = Column(Boolean, nullable=False)
+    vector_db_support = Column(Boolean, nullable=False)
 
 
 # API to get engine information

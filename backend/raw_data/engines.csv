@@ -1,7 +1,8 @@
-id,name,llm_support,embedding_support,reranking_support,vector_db_support
-551d8d806b004907b8a844f4df5b7da1,HuggingFace,true,true,true,
+id,name,llm_support,embedding_support,reranking_support,prompt_guard_support,vector_db_support
+551d8d806b004907b8a844f4df5b7da1,HuggingFace,true,true,true,,
 f2fd8a4a5cfa4c40b8348cf8d86343fc,NIM,true,true,true,
 49faea0e40a84e14832b10d494f6bae0,vLLM,true,,,
-a880105d594b42379eebc90b258d7200,ChromaDB,,,,true
-01a9796d34864991826fe245bc89fba1,Milvus,,,,true
-72b3f65f62bf448cbb5fc413bb991ea5,Qdrant,,,,true
+a975bb3bd23b48b1af180c75b0ffe2d1,OPEA,,,,true,
+a880105d594b42379eebc90b258d7200,ChromaDB,,,,,true
+01a9796d34864991826fe245bc89fba1,Milvus,,,,,true
+72b3f65f62bf448cbb5fc413bb991ea5,Qdrant,,,,,true

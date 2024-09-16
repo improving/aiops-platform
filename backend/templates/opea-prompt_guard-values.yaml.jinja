@@ -1,0 +1,32 @@
+autodependency:
+  enabled: {{ autodependency_enabled | default(true) }}
+
+global:
+  HUGGINGFACEHUB_API_TOKEN: {{ global.huggingfacehub_api_token | default('REPLACE_ME') }}
+  # PVC for HuggingFace model cache
+  modelUsePVC: {{ global.model_use_pvc | default('hf-cache') }}
+
+# Guard Model Id
+SAFETY_GUARD_MODEL_ID: {{ safety_guard_model_id | default('meta-llama/Meta-Llama-Guard-2-8B') }}
+
+service:
+  type: {{ service_type | default('LoadBalancer') }}
+
+nodeSelector:
+  kubernetes.io/hostname: {{ node_selector | default('gpu-node-1') }}
+
+tgi:
+  LLM_MODEL_ID: {{ tgi.llm_model_id | default('meta-llama/Meta-Llama-Guard-2-8B') }}
+  service:
+    type: {{ tgi_service_type | default('LoadBalancer') }}
+  nodeSelector:
+    kubernetes.io/hostname: {{ node_selector | default('gpu-node-1') }}
+
+volumeMounts:
+  - name: hf-cache
+    mountPath: {{ hf_cache_mount_path | default('/data') }}
+
+volumes:
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: {{ hf_cache_claim_name | default('hf-cache') }}

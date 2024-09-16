@@ -6,6 +6,7 @@ e9795fd9799c497590896fb53e41dc38,HuggingFace,llm,https://infracloudio.github.io/
 5bd61360a6a74b0a8be39174ab189bc6,NIM,embedding,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-embedding-nim-1.0.0.tgz
 5485c874e3bf454b8ddf86959777c4a5,NIM,reranker,https://helm.ngc.nvidia.com/nim/nvidia/charts/,text-reranking-nim-1.0.0.tgz
 3dcd1b5b97574775a11eedfa7708bfc3,vLLM,llm,https://substratusai.github.io/helm,vllm
+471c3143ee1e43beb95a96c839bf30af,OPEA,prompt_guard,https://infracloudio.github.io/charts,guardrails-usvc
 a880105d594b42379eebc90b258d7200,ChromaDB,vector_db,https://infracloudio.github.io/charts,chromadb
 01a9796d34864991826fe245bc89fba1,Milvus,vector_db,https://zilliztech.github.io/milvus-helm/,milvus
 72b3f65f62bf448cbb5fc413bb991ea5,Qdrant,vector_db,https://qdrant.github.io/qdrant-helm,qdrant

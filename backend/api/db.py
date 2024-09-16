@@ -52,6 +52,8 @@ def load_initial_data():
                         llm_support=bool(row["llm_support"]),
                         embedding_support=bool(row["embedding_support"]),
                         reranking_support=bool(row["reranking_support"]),
+                        prompt_guard_support=bool(row["prompt_guard_support"]),
+                        vector_db_support=bool(row["vector_db_support"]),
                     )
                     db.add(_engine)
 
