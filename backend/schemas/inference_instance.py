@@ -1,8 +1,11 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 import uuid
-from .model import ModelSchema
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
 from .engine import EngineSchema
+from .model import ModelSchema
+
 
 class InferenceInstanceConfigParamsSchema(BaseModel):
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
@@ -15,6 +18,7 @@ class InferenceInstanceConfigParamsSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class InferenceInstanceSchema(BaseModel):
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)

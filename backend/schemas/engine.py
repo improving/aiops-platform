@@ -1,6 +1,8 @@
-from pydantic import BaseModel
 import uuid
 from typing import Optional
+
+from pydantic import BaseModel
+
 
 class EngineSchema(BaseModel):
     id: uuid.UUID

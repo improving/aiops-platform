@@ -1,5 +1,6 @@
-from kubernetes import config
 from fastapi import HTTPException
+from kubernetes import config
+
 
 def load_kubernetes_config():
     try:
@@ -10,4 +11,6 @@ def load_kubernetes_config():
             config.load_incluster_config()
             return "incluster_config"
         except config.config_exception.ConfigException:
-            raise HTTPException(status_code=500, detail="Failed to load Kubernetes configuration")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load Kubernetes configuration")

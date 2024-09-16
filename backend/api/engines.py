@@ -1,13 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List
 import uuid
-from sqlalchemy import Column, String, Boolean
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import Boolean, Column, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
-from .database import Base, get_db
+
 from schemas.engine import EngineSchema
 
+from .database import Base, get_db
+
 router = APIRouter()
+
 
 # SQLAlchemy model
 class DBEngine(Base):
@@ -18,6 +22,7 @@ class DBEngine(Base):
     llm_support = Column(Boolean, nullable=False)
     embedding_support = Column(Boolean, nullable=False)
     reranking_support = Column(Boolean, nullable=False)
+
 
 # API to get engine information
 @router.get("/v1alpha1/engines", response_model=List[EngineSchema])

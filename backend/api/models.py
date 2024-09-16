@@ -1,13 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List
 import uuid
-from sqlalchemy import Column, String, Integer
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
-from .database import Base, get_db
+
 from schemas.model import ModelSchema
 
+from .database import Base, get_db
+
 router = APIRouter()
+
 
 # SQLAlchemy model
 class DBModel(Base):
@@ -20,6 +24,7 @@ class DBModel(Base):
     category = Column(String)
     subcategory = Column(String)
     size = Column(Integer)
+
 
 # API to get model information
 @router.get("/v1alpha1/models", response_model=List[ModelSchema])

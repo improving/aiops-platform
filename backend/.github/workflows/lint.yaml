@@ -1,0 +1,52 @@
+name: Lint and Format Python Code
+
+on: [push]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # Specify your Python version
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r dev-requirements.txt
+
+      - name: Run Sort Imports
+        id: sort-imports
+        run: |
+          ./hack/sort-imports.sh
+          git diff --exit-code || echo "Imports sorted."
+
+      - name: Run Lint
+        id: lint
+        run: |
+          ./hack/lint.sh
+          git diff --exit-code || echo "Lint failed"
+
+      # - name: Run Format
+      #   id: format
+      #   run: |
+      #     ./hack/format.sh
+      #     git diff --exit-code || echo "Files modified by formatting."
+
+      - name: Run Tests
+        id: tests
+        run: |
+          pytest
+
+      - name: Check for modifications
+        run: |
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Some files were modified. Please review the changes."
+            exit 1
+          fi
