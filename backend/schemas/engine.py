@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EngineSchema(BaseModel):
@@ -13,5 +13,4 @@ class EngineSchema(BaseModel):
     prompt_guard_support: Optional[bool] = False
     vector_db_support: Optional[bool] = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

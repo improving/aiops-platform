@@ -25,7 +25,7 @@ from schemas.model import ModelSchema
 from .controller_utils import get_controller
 from .database import Base, get_db
 from .engines import DBEngine
-from .kubernetes_utils import load_kubernetes_config
+from .kubernetes_utils import get_kubernetes_client
 from .models import DBModel
 
 router = APIRouter()
@@ -70,12 +70,11 @@ class DBInferenceInstance(Base):
 
 @router.get("/v1alpha1/inferenceInstance",
             response_model=List[InferenceInstanceSchema])
-async def list_inference_instances(db: Session = Depends(get_db)):
+async def list_inference_instances(
+        db: Session = Depends(get_db),
+        core_v1_api: client.CoreV1Api = Depends(get_kubernetes_client)):
     try:
         instances = db.query(DBInferenceInstance).all()
-        config_source = load_kubernetes_config()
-        logger.info(f"Loaded Kubernetes configuration from: {config_source}")
-        core_v1_api = client.CoreV1Api()
         for instance in instances:
             instance_ready, instance_status = await check_pod_status_and_readiness(
                 instance, core_v1_api, db)
@@ -89,7 +88,10 @@ async def list_inference_instances(db: Session = Depends(get_db)):
 
 @router.get("/v1alpha1/inferenceInstance/{id}",
             response_model=InferenceInstanceSchema)
-async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
+async def get_inference_instance(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    core_v1_api: client.CoreV1Api = Depends(get_kubernetes_client)):
     try:
         instance = db.query(DBInferenceInstance).filter(
             DBInferenceInstance.id == id).first()
@@ -97,10 +99,6 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             logger.error(f"Inference instance not found: {id}")
             raise HTTPException(status_code=404,
                                 detail="Inference instance not found")
-
-        config_source = load_kubernetes_config()
-        logger.info(f"Loaded Kubernetes configuration from: {config_source}")
-        core_v1_api = client.CoreV1Api()
 
         instance_ready, instance_status = await check_pod_status_and_readiness(
             instance, core_v1_api, db)
@@ -428,8 +426,10 @@ async def update_all_instance_endpoints():
         db.close()
 
 
-async def update_instance_endpoints(instance: DBInferenceInstance,
-                                    db: Session):
+async def update_instance_endpoints(
+    instance: DBInferenceInstance,
+    db: Session,
+    core_v1_api: client.CoreV1Api = Depends(get_kubernetes_client)):
     logger.info(f"Updating endpoints for instance {instance.id}")
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
@@ -446,10 +446,6 @@ async def update_instance_endpoints(instance: DBInferenceInstance,
 
     controller = await get_controller(engine.name)
     service_name = controller.get_service_name(instance, engine_chart)
-
-    config_source = load_kubernetes_config()
-    logger.info(f"Loaded Kubernetes configuration from: {config_source}")
-    core_v1_api = client.CoreV1Api()
 
     try:
         # Get the service information

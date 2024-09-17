@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .engine import EngineSchema
 from .model import ModelSchema
@@ -16,8 +16,7 @@ class InferenceInstanceConfigParamsSchema(BaseModel):
     quantization: Optional[str] = None
     image: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InferenceInstanceSchema(BaseModel):
@@ -32,5 +31,4 @@ class InferenceInstanceSchema(BaseModel):
     ready: Optional[bool] = False
     status: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

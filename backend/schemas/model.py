@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ModelSchema(BaseModel):
@@ -13,5 +13,4 @@ class ModelSchema(BaseModel):
     subcategory: Optional[str] = None
     size: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

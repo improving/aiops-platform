@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class InferenceInstanceDashboardsSchema(BaseModel):
@@ -13,5 +13,4 @@ class InferenceInstanceDashboardsSchema(BaseModel):
     org_id: str
     query_params: dict
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

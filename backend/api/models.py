@@ -34,6 +34,7 @@ def get_models(db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No models found")
     return models
 
+
 @router.get("/v1alpha1/models/{id}", response_model=ModelSchema)
 def get_model(id: uuid.UUID, db: Session = Depends(get_db)):
     model = db.query(DBModel).filter(DBModel.id == id).first()

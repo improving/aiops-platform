@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from kubernetes import config
+from kubernetes import client, config
 
 
 def load_kubernetes_config():
@@ -14,3 +14,8 @@ def load_kubernetes_config():
             raise HTTPException(
                 status_code=500,
                 detail="Failed to load Kubernetes configuration")
+
+
+def get_kubernetes_client():
+    load_kubernetes_config()
+    return client.CoreV1Api()

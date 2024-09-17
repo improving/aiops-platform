@@ -1,12 +1,12 @@
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from kubernetes import client
 from pydantic import BaseModel
 
 from logger import setup_logger
 
-from .kubernetes_utils import load_kubernetes_config
+from .kubernetes_utils import get_kubernetes_client
 
 logger = setup_logger(__name__)
 
@@ -31,10 +31,9 @@ class Host(BaseModel):
 # API to get host information
 @router.get("/v1alpha1/hosts", response_model=List[Host])
 def get_hosts(includeNotReady: bool = Query(
-    default=False, description="Include nodes that are not in Ready status")):
-    config_source = load_kubernetes_config()
-    logger.info(f"Loaded Kubernetes configuration from: {config_source}")
-    v1 = client.CoreV1Api()
+    default=False, description="Include nodes that are not in Ready status"),
+              v1: client.CoreV1Api = Depends(get_kubernetes_client,
+                                             use_cache=True)):
     try:
         nodes = v1.list_node()
     except Exception as e:
@@ -76,35 +75,35 @@ def get_hosts(includeNotReady: bool = Query(
     return hosts
 
 
-def get_host_details(hostname: str) -> dict:
-    v1 = client.CoreV1Api()
-    try:
-        nodes = v1.list_node()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# def get_host_details(hostname: str) -> dict:
+#     v1 = client.CoreV1Api()
+#     try:
+#         nodes = v1.list_node()
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
-    for node in nodes.items:
-        if node.metadata.annotations and node.metadata.annotations.get(
-                "kubernetes.io/hostname") == hostname:
-            annotations = node.metadata.annotations
-            return {
-                "cpu_vendor":
-                annotations.get(
-                    "feature.node.kubernetes.io/cpu-model.vendor_id",
-                    "Unknown"),
-                "cuda_driver_version":
-                annotations.get("nvidia.com/cuda.driver-version.full", "N/A"),
-                "cuda_runtime_version":
-                annotations.get("nvidia.com/cuda.runtime-version.full", "N/A"),
-                "gpu_count":
-                int(annotations.get("nvidia.com/gpu.count", 0)),
-                "gpu_memory":
-                int(annotations.get("nvidia.com/gpu.memory", 0)),
-                "gpu_model":
-                annotations.get("nvidia.com/gpu.product", "N/A"),
-                "gpu_replicas":
-                int(annotations.get("nvidia.com/gpu.replicas", 0)),
-                "gpu_sharing_strategy":
-                annotations.get("nvidia.com/gpu.sharing-strategy", "N/A"),
-            }
-    return {}
+#     for node in nodes.items:
+#         if node.metadata.annotations and node.metadata.annotations.get(
+#                 "kubernetes.io/hostname") == hostname:
+#             annotations = node.metadata.annotations
+#             return {
+#                 "cpu_vendor":
+#                 annotations.get(
+#                     "feature.node.kubernetes.io/cpu-model.vendor_id",
+#                     "Unknown"),
+#                 "cuda_driver_version":
+#                 annotations.get("nvidia.com/cuda.driver-version.full", "N/A"),
+#                 "cuda_runtime_version":
+#                 annotations.get("nvidia.com/cuda.runtime-version.full", "N/A"),
+#                 "gpu_count":
+#                 int(annotations.get("nvidia.com/gpu.count", 0)),
+#                 "gpu_memory":
+#                 int(annotations.get("nvidia.com/gpu.memory", 0)),
+#                 "gpu_model":
+#                 annotations.get("nvidia.com/gpu.product", "N/A"),
+#                 "gpu_replicas":
+#                 int(annotations.get("nvidia.com/gpu.replicas", 0)),
+#                 "gpu_sharing_strategy":
+#                 annotations.get("nvidia.com/gpu.sharing-strategy", "N/A"),
+#             }
+#     return {}
