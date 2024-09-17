@@ -25,7 +25,7 @@ export default function Header() {
       <div className="container mx-auto px-4 flex justify-between items-center">
         <Menubar className="flex-grow">
           <MenubarMenu>
-            <MenubarTrigger className="font-bold">Model Hub</MenubarTrigger>
+            <MenubarTrigger className="font-bold">Hub</MenubarTrigger>
             <MenubarContent>
               <Link href="/" passHref>
                 <MenubarItem>Home</MenubarItem>
@@ -33,14 +33,26 @@ export default function Header() {
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
-            <Link href="/model-catalog" passHref>
-              <MenubarTrigger>Model Catalog</MenubarTrigger>
-            </Link>
+            <MenubarTrigger>Models</MenubarTrigger>
+            <MenubarContent>
+              <Link href="/models/catalog/" passHref>
+                <MenubarItem>Catalog</MenubarItem>
+              </Link>
+              <Link href="/models/endpoints" passHref>
+                <MenubarItem>Instances</MenubarItem>
+              </Link>
+            </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
-            <Link href="/inference-endpoints" passHref>
-              <MenubarTrigger>Inference Endpoints</MenubarTrigger>
-            </Link>
+            <MenubarTrigger>Vector Databases</MenubarTrigger>
+            <MenubarContent>
+              <Link href="/vector-databases/catalog" passHref>
+                <MenubarItem>Catalog</MenubarItem>
+              </Link>
+              <Link href="/vector-databases/endpoints" passHref>
+                <MenubarItem>Instances</MenubarItem>
+              </Link>
+            </MenubarContent>
           </MenubarMenu>
         </Menubar>
         <div className="flex items-center space-x-4">

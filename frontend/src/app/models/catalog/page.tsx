@@ -144,7 +144,7 @@ export default function ModelCatalog() {
                 </p>
               </CardContent>
               <CardFooter>
-                <Link href={`/launch-model/${model.id}`} passHref>
+                <Link href={`/models/launch/${model.id}`} passHref>
                   <Button>
                     <RocketIcon className="mr-2 w-4 h-4" />
                     Launch

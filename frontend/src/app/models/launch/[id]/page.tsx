@@ -192,7 +192,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
       const data = await response.json();
       // Redirect to the individual inference endpoint page
-      router.push(`/inference-endpoints/${data.id}`);
+      router.push(`/models/endpoints/${data.id}`);
     } catch (error: any) {
       toast({
         // Show toast on error

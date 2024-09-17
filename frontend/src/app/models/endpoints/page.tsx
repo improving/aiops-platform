@@ -116,7 +116,7 @@ export default function InferenceEndpoints() {
         {endpoints.length === 0 ? (
           <div className="text-center">
             <p className="mb-4">No inference endpoints available.</p>
-            <Link href="/model-catalog">
+            <Link href="/models/catalog">
               <Button>
                 <RocketIcon className="mr-2 h-4 w-4" />
                 Launch
@@ -223,7 +223,7 @@ export default function InferenceEndpoints() {
                     </p>
                   </CardContent>
                   <CardFooter>
-                    <Link href={`/inference-endpoints/${endpoint.id}`} passHref>
+                    <Link href={`/models/endpoints/${endpoint.id}`} passHref>
                       <Button>
                         <EyeOpenIcon className="mr-2 w-4 h-4" />
                         View Details

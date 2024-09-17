@@ -25,7 +25,7 @@ export default function Home() {
               <CardDescription>Explore our AI models</CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/model-catalog" passHref>
+              <Link href="/models/catalog" passHref>
                 <Button className="w-full">View Catalog</Button>
               </Link>
             </CardContent>
@@ -36,7 +36,7 @@ export default function Home() {
               <CardDescription>Manage your deployed models</CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/inference-endpoints" passHref>
+              <Link href="/models/endpoints" passHref>
                 <Button variant="secondary" className="w-full">
                   View Endpoints
                 </Button>

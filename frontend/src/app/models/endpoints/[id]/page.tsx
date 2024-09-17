@@ -144,7 +144,7 @@ export default function InferenceEndpointDetails({
       if (!response.ok) {
         throw new Error("Failed to delete inference instance");
       }
-      router.push("/inference-endpoints");
+      router.push("/models/endpoints");
     } catch (error) {
       console.error("Error deleting inference instance:", error);
       setError("Failed to delete inference instance");
