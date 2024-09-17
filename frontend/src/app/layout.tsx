@@ -6,8 +6,8 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Model Hub",
-  description: "Explore and deploy AI models",
+  title: "Hub",
+  description: "Explore and deploy AI services",
 };
 
 export default function RootLayout({

@@ -17,30 +17,42 @@ export default function Home() {
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-grow container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Welcome to Model Hub</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
+        <h1 className="text-3xl font-bold mb-8">Welcome to Hub</h1>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="shadow-lg rounded-lg">
             <CardHeader>
-              <CardTitle>Model Catalog</CardTitle>
-              <CardDescription>Explore our AI models</CardDescription>
+              <CardTitle className="text-lg font-semibold">Models</CardTitle>
+              <CardDescription className="text-sm">Explore our AI models</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Link href="/models/catalog" passHref>
-                <Button className="w-full">View Catalog</Button>
-              </Link>
+            <CardContent className="flex flex-col items-center">
+              <div className="flex flex-row gap-2 mb-3 w-full">
+                <Link href="/models/catalog" passHref>
+                  <Button className="w-full py-2">View Catalog</Button>
+                </Link>
+                <Link href="/models/endpoints" passHref>
+                  <Button variant="secondary" className="w-full py-2">
+                    View Endpoints
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="shadow-lg rounded-lg">
             <CardHeader>
-              <CardTitle>Inference Endpoints</CardTitle>
-              <CardDescription>Manage your deployed models</CardDescription>
+              <CardTitle className="text-lg font-semibold">Vector Databases</CardTitle>
+              <CardDescription className="text-sm">Explore our vector databases</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Link href="/models/endpoints" passHref>
-                <Button variant="secondary" className="w-full">
-                  View Endpoints
-                </Button>
-              </Link>
+            <CardContent className="flex flex-col items-center">
+              <div className="flex flex-row gap-2 mb-3 w-full">
+                <Link href="/vector-databases/catalog" passHref>
+                  <Button className="w-full py-2">View Catalog</Button>
+                </Link>
+                <Link href="/vector-databases/endpoints" passHref>
+                  <Button variant="secondary" className="w-full py-2">
+                    View Endpoints
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </div>
