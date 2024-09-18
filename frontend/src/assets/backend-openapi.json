@@ -1,6 +1,9 @@
 {
   "openapi": "3.1.0",
-  "info": { "title": "FastAPI", "version": "0.1.0" },
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
   "paths": {
     "/v1alpha1/models": {
       "get": {
@@ -12,9 +15,51 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/ModelSchema" },
+                  "items": {
+                    "$ref": "#/components/schemas/ModelSchema"
+                  },
                   "type": "array",
                   "title": "Response Get Models V1Alpha1 Models Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/models/{id}": {
+      "get": {
+        "summary": "Get Model",
+        "operationId": "get_model_v1alpha1_models__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -32,7 +77,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/EngineSchema" },
+                  "items": {
+                    "$ref": "#/components/schemas/EngineSchema"
+                  },
                   "type": "array",
                   "title": "Response Get Engines V1Alpha1 Engines Get"
                 }
@@ -91,7 +138,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -107,7 +156,11 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Id" }
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
           }
         ],
         "responses": {
@@ -125,7 +178,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -139,7 +194,11 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Id" }
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
           }
         ],
         "requestBody": {
@@ -167,7 +226,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -181,19 +242,29 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Id" }
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "Successful Response",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -209,7 +280,11 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Id" }
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
           }
         ],
         "responses": {
@@ -231,7 +306,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -263,7 +340,9 @@
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/Host" },
+                  "items": {
+                    "$ref": "#/components/schemas/Host"
+                  },
                   "title": "Response Get Hosts V1Alpha1 Hosts Get"
                 }
               }
@@ -273,7 +352,214 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/vectordb": {
+      "get": {
+        "summary": "Get Vectordb",
+        "operationId": "get_vectordb_v1alpha1_vectordb_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VectorDBSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Get Vectordb V1Alpha1 Vectordb Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/vectordb_instances": {
+      "get": {
+        "summary": "Get Vectordb Instances",
+        "operationId": "get_vectordb_instances_v1alpha1_vectordb_instances_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Get Vectordb Instances V1Alpha1 Vectordb Instances Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Vectordb Instance",
+        "operationId": "create_vectordb_instance_v1alpha1_vectordb_instances_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorDBInstanceSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/vectordb_instances/{id}": {
+      "get": {
+        "summary": "Get Vectordb Instance",
+        "operationId": "get_vectordb_instance_v1alpha1_vectordb_instances__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The ID of the vector database instance to retrieve",
+              "title": "Id"
+            },
+            "description": "The ID of the vector database instance to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Vectordb Instance",
+        "operationId": "update_vectordb_instance_v1alpha1_vectordb_instances__id__put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The ID of the vector database instance to update",
+              "title": "Id"
+            },
+            "description": "The ID of the vector database instance to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorDBInstanceSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Vectordb Instance",
+        "operationId": "delete_vectordb_instance_v1alpha1_vectordb_instances__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The ID of the vector database instance to delete",
+              "title": "Id"
+            },
+            "description": "The ID of the vector database instance to delete"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -287,7 +573,11 @@
         "responses": {
           "200": {
             "description": "Successful Response",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -299,7 +589,27 @@
         "responses": {
           "200": {
             "description": "Successful Response",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Endpoint",
+        "operationId": "health_endpoint_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           }
         }
       }
@@ -309,32 +619,95 @@
     "schemas": {
       "EngineSchema": {
         "properties": {
-          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
           "name": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Name"
           },
           "llm_support": {
-            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
-            "title": "Llm Support"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Support",
+            "default": false
           },
           "embedding_support": {
-            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
-            "title": "Embedding Support"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Support",
+            "default": false
           },
           "reranking_support": {
-            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
-            "title": "Reranking Support"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranking Support",
+            "default": false
+          },
+          "prompt_guard_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Guard Support",
+            "default": false
+          },
+          "vector_db_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Db Support",
+            "default": false
           }
         },
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "title": "EngineSchema"
       },
       "HTTPValidationError": {
         "properties": {
           "detail": {
-            "items": { "$ref": "#/components/schemas/ValidationError" },
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
             "type": "array",
             "title": "Detail"
           }
@@ -344,10 +717,22 @@
       },
       "Host": {
         "properties": {
-          "hostname": { "type": "string", "title": "Hostname" },
-          "cpu_vendor": { "type": "string", "title": "Cpu Vendor" },
-          "cpu_memory": { "type": "integer", "title": "Cpu Memory" },
-          "cpu_cores": { "type": "integer", "title": "Cpu Cores" },
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "cpu_vendor": {
+            "type": "string",
+            "title": "Cpu Vendor"
+          },
+          "cpu_memory": {
+            "type": "integer",
+            "title": "Cpu Memory"
+          },
+          "cpu_cores": {
+            "type": "integer",
+            "title": "Cpu Cores"
+          },
           "cuda_driver_version": {
             "type": "string",
             "title": "Cuda Driver Version"
@@ -356,10 +741,22 @@
             "type": "string",
             "title": "Cuda Runtime Version"
           },
-          "gpu_count": { "type": "integer", "title": "Gpu Count" },
-          "gpu_memory": { "type": "integer", "title": "Gpu Memory" },
-          "gpu_model": { "type": "string", "title": "Gpu Model" },
-          "gpu_replicas": { "type": "integer", "title": "Gpu Replicas" },
+          "gpu_count": {
+            "type": "integer",
+            "title": "Gpu Count"
+          },
+          "gpu_memory": {
+            "type": "integer",
+            "title": "Gpu Memory"
+          },
+          "gpu_model": {
+            "type": "string",
+            "title": "Gpu Model"
+          },
+          "gpu_replicas": {
+            "type": "integer",
+            "title": "Gpu Replicas"
+          },
           "gpu_sharing_strategy": {
             "type": "string",
             "title": "Gpu Sharing Strategy"
@@ -385,33 +782,80 @@
         "properties": {
           "id": {
             "anyOf": [
-              { "type": "string", "format": "uuid" },
-              { "type": "null" }
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Id"
           },
           "maxInputLength": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Maxinputlength"
           },
           "maxTokens": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Maxtokens"
           },
           "maxBatchPrefillTokens": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Maxbatchprefilltokens"
           },
           "maxBatchTotalTokens": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Maxbatchtotaltokens"
           },
           "quantization": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Quantization"
           },
           "image": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Image"
           }
         },
@@ -420,121 +864,368 @@
       },
       "InferenceInstanceDashboardsSchema": {
         "properties": {
-          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
           "dashboard_id": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Dashboard Id"
           },
           "dashboard_name": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Dashboard Name"
           },
           "panel_id": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Panel Id"
           },
           "panel_name": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Panel Name"
           },
-          "org_id": { "type": "string", "title": "Org Id" },
-          "query_params": { "type": "string", "title": "Query Params" }
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "query_params": {
+            "type": "object",
+            "title": "Query Params"
+          }
         },
         "type": "object",
-        "required": ["id", "org_id", "query_params"],
+        "required": [
+          "id",
+          "org_id",
+          "query_params"
+        ],
         "title": "InferenceInstanceDashboardsSchema"
       },
       "InferenceInstanceSchema": {
         "properties": {
           "id": {
             "anyOf": [
-              { "type": "string", "format": "uuid" },
-              { "type": "null" }
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Id"
           },
-          "model": { "$ref": "#/components/schemas/ModelSchema" },
-          "engine": { "$ref": "#/components/schemas/EngineSchema" },
-          "host": { "type": "string", "title": "Host" },
+          "model": {
+            "$ref": "#/components/schemas/ModelSchema"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineSchema"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
           "config": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/InferenceInstanceConfigParamsSchema"
               },
-              { "type": "null" }
+              {
+                "type": "null"
+              }
             ]
           },
           "endpoint": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Endpoint"
           },
           "healthEndpoint": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Healthendpoint"
           },
           "metricsEndpoint": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Metricsendpoint"
           },
           "ready": {
-            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Ready",
             "default": false
           },
           "status": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Status"
           }
         },
         "type": "object",
-        "required": ["model", "engine", "host"],
+        "required": [
+          "model",
+          "engine",
+          "host"
+        ],
         "title": "InferenceInstanceSchema"
       },
       "ModelSchema": {
         "properties": {
-          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
           "name": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Name"
           },
           "modelId": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Modelid"
           },
           "description": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Description"
           },
           "category": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Category"
           },
           "subcategory": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Subcategory"
           },
           "size": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Size"
           }
         },
         "type": "object",
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "title": "ModelSchema"
       },
       "ValidationError": {
         "properties": {
           "loc": {
-            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
             "type": "array",
             "title": "Location"
           },
-          "msg": { "type": "string", "title": "Message" },
-          "type": { "type": "string", "title": "Error Type" }
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
+      },
+      "VectorDBInstanceSchema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "vectorDB": {
+            "$ref": "#/components/schemas/VectorDBSchema"
+          },
+          "configParams": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configparams"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vectorDB"
+        ],
+        "title": "VectorDBInstanceSchema",
+        "exclude": [
+          "vectorDB"
+        ]
+      },
+      "VectorDBSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "VectorDBSchema"
       }
     }
   }
