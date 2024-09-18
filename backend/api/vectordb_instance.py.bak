@@ -1,0 +1,115 @@
+import json
+from typing import List
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Path
+from sqlalchemy.orm import Session, relationship
+from sqlalchemy import JSON, UUID, Column, ForeignKey, String
+
+from api.database import Base, get_db
+from logger import setup_logger
+from schemas.vectordb_instance import VectorDBInstanceSchema
+
+router = APIRouter()
+
+# Initialize the logger
+logger = setup_logger(__name__)
+
+# SQLAlchemy model
+class DBVectorDBInstance(Base):
+    __tablename__ = "vectordb_instances"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    vectordb_id = Column(UUID(as_uuid=True), ForeignKey('vectordb.id'))
+    configParams = Column(JSON, nullable=True)  # Change this line
+    endpoint = Column(String, nullable=True)
+
+    vectorDB = relationship("DBVectorDB")
+
+@router.get("/v1alpha1/vectordb_instances", response_model=List[VectorDBInstanceSchema])
+def get_vectordb_instances(db: Session = Depends(get_db)):
+    vectordb_instances = db.query(DBVectorDBInstance).all()
+    if not vectordb_instances:
+        raise HTTPException(status_code=404, detail="No vector database instances found")
+
+    # Convert the instances to the schema format, parsing the JSON strings
+    return [
+        VectorDBInstanceSchema(
+            id=instance.id,
+            vectorDB=instance.vectorDB,
+            configParams=json.loads(instance.configParams) if instance.configParams else None,
+            endpoint=instance.endpoint
+        )
+        for instance in vectordb_instances
+    ]
+
+@router.get("/v1alpha1/vectordb_instances/{id}", response_model=VectorDBInstanceSchema)
+def get_vectordb_instance(id: uuid.UUID = Path(
+        description="The ID of the vector database instance to retrieve"),
+        db: Session = Depends(get_db)):
+    vectordb_instance = db.query(DBVectorDBInstance).filter(DBVectorDBInstance.id == id).first()
+    if not vectordb_instance:
+        raise HTTPException(status_code=404, detail="Vector database instance not found")
+
+    return VectorDBInstanceSchema(
+        id=vectordb_instance.id,
+        vectorDB=vectordb_instance.vectorDB,
+        configParams=json.loads(vectordb_instance.configParams) if vectordb_instance.configParams else None,
+        endpoint=vectordb_instance.endpoint
+    )
+
+@router.post("/v1alpha1/vectordb_instances", response_model=VectorDBInstanceSchema, status_code=201)
+def create_vectordb_instance(vectordb_instance: VectorDBInstanceSchema, db: Session = Depends(get_db)):
+    # Extract the vectordb_id from the vectorDB object
+    vectordb_id = vectordb_instance.vectorDB.id
+
+    vectorDBInstance = DBVectorDBInstance(
+        vectordb_id=vectordb_id,
+        configParams=json.dumps(vectordb_instance.configParams),
+        endpoint=vectordb_instance.endpoint
+    )
+
+    db.add(vectorDBInstance)
+    db.commit()
+    db.refresh(vectorDBInstance)
+
+    # Construct the response
+    response_data = VectorDBInstanceSchema(
+        id=vectorDBInstance.id,
+        vectorDB=vectorDBInstance.vectorDB,
+        configParams=json.loads(vectorDBInstance.configParams),
+        endpoint=vectorDBInstance.endpoint
+    )
+
+    return response_data
+
+@router.put("/v1alpha1/vectordb_instances/{id}", response_model=VectorDBInstanceSchema)
+def update_vectordb_instance(vectordb_instance: VectorDBInstanceSchema, id: uuid.UUID = Path(
+        description="The ID of the vector database instance to update"),
+        db: Session = Depends(get_db)):
+    db_vectordb_instance = db.query(DBVectorDBInstance).filter(DBVectorDBInstance.id == id).first()
+    if not db_vectordb_instance:
+        raise HTTPException(status_code=404, detail="Vector database instance not found")
+    db_vectordb_instance.vectordb_id = vectordb_instance.vectorDB.id
+    db_vectordb_instance.configParams = json.dumps(vectordb_instance.configParams)
+    db_vectordb_instance.endpoint = vectordb_instance.endpoint
+    db.commit()
+    db.refresh(db_vectordb_instance)
+
+    response_data = VectorDBInstanceSchema(
+        id=db_vectordb_instance.id,
+        vectorDB=db_vectordb_instance.vectorDB,
+        configParams=json.loads(db_vectordb_instance.configParams),
+        endpoint=db_vectordb_instance.endpoint
+    )
+    return response_data
+
+@router.delete("/v1alpha1/vectordb_instances/{id}", status_code=204)
+def delete_vectordb_instance(id: uuid.UUID = Path(
+        description="The ID of the vector database instance to delete"),
+        db: Session = Depends(get_db)):
+    db_vectordb_instance = db.query(DBVectorDBInstance).filter(DBVectorDBInstance.id == id).first()
+    if not db_vectordb_instance:
+        raise HTTPException(status_code=404, detail="Vector database instance not found")
+    db.delete(db_vectordb_instance)
+    db.commit()
+    return {"message": "Vector database instance deleted successfully"}

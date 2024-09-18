@@ -7,6 +7,7 @@ from api.engines import DBEngine
 from api.inference_instance import (DBInferenceInstance,
                                     DBInferenceInstanceConfigParams)
 from api.models import DBModel
+from api.vectordb import DBVectorDB
 from logger import setup_logger
 
 from .database import Base, SessionLocal, engine
@@ -26,8 +27,6 @@ def load_initial_data():
         logger.info("Loading models")
         if db.query(DBModel).count() == 0:
             with open("raw_data/models.csv", "r", encoding="utf-8") as f:
-                logger.info("Loading models")
-                logger.info(f"Loading models from {f}")
                 csv_reader = csv.DictReader(f)
                 for row in csv_reader:
                     model = DBModel(
@@ -42,6 +41,7 @@ def load_initial_data():
                     db.add(model)
 
         # Load engines
+        logger.info("Loading engines")
         if db.query(DBEngine).count() == 0:
             with open("raw_data/engines.csv", "r", encoding="utf-8") as f:
                 csv_reader = csv.DictReader(f)
@@ -58,6 +58,7 @@ def load_initial_data():
                     db.add(_engine)
 
         # Load engine charts
+        logger.info("Loading engine charts")
         if db.query(DBEngineCharts).count() == 0:
             with open("raw_data/engine_charts.csv", "r",
                       encoding="utf-8") as f:
@@ -73,6 +74,7 @@ def load_initial_data():
                     db.add(engine_chart)
 
         # Load engine chart dashboards
+        logger.info("Loading engine chart dashboards")
         if db.query(DBEngineChartDashboards).count() == 0:
             with open("raw_data/engine_chart_dashboards.csv",
                       "r",
@@ -89,6 +91,21 @@ def load_initial_data():
                         panel_name=row["panel_name"],
                     )
                     db.add(engine_chart_dashboard)
+
+        # Load vector dbs
+        logger.info("Loading vector dbs")
+        if db.query(DBVectorDB).count() == 0:
+            with open("raw_data/vectordb.csv", "r", encoding="utf-8") as f:
+                csv_reader = csv.DictReader(f)
+                for row in csv_reader:
+                    vectordb = DBVectorDB(
+                        id=uuid.uuid4(),
+                        name=row["name"],
+                        description=row["description"],
+                        chart_repo=row["chart_repo"],
+                        chart_name=row["chart_name"],
+                    )
+                    db.add(vectordb)
 
         db.commit()
     except Exception as e:
