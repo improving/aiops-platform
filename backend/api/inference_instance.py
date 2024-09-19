@@ -220,7 +220,7 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
             healthEndpoint=db_instance.healthEndpoint,
             metricsEndpoint=db_instance.metricsEndpoint)
 
-        controller = await get_controller(engine.name)
+        controller = get_controller(engine.name)
 
         try:
             await controller.install(full_instance, engine_chart)
@@ -290,7 +290,7 @@ async def update_inference_instance(id: uuid.UUID,
             healthEndpoint=db_instance.healthEndpoint,
             metricsEndpoint=db_instance.metricsEndpoint)
 
-        controller = await get_controller(engine.name)
+        controller = get_controller(engine.name)
 
         try:
             await controller.upgrade(full_instance, engine_chart)
@@ -343,7 +343,7 @@ async def delete_inference_instance(id: uuid.UUID,
             healthEndpoint=db_instance.healthEndpoint,
             metricsEndpoint=db_instance.metricsEndpoint)
 
-        controller = await get_controller(engine.name)
+        controller = get_controller(engine.name)
 
         try:
             await controller.uninstall(full_instance, engine_chart)
@@ -388,7 +388,7 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
             return
 
         for chart_dashboard in engine_chart_dashboards:
-            controller = await get_controller(instance.engine.name)
+            controller = (instance.engine.name)
             namespace = controller.namespace
             service_name = controller.get_service_name(instance, engine_chart)
             query_params = {
@@ -410,7 +410,7 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
                             detail=f"Error creating instance dashboards: {e}")
 
 
-async def update_all_instance_endpoints():
+def update_all_instance_endpoints():
     logger.debug("Updating all inference instance endpoints")
     db = SessionLocal()
     try:
@@ -422,12 +422,12 @@ async def update_all_instance_endpoints():
         logger.debug(f"Found {len(instances)} inferenceinstances without populated endpoints")
 
         for instance in instances:
-            await update_instance_endpoints(instance, db)
+            update_instance_endpoints(instance, db)
     finally:
         db.close()
 
 
-async def update_instance_endpoints(
+def update_instance_endpoints(
     instance: DBInferenceInstance,
     db: Session):
     logger.info(f"Updating endpoints for instance {instance.id}")
@@ -444,7 +444,7 @@ async def update_instance_endpoints(
         raise HTTPException(status_code=404,
                             detail="Associated engine chart not found")
 
-    controller = await get_controller(engine.name)
+    controller = get_controller(engine.name)
     service_name = controller.get_service_name(instance, engine_chart)
 
     try:

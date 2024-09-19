@@ -163,7 +163,7 @@ def check_pod_status_and_readiness(instance: DBVectorDBInstance):
 
     return get_pod_status_and_readiness(controller.namespace, pod_labels)
 
-async def update_all_instance_endpoints():
+def update_all_instance_endpoints():
     logger.debug("Updating all instance endpoints")
     db = SessionLocal()
     try:
@@ -175,11 +175,11 @@ async def update_all_instance_endpoints():
         logger.debug(f"Found {len(instances)} instances without populated endpoints")
 
         for instance in instances:
-            await update_instance_endpoints(instance, db)
+            update_instance_endpoints(instance, db)
     finally:
         db.close()
 
-async def update_instance_endpoints(
+def update_instance_endpoints(
     instance: DBVectorDBInstance,
     db: Session):
     logger.info(f"Updating endpoints for instance {instance.id}")
