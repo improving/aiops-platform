@@ -27,3 +27,7 @@ class VLLMController(Controller):
             context["dtype"] = "auto"
 
         return context
+
+    def get_service_name(self, instance: InferenceInstanceSchema,
+                         engineChart: EngineChartsSchema):
+        return f"{self._get_release_name(instance)}"
