@@ -8,5 +8,7 @@ class VectorDBSchema(BaseModel):
     id: uuid.UUID
     name: Optional[str] = None
     description: Optional[str] = None
-    
+    chart_repo: Optional[str] = None
+    chart_name: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)

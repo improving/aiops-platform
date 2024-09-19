@@ -25,7 +25,7 @@ from schemas.model import ModelSchema
 from .controller_utils import get_controller
 from .database import Base, get_db
 from .engines import DBEngine
-from .kubernetes_utils import get_kubernetes_client
+from .kubernetes_utils import get_pod_status_and_readiness, get_service_endpoint
 from .models import DBModel
 
 router = APIRouter()
@@ -71,13 +71,12 @@ class DBInferenceInstance(Base):
 @router.get("/v1alpha1/inferenceInstance",
             response_model=List[InferenceInstanceSchema])
 async def list_inference_instances(
-        db: Session = Depends(get_db),
-        core_v1_api: client.CoreV1Api = Depends(get_kubernetes_client)):
+        db: Session = Depends(get_db)):
     try:
         instances = db.query(DBInferenceInstance).all()
         for instance in instances:
             instance_ready, instance_status = await check_pod_status_and_readiness(
-                instance, core_v1_api, db)
+                instance, db)
             instance.ready = instance_ready
             instance.status = instance_status
         return instances
@@ -90,8 +89,7 @@ async def list_inference_instances(
             response_model=InferenceInstanceSchema)
 async def get_inference_instance(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
-    core_v1_api: client.CoreV1Api = Depends(get_kubernetes_client)):
+    db: Session = Depends(get_db)):
     try:
         instance = db.query(DBInferenceInstance).filter(
             DBInferenceInstance.id == id).first()
@@ -101,7 +99,7 @@ async def get_inference_instance(
                                 detail="Inference instance not found")
 
         instance_ready, instance_status = await check_pod_status_and_readiness(
-            instance, core_v1_api, db)
+            instance, db)
 
         full_instance = InferenceInstanceSchema(
             id=instance.id,
@@ -272,8 +270,6 @@ async def update_inference_instance(id: uuid.UUID,
             else:
                 setattr(db_instance, key, value)
 
-        db.commit()
-        db.refresh(db_instance)
 
         model = db.query(DBModel).filter(
             DBModel.id == db_instance.model_id).first()
@@ -304,6 +300,8 @@ async def update_inference_instance(id: uuid.UUID,
                 status_code=500,
                 detail=f"Failed to upgrade Helm chart: {str(e)}")
 
+        db.commit()
+        db.refresh(db_instance)
         return db_instance
     except HTTPException:
         logger.exception("HTTPException in update_inference_instance")
@@ -413,12 +411,15 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
 
 
 async def update_all_instance_endpoints():
+    logger.debug("Updating all inference instance endpoints")
     db = SessionLocal()
     try:
         # Query for instances without populated endpoints
         instances = db.query(DBInferenceInstance).filter(
             or_(DBInferenceInstance.endpoint is None,
                 DBInferenceInstance.endpoint == '')).all()
+
+        logger.debug(f"Found {len(instances)} inferenceinstances without populated endpoints")
 
         for instance in instances:
             await update_instance_endpoints(instance, db)
@@ -428,8 +429,7 @@ async def update_all_instance_endpoints():
 
 async def update_instance_endpoints(
     instance: DBInferenceInstance,
-    db: Session,
-    core_v1_api: client.CoreV1Api = Depends(get_kubernetes_client)):
+    db: Session):
     logger.info(f"Updating endpoints for instance {instance.id}")
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
@@ -448,24 +448,13 @@ async def update_instance_endpoints(
     service_name = controller.get_service_name(instance, engine_chart)
 
     try:
-        # Get the service information
-        service = core_v1_api.read_namespaced_service(
-            name=service_name, namespace=controller.namespace)
+        endpoint = get_service_endpoint(controller.namespace, service_name)
 
-        # Get the service IP and port
-        if service.spec.type == "LoadBalancer":
-            ip = service.status.load_balancer.ingress[
-                0].ip if service.status.load_balancer.ingress else None
-        else:
-            ip = service.spec.cluster_ip
-
-        port = service.spec.ports[0].port if service.spec.ports else None
-
-        if ip and port:
+        if endpoint:
             # Update the instance endpoint
-            instance.endpoint = f"http://{ip}:{port}"
-            instance.healthEndpoint = f"http://{ip}:{port}/health"
-            instance.metricsEndpoint = f"http://{ip}:{port}/metrics"
+            instance.endpoint = endpoint
+            instance.healthEndpoint = f"{endpoint}/health"
+            instance.metricsEndpoint = f"{endpoint}/metrics"
 
             # Update the database
             db.commit()
@@ -479,9 +468,8 @@ async def update_instance_endpoints(
     # Don't raise an exception here, as we still want to return the instance information
 
 
-async def check_pod_status_and_readiness(instance: DBInferenceInstance,
-                                         core_v1_api: client.CoreV1Api,
-                                         db: Session):
+def check_pod_status_and_readiness(instance: DBInferenceInstance,
+                                   db: Session):
     # Get the associated engine
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
@@ -496,51 +484,10 @@ async def check_pod_status_and_readiness(instance: DBInferenceInstance,
         raise HTTPException(status_code=404,
                             detail="Associated engine chart not found")
 
-    controller = await get_controller(engine.name)
+    controller = get_controller(engine.name)
+    pod_labels = controller.get_pod_labels(instance, engine_chart)
 
-    # Check pod readiness
-    try:
-        # Define pod labels based on the engine type
-        pod_labels = controller.get_pod_labels(instance, engine_chart)
-
-        # Query pods
-        pods = core_v1_api.list_namespaced_pod(namespace=controller.namespace,
-                                               label_selector=pod_labels)
-
-        # Check if any pod is ready
-        instance_ready = any(pod.status.phase == 'Running' and all(
-            container.ready for container in pod.status.container_statuses)
-                             for pod in pods.items)
-
-        if pods.items:
-            pod = pods.items[0]
-            status = pod.status.container_statuses[0]
-            if pod.status.init_container_statuses:
-                initContainerStatus = pod.status.init_container_statuses[0]
-                if not initContainerStatus.state.terminated:
-                    logger.info("Using init container status")
-                    status = initContainerStatus
-                else:
-                    logger.info("Using container status")
-
-            logger.info(f"Pod Name: {pod.metadata.name}, Status: {status}")
-            if not status.started and status.state.waiting:
-                instance_status = status.state.waiting.reason
-            elif not status.started and status.state.terminated:
-                instance_status = "Terminated"
-            elif status.started or (not status.started
-                                    and status.state.running.started_at):
-                instance_status = "Running"
-            else:
-                instance_status = status.state
-        else:
-            instance_status = "Unknown"
-    except client.exceptions.ApiException as e:
-        logger.exception(f"Error checking pod status and readiness: {e}")
-        instance_ready = False
-        instance_status = "Unknown"
-
-    return instance_ready, instance_status
+    return get_pod_status_and_readiness(controller.namespace, pod_labels)
 
 
 # Initialize the scheduler

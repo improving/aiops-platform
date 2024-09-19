@@ -10,6 +10,8 @@ class VectorDBInstanceSchema(BaseModel):
     vectorDB: VectorDBSchema
     configParams: Optional[Dict[str, Any]] = None
     endpoint: Optional[str] = None
+    ready: Optional[bool] = False
+    status: Optional[str] = None
 
     model_config = {
         "from_attributes": True,
