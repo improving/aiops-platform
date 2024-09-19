@@ -75,7 +75,7 @@ async def list_inference_instances(db: Session = Depends(get_db)):
     try:
         instances = db.query(DBInferenceInstance).all()
         for instance in instances:
-            instance_ready, instance_status = await check_pod_status_and_readiness(
+            instance_ready, instance_status = check_pod_status_and_readiness(
                 instance, db)
             instance.ready = instance_ready
             instance.status = instance_status
@@ -96,7 +96,7 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404,
                                 detail="Inference instance not found")
 
-        instance_ready, instance_status = await check_pod_status_and_readiness(
+        instance_ready, instance_status = check_pod_status_and_readiness(
             instance, db)
 
         full_instance = InferenceInstanceSchema(
@@ -385,7 +385,7 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
             return
 
         for chart_dashboard in engine_chart_dashboards:
-            controller = (instance.engine.name)
+            controller = get_controller(instance.engine.name)
             namespace = controller.namespace
             service_name = controller.get_service_name(instance, engine_chart)
             query_params = {
