@@ -38,36 +38,7 @@ import {
 } from "@/components/ui/popover";
 import { ChevronDownIcon } from "@radix-ui/react-icons";
 import { CommandList } from "cmdk";
-
-interface InferenceInstance {
-  id: string;
-  model: {
-    id: string;
-    name: string;
-  };
-  engine: {
-    id: string;
-    name: string;
-  };
-  host: string;
-  endpoint: string;
-  healthEndpoint: string;
-  metricsEndpoint: string;
-  ready: boolean;
-  status: string;
-}
-
-interface InferenceInstanceDashboard {
-  id: string;
-  dashboard_id: string | null;
-  dashboard_name: string | null;
-  panel_id: string | null;
-  panel_name: string | null;
-  org_id: string;
-  queryParams: {
-    [key: string]: string;
-  };
-}
+import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -91,7 +62,9 @@ export default function InferenceEndpointDetails({
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dashboards, setDashboards] = useState<InferenceInstanceDashboard[]>([]);
+  const [dashboards, setDashboards] = useState<InferenceInstanceDashboard[]>(
+    []
+  );
   const [selectedTimeRange, setSelectedTimeRange] = useState(
     timeRangeOptions[0]
   );
@@ -119,7 +92,9 @@ export default function InferenceEndpointDetails({
 
     const fetchDashboards = async () => {
       try {
-        const response = await fetch(`/api/v1alpha1/inferenceInstance/${params.id}/dashboards`);
+        const response = await fetch(
+          `/api/v1alpha1/inferenceInstance/${params.id}/dashboards`
+        );
         if (!response.ok) {
           throw new Error("Failed to fetch dashboards");
         }
@@ -321,12 +296,15 @@ export default function InferenceEndpointDetails({
                   {dashboards.map((dashboard) => (
                     <GrafanaEmbed
                       key={dashboard.id}
-                      grafanaEndpoint={process.env.NEXT_PUBLIC_GRAFANA_URL || "http://192.0.2.202"}
+                      grafanaEndpoint={
+                        process.env.NEXT_PUBLIC_GRAFANA_URL ||
+                        "http://192.0.2.202"
+                      }
                       dashboardID={dashboard.dashboard_id || ""}
                       panelID={dashboard.panel_id || ""}
                       orgID={dashboard.org_id}
                       queryParams={{
-                        ...dashboard.queryParams,
+                        ...dashboard.query_params,
                         ...timeRangeParams,
                       }}
                     />

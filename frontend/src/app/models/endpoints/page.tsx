@@ -27,22 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/hooks/use-toast";
-
-interface InferenceInstance {
-  id: string;
-  model: {
-    id: string;
-    name: string;
-  };
-  engine: {
-    id: string;
-    name: string;
-  };
-  host: string;
-  endpoint: string;
-  ready: boolean;
-  status: string;
-}
+import { InferenceInstance } from "@/types/models";
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);

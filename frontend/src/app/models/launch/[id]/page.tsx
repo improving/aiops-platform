@@ -24,40 +24,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
+import { Engine, Host, Model } from "@/types/models";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
 type EnvVar = { name: string; value: string };
-
-interface Engine {
-  id: string;
-  name: string;
-  llm_support: boolean;
-  embedding_support: boolean;
-  reranking_support: boolean;
-  prompt_guard_support: boolean;
-  vector_db_support: boolean;
-}
-
-interface Host {
-  hostname: string;
-  cpu_vendor: string;
-  cpu_memory: number;
-  cpu_cores: number;
-  cuda_driver_version: string;
-  cuda_runtime_version: string;
-  gpu_count: number;
-  gpu_memory: number;
-  gpu_model: string;
-  gpu_replicas: number;
-  gpu_sharing_strategy: string;
-}
-
-interface Model {
-  id: string;
-  name: string;
-  category: "llm" | "embedding" | "reranker" | "prompt_guard" | "vector_db";
-}
 
 export default function LaunchModel({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -80,7 +51,9 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         const response = await fetch("/api/v1alpha1/engines");
         if (!response.ok) {
           const errorData = await response.json(); // Get error details
-          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+          throw new Error(
+            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
+          );
         }
         const data = await response.json();
         setEngines(data);
@@ -98,7 +71,9 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         const response = await fetch("/api/v1alpha1/hosts");
         if (!response.ok) {
           const errorData = await response.json(); // Get error details
-          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+          throw new Error(
+            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
+          );
         }
         const data = await response.json();
         setHosts(data);
@@ -116,7 +91,9 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         const response = await fetch(`/api/v1alpha1/models/${params.id}`);
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+          throw new Error(
+            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
+          );
         }
         const data = await response.json();
         setModel(data);
@@ -135,7 +112,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     if (model && engines.length > 0) {
-      const filtered = engines.filter(engine => {
+      const filtered = engines.filter((engine) => {
         switch (model.category) {
           case "llm":
             return engine.llm_support;
@@ -187,7 +164,9 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
       if (!response.ok) {
         const errorData = await response.json(); // Get error details
-        throw new Error(`HTTP ${response.status}-${response.statusText}: ${errorData.detail}`);
+        throw new Error(
+          `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
+        );
       }
 
       const data = await response.json();
