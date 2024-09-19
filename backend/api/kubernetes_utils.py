@@ -6,6 +6,7 @@ from logger import setup_logger
 # Initialize the logger
 logger = setup_logger(__name__)
 
+
 def load_kubernetes_config():
     try:
         config.load_kube_config()
@@ -23,6 +24,7 @@ def load_kubernetes_config():
 def get_kubernetes_client():
     load_kubernetes_config()
     return client.CoreV1Api()
+
 
 def get_pod_status_and_readiness(namespace, pod_labels):
     try:
@@ -65,6 +67,7 @@ def get_pod_status_and_readiness(namespace, pod_labels):
         instance_status = "Unknown"
 
     return instance_ready, instance_status
+
 
 def get_service_endpoint(namespace, service_name):
     endpoint = None

@@ -1,9 +1,10 @@
 import uuid
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 from schemas.vectordb import VectorDBSchema
+
 
 class VectorDBInstanceSchema(BaseModel):
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
@@ -15,5 +16,7 @@ class VectorDBInstanceSchema(BaseModel):
 
     model_config = {
         "from_attributes": True,
-        "json_schema_extra": {"exclude": ["vectorDB"]}
+        "json_schema_extra": {
+            "exclude": ["vectorDB"]
+        }
     }

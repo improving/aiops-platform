@@ -32,8 +32,9 @@ class Controller(ABC):
 
     def get_pod_labels(self, instance: InferenceInstanceSchema,
                        engineChart: EngineChartsSchema):
-        return (f"app.kubernetes.io/instance={self._get_release_name(instance)},"
-                f"app.kubernetes.io/name={engineChart.chart_name}")
+        return (
+            f"app.kubernetes.io/instance={self._get_release_name(instance)},"
+            f"app.kubernetes.io/name={engineChart.chart_name}")
 
     async def _prepare_helm_values(self, instance: InferenceInstanceSchema,
                                    engineChart: EngineChartsSchema):

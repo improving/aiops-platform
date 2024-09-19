@@ -25,7 +25,8 @@ from schemas.model import ModelSchema
 from .controller_utils import get_controller
 from .database import Base, get_db
 from .engines import DBEngine
-from .kubernetes_utils import get_pod_status_and_readiness, get_service_endpoint
+from .kubernetes_utils import (get_pod_status_and_readiness,
+                               get_service_endpoint)
 from .models import DBModel
 
 router = APIRouter()
@@ -70,8 +71,7 @@ class DBInferenceInstance(Base):
 
 @router.get("/v1alpha1/inferenceInstance",
             response_model=List[InferenceInstanceSchema])
-async def list_inference_instances(
-        db: Session = Depends(get_db)):
+async def list_inference_instances(db: Session = Depends(get_db)):
     try:
         instances = db.query(DBInferenceInstance).all()
         for instance in instances:
@@ -87,9 +87,7 @@ async def list_inference_instances(
 
 @router.get("/v1alpha1/inferenceInstance/{id}",
             response_model=InferenceInstanceSchema)
-async def get_inference_instance(
-    id: uuid.UUID,
-    db: Session = Depends(get_db)):
+async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
     try:
         instance = db.query(DBInferenceInstance).filter(
             DBInferenceInstance.id == id).first()
@@ -270,7 +268,6 @@ async def update_inference_instance(id: uuid.UUID,
             else:
                 setattr(db_instance, key, value)
 
-
         model = db.query(DBModel).filter(
             DBModel.id == db_instance.model_id).first()
         engine = db.query(DBEngine).filter(
@@ -419,7 +416,9 @@ def update_all_instance_endpoints():
             or_(DBInferenceInstance.endpoint is None,
                 DBInferenceInstance.endpoint == '')).all()
 
-        logger.debug(f"Found {len(instances)} inferenceinstances without populated endpoints")
+        logger.debug(
+            f"Found {len(instances)} inferenceinstances without populated endpoints"
+        )
 
         for instance in instances:
             update_instance_endpoints(instance, db)
@@ -427,9 +426,7 @@ def update_all_instance_endpoints():
         db.close()
 
 
-def update_instance_endpoints(
-    instance: DBInferenceInstance,
-    db: Session):
+def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
     logger.info(f"Updating endpoints for instance {instance.id}")
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
@@ -468,8 +465,7 @@ def update_instance_endpoints(
     # Don't raise an exception here, as we still want to return the instance information
 
 
-def check_pod_status_and_readiness(instance: DBInferenceInstance,
-                                   db: Session):
+def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
     # Get the associated engine
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()

@@ -12,6 +12,7 @@ from .database import Base, get_db
 
 router = APIRouter()
 
+
 # SQLAlchemy model
 class DBVectorDB(Base):
     __tablename__ = "vectordb"
@@ -22,10 +23,12 @@ class DBVectorDB(Base):
     chart_repo = Column(String, nullable=False)
     chart_name = Column(String, nullable=False)
 
+
 # API to get vectordb catalog
 @router.get("/v1alpha1/vectordb", response_model=List[VectorDBSchema])
 def get_vectordb(db: Session = Depends(get_db)):
     vectordb = db.query(DBVectorDB).all()
     if not vectordb:
-        raise HTTPException(status_code=404, detail="No vector databases found")
+        raise HTTPException(status_code=404,
+                            detail="No vector databases found")
     return vectordb

@@ -5,7 +5,8 @@ from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 
 from api.kubernetes_utils import get_kubernetes_client
-from controller.base_controller import HelmInstallError, HelmUninstallError, HelmUpgradeError
+from controller.base_controller import (HelmInstallError, HelmUninstallError,
+                                        HelmUpgradeError)
 from logger import setup_logger
 from schemas.vectordb_instance import VectorDBInstanceSchema
 
@@ -27,13 +28,13 @@ class VectorDBController():
         return f"{self._get_release_name(instance)}"
 
     def get_pod_labels(self, instance: VectorDBInstanceSchema):
-        return (f"app.kubernetes.io/instance={self._get_release_name(instance)},"
-                f"app.kubernetes.io/name={instance.vectorDB.chart_name}")
+        return (
+            f"app.kubernetes.io/instance={self._get_release_name(instance)},"
+            f"app.kubernetes.io/name={instance.vectorDB.chart_name}")
 
     async def _prepare_helm_values(self, instance: VectorDBInstanceSchema):
         template = self.jinja_env.get_template(
-            f"{instance.vectorDB.chart_name.lower()}-values.yaml.jinja"
-        )
+            f"{instance.vectorDB.chart_name.lower()}-values.yaml.jinja")
 
         context = self._get_base_context(instance)
 
@@ -42,15 +43,14 @@ class VectorDBController():
         return values
 
     def _get_base_context(self, instance: VectorDBInstanceSchema):
-        service_type = "LoadBalancer" # default service type
+        service_type = "LoadBalancer"  # default service type
         if instance.configParams and instance.configParams["serviceType"]:
             service_type = instance.configParams["serviceType"]
 
-        return {
-            "service_type": service_type
-        }
+        return {"service_type": service_type}
 
-    async def _add_and_update_helm_repo(self, instance: VectorDBInstanceSchema):
+    async def _add_and_update_helm_repo(self,
+                                        instance: VectorDBInstanceSchema):
         repo_url = instance.vectorDB.chart_repo
         chart_name = instance.vectorDB.chart_name
 
@@ -90,8 +90,7 @@ class VectorDBController():
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:  # Consider replacing with a more specific exception
             self.logger.exception(f"Helm upgrade failed: {str(e)}")
-            raise HelmUpgradeError(
-                f"Helm upgrade failed: {str(e)}") from e
+            raise HelmUpgradeError(f"Helm upgrade failed: {str(e)}") from e
 
     async def uninstall(self, instance: VectorDBInstanceSchema):
         chart_name = self._get_release_name(instance)
@@ -107,5 +106,4 @@ class VectorDBController():
             self.logger.error(f"Release not found: {chart_name}")
         except Exception as e:  # Consider replacing with a more specific exception
             self.logger.exception(f"Helm uninstall failed: {str(e)}")
-            raise HelmUninstallError(
-                f"Helm uninstall failed: {str(e)}") from e
+            raise HelmUninstallError(f"Helm uninstall failed: {str(e)}") from e

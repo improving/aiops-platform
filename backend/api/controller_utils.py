@@ -1,6 +1,7 @@
 from controller import HuggingFaceController, NIMController, VLLMController
 from controller.opea_controller import OPEAController
 
+
 def get_controller(engine_name: str):
     if engine_name.lower() == "huggingface":
         return HuggingFaceController()
