@@ -2,7 +2,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import BigInteger, Column, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,7 @@ class DBModel(Base):
     description = Column(String)
     category = Column(String)
     subcategory = Column(String)
-    size = Column(Integer)
+    size = Column(BigInteger)
 
 
 # API to get model information

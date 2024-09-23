@@ -1,6 +1,8 @@
 import csv
 import uuid
 
+from sqlalchemy import MetaData, Table, text
+
 from api.engine_chart_dashboards import DBEngineChartDashboards
 from api.engine_charts import DBEngineCharts
 from api.engines import DBEngine
@@ -15,8 +17,83 @@ from .database import Base, SessionLocal, engine
 logger = setup_logger(__name__)
 
 
+def update_table_definitions():
+    db = SessionLocal()
+    connection = engine.connect()
+    try:
+        metadata = MetaData()
+        metadata.reflect(bind=engine)
+
+        for table in Base.metadata.tables.values():
+            if table.name in metadata.tables:
+                existing_table = Table(table.name,
+                                       metadata,
+                                       autoload_with=engine)
+                existing_columns = set(existing_table.columns.keys())
+                model_columns = set(table.columns.keys())
+
+                # Add new columns
+                add_update_columns(connection, table, existing_table,
+                                   existing_columns)
+
+                # Drop removed columns
+                for column_name in existing_columns - model_columns:
+                    logger.info(
+                        f"Dropping column {column_name} from table {table.name}"
+                    )
+                    connection.execute(
+                        text(
+                            f'ALTER TABLE "{table.name}" DROP COLUMN "{column_name}"'
+                        ))
+            else:
+                logger.info(f"Creating table {table.name}")
+                table.create(bind=engine)
+
+        for table_name in metadata.tables.keys():
+            if table_name not in Base.metadata.tables:
+                logger.info(f"Dropping table {table_name}")
+                connection.execute(text(f'DROP TABLE "{table_name}"'))
+
+        logger.info("Table definitions updated successfully")
+    except Exception as e:
+        logger.error(
+            f"An error occurred while updating table definitions: {e}")
+        db.rollback()
+        raise e
+    finally:
+        db.commit()
+        connection.close()
+        db.close()
+
+
+def add_update_columns(connection, table, existing_table, existing_columns):
+    for column in table.columns:
+        if column.name not in existing_columns:
+            logger.info(f"Adding column {column.name} to table {table.name}")
+            connection.execute(
+                text(
+                    f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column.type.compile(dialect=engine.dialect)}'
+                ))
+        else:
+            existing_column = existing_table.columns[column.name]
+            if str(column.type) != str(existing_column.type):
+                logger.info(
+                    f"Updating column {column.name} in table {table.name}. Existing type: {existing_column.type}, New type: {column.type}, compiled type: {column.type.compile(dialect=engine.dialect)}"
+                )
+                try:
+                    connection.execute(
+                        text(
+                            f'ALTER TABLE "{table.name}" ALTER COLUMN "{column.name}" TYPE {column.type.compile(dialect=engine.dialect)}'
+                        ))
+                except Exception as e:
+                    logger.error(
+                        f"Error updating column {column.name} in table {table.name}: {e}"
+                    )
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    update_table_definitions()
     load_initial_data()
 
 
@@ -39,6 +116,7 @@ def load_initial_data():
                         size=int(row["size"]),
                     )
                     db.add(model)
+        db.commit()
 
         # Load engines
         logger.info("Loading engines")
@@ -56,6 +134,7 @@ def load_initial_data():
                         vector_db_support=bool(row["vector_db_support"]),
                     )
                     db.add(_engine)
+        db.commit()
 
         # Load engine charts
         logger.info("Loading engine charts")
@@ -72,6 +151,7 @@ def load_initial_data():
                         chart_name=row["chart_name"],
                     )
                     db.add(engine_chart)
+        db.commit()
 
         # Load engine chart dashboards
         logger.info("Loading engine chart dashboards")
@@ -91,6 +171,7 @@ def load_initial_data():
                         panel_name=row["panel_name"],
                     )
                     db.add(engine_chart_dashboard)
+        db.commit()
 
         # Load vector dbs
         logger.info("Loading vector dbs")
@@ -121,6 +202,9 @@ def reload_data():
         # Clear existing data
         db.query(DBInferenceInstanceConfigParams).delete()
         db.query(DBInferenceInstance).delete()
+        db.query(DBEngineChartDashboards).delete()
+        db.query(DBVectorDB).delete()
+        db.query(DBEngineCharts).delete()
         db.query(DBEngine).delete()
         db.query(DBModel).delete()
         db.query(DBEngineCharts).delete()
