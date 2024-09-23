@@ -1,0 +1,6 @@
+auth:
+  postgresPassword: "postgres"
+
+primary:
+  nodeSelector:
+    kubernetes.io/hostname: gpu-node-4

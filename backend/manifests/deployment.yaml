@@ -30,6 +30,14 @@ spec:
             secretKeyRef:
               name: ngc-api-key
               key: NGC_API_KEY
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: aiops-postgres-postgresql
+              key: postgres-password
+        envFrom:
+        - configMapRef:
+            name: aiops-backend-config
         ports:
         - containerPort: 8000
         resources:
