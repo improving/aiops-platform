@@ -350,14 +350,13 @@ async def delete_inference_instance(id: uuid.UUID,
                 status_code=500,
                 detail=f"Failed to remove Helm chart: {str(e)}")
 
-        db.delete(db_instance.config)
-        db.delete(db_instance)
-        db.commit()
-
         try:
             if instance_dashboards:
                 for dashboard in instance_dashboards:
                     db.delete(dashboard)
+
+                db.delete(db_instance.config)
+                db.delete(db_instance)
                 db.commit()
         except Exception as e:
             logger.exception(f"Error deleting dashboards: {e}")
