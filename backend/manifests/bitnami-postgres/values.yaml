@@ -4,3 +4,5 @@ auth:
 primary:
   nodeSelector:
     kubernetes.io/hostname: gpu-node-4
+  service:
+    type: LoadBalancer
