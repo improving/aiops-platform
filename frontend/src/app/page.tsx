@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import Dashboard from "@/components/Dashboard";
 
-export function DisplayCard({
+function DisplayCard({
   title,
   description,
   buttons,
