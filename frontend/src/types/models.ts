@@ -16,6 +16,7 @@ interface InferenceInstance {
   status: string;
 }
 
+
 interface InferenceInstanceDashboard {
   id: string;
   dashboard_id: string | null;
@@ -55,8 +56,18 @@ interface Host {
 interface Model {
   id: string;
   name: string;
-  category: "llm" | "embedding" | "reranker" | "prompt_guard" | "vector_db";
+  modelId: string;
+  description: string;
+  category: string;
+  subcategory: string;
+  size: number;
 }
+
+// interface Model {
+//   id: string;
+//   name: string;
+//   category: "llm" | "embedding" | "reranker" | "prompt_guard" | "vector_db";
+// }
 
 export type {
   InferenceInstance,

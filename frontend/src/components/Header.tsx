@@ -18,7 +18,7 @@ import { SunIcon, MoonIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
 
 export default function Header() {
-  const { setTheme } = useTheme()
+  const { setTheme } = useTheme();
 
   return (
     <header className="bg-background border-b">

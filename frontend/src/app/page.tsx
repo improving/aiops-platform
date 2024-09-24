@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,53 +9,75 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import Dashboard from "@/components/Dashboard";
+
+export function DisplayCard({
+  title,
+  description,
+  buttons,
+}: {
+  title: string;
+  description: string;
+  buttons: { link: string; text: string; variant: "default" | "secondary" }[];
+}) {
+  return (
+    <Card className="shadow-lg rounded-lg">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+        <CardDescription className="text-sm">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center">
+        <div className="flex flex-row gap-2 mb-3 w-full">
+          {buttons.map((button, index) => (
+            <Link key={index} href={button.link} passHref>
+              <Button variant={button.variant} className="w-full py-2">
+                {button.text}
+              </Button>
+            </Link>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-grow container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Welcome to Hub</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="shadow-lg rounded-lg">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Models</CardTitle>
-              <CardDescription className="text-sm">Explore our AI models</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div className="flex flex-row gap-2 mb-3 w-full">
-                <Link href="/models/catalog" passHref>
-                  <Button className="w-full py-2">View Catalog</Button>
-                </Link>
-                <Link href="/models/endpoints" passHref>
-                  <Button variant="secondary" className="w-full py-2">
-                    View Endpoints
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-lg rounded-lg">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Vector Databases</CardTitle>
-              <CardDescription className="text-sm">Explore our vector databases</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div className="flex flex-row gap-2 mb-3 w-full">
-                <Link href="/vector-databases/catalog" passHref>
-                  <Button className="w-full py-2">View Catalog</Button>
-                </Link>
-                <Link href="/vector-databases/endpoints" passHref>
-                  <Button variant="secondary" className="w-full py-2">
-                    View Endpoints
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-      <Footer />
-    </div>
+    <Dashboard title="Welcome to Hub">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <DisplayCard
+          title="Models"
+          description="Explore our AI models"
+          buttons={[
+            {
+              link: "/models/catalog",
+              text: "View Catalog",
+              variant: "default",
+            },
+            {
+              link: "/models/endpoints",
+              text: "View Endpoints",
+              variant: "secondary",
+            },
+          ]}
+        />
+        <DisplayCard
+          title="Vector Databases"
+          description="Explore our vector databases"
+          buttons={[
+            {
+              link: "/vector-databases/catalog",
+              text: "View Catalog",
+              variant: "default",
+            },
+            {
+              link: "/vector-databases/endpoints",
+              text: "View Endpoints",
+              variant: "secondary",
+            },
+          ]}
+        />
+      </div>
+    </Dashboard>
   );
 }
