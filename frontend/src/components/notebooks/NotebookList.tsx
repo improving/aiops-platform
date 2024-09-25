@@ -56,7 +56,7 @@ export default function NotebookList() {
         <Link href="/notebooks/new" passHref>
           <Button>
             <RocketIcon className="mr-2 w-4 h-4" />
-            Create New Notebook
+            New Notebook
           </Button>
         </Link>
       </div>
