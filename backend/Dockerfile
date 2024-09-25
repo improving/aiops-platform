@@ -19,6 +19,7 @@ COPY api/ ./api/
 COPY controller/ ./controller/
 COPY templates/ ./templates/
 COPY schemas/ ./schemas/
+COPY models/ ./models/
 COPY raw_data/ ./raw_data/
 COPY app.py .
 COPY logger.py .
