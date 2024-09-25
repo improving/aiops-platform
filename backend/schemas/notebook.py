@@ -39,7 +39,7 @@ class NotebookInstance(BaseModel):
                     'pytorch', 'tensorflow'
             ]:
                 raise ValueError('Invalid framework for type jupyter')
-            if values.data['type'] == 'vscode' and v not in ['python', '']:
+            if values.data['type'] == 'vscode' and v not in ['python', '', None]:
                 raise ValueError('Invalid framework for type vscode')
         return v
 

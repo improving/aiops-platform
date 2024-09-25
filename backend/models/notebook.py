@@ -13,7 +13,7 @@ class Notebook(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)
-    framework = Column(String, nullable=False)
+    framework = Column(String)
     nvidia_gpu = Column(Boolean, nullable=False)
     image = Column(String)
     resources_cpu = Column(String)

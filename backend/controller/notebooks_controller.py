@@ -25,7 +25,7 @@ class NotebooksController():
         return f"{instance.name.lower()}-{str(instance.id)[:8]}"
 
     def get_service_name(self, instance: NotebookInstance):
-        return f"{self._get_release_name(instance)}-kf-notebooks-{instance.name}"
+        return f"{self._get_release_name(instance)}-kf-notebooks-{instance.name}"[:41].rstrip("-")
 
     def get_pod_labels(self, instance: NotebookInstance):
         return (
@@ -49,7 +49,7 @@ class NotebooksController():
                 image_suffix = "-full"
             image = f"kubeflownotebookswg/jupyter-{framework.lower()}{image_suffix}"
         elif notebook_type.lower() == "vscode":
-            if framework.lower() == "python":
+            if framework and framework.lower() == "python":
                 image_suffix = "-python"
             else:
                 image_suffix = ""
