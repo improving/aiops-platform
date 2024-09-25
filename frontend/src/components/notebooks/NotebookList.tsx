@@ -81,6 +81,16 @@ export default function NotebookList() {
                     GPUs: {notebook.resources_gpu}
                   </span>
                 )}
+                {notebook.resources_cpu && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                    CPU: {notebook.resources_cpu}
+                  </span>
+                )}
+                {notebook.resources_memory && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                    Mem: {notebook.resources_memory}
+                  </span>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-between">
@@ -89,7 +99,7 @@ export default function NotebookList() {
                 onClick={() => window.open(notebook.endpoint, "_blank")}
               >
                 <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
-                Connect to Notebook
+                Connect
               </Button>
               <Link href={`/notebooks/${notebook.id}`} passHref>
                 <Button variant="secondary">

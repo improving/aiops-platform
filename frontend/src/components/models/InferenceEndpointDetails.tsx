@@ -3,7 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { TrashIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
+import {
+  TrashIcon,
+  ClipboardCopyIcon,
+  OpenInNewWindowIcon,
+} from "@radix-ui/react-icons";
 import {
   Dialog,
   DialogContent,
@@ -143,170 +147,176 @@ export default function InferenceEndpointDetailsPage({
 
   return (
     <Tabs defaultValue="details" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
-        </TabsList>
-        <TabsContent value="details">
+      </TabsList>
+      <TabsContent value="details">
         <Card>
-            <CardHeader>
+          <CardHeader>
             <CardTitle>{inferenceInstance.model.name}</CardTitle>
-            </CardHeader>
-            <CardContent>
+          </CardHeader>
+          <CardContent>
             <div className="grid gap-4">
-                <div className="grid grid-cols-2 items-center gap-4">
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Model</Label>
                 <span>{inferenceInstance.model.name || "N/A"}</span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Engine</Label>
                 <span>{inferenceInstance.engine.name || "N/A"}</span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Host</Label>
                 <span>{inferenceInstance.host || "N/A"}</span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Ready</Label>
                 <span>{inferenceInstance.ready ? "Yes" : "No"}</span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Status</Label>
                 <span>{inferenceInstance.status || "N/A"}</span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Endpoint</Label>
                 <span className="flex items-center">
-                    {inferenceInstance.ready ? (
-                    <span className="text-green-500">
-                        {inferenceInstance.endpoint || "N/A"}
-                    </span>
-                    ) : (
-                    <span className="text-red-500">
-                        {inferenceInstance.endpoint || "N/A"}
-                    </span>
-                    )}
-                    <Button
+                  <span
+                    className={
+                      inferenceInstance.ready
+                        ? "text-green-500"
+                        : "text-red-500"
+                    }
+                  >
+                    <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
+                    <a
+                      href={`${inferenceInstance.endpoint}/docs`}
+                      target="_blank"
+                    >
+                      {inferenceInstance.endpoint || "N/A"}
+                    </a>
+                  </span>
+                  <Button
                     variant="outline"
                     onClick={() =>
-                        navigator.clipboard.writeText(
+                      navigator.clipboard.writeText(
                         inferenceInstance.endpoint || ""
-                        )
+                      )
                     }
                     className="ml-2"
-                    >
+                  >
                     <ClipboardCopyIcon className="mr-2 w-4 h-4" />
-                    </Button>
+                  </Button>
                 </span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Health Endpoint</Label>
                 <span>{inferenceInstance.healthEndpoint || "N/A"}</span>
-                </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Metrics Endpoint</Label>
                 <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
-                </div>
+              </div>
             </div>
-            </CardContent>
-            <CardFooter>
+          </CardContent>
+          <CardFooter>
             <Dialog>
-                <DialogTrigger asChild>
+              <DialogTrigger asChild>
                 <Button variant="destructive">
-                    <TrashIcon className="mr-2 w-4 h-4" />
-                    Delete Inference Endpoint
+                  <TrashIcon className="mr-2 w-4 h-4" />
+                  Delete Inference Endpoint
                 </Button>
-                </DialogTrigger>
-                <DialogContent>
+              </DialogTrigger>
+              <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>
+                  <DialogTitle>
                     Are you sure you want to delete this inference endpoint?
-                    </DialogTitle>
-                    <DialogDescription>
+                  </DialogTitle>
+                  <DialogDescription>
                     This action cannot be undone.
-                    </DialogDescription>
+                  </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                    <Button
+                  <Button
                     type="button"
                     variant="destructive"
                     onClick={handleDelete}
-                    >
+                  >
                     <TrashIcon className="mr-2 w-4 h-4" />
                     Delete
-                    </Button>
+                  </Button>
                 </DialogFooter>
-                </DialogContent>
+              </DialogContent>
             </Dialog>
-            </CardFooter>
+          </CardFooter>
         </Card>
-        </TabsContent>
-        <TabsContent value="dashboards">
+      </TabsContent>
+      <TabsContent value="dashboards">
         <Card>
-            <CardHeader>
+          <CardHeader>
             <CardTitle>Dashboards</CardTitle>
-            </CardHeader>
-            <CardContent>
+          </CardHeader>
+          <CardContent>
             <div className="mb-4">
-                <Popover open={open} onOpenChange={setOpen}>
+              <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
-                    <Button
+                  <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
                     className="w-[200px] justify-between"
-                    >
+                  >
                     {selectedTimeRange.label}
                     <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
+                  </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[200px] p-0">
-                    <Command>
+                  <Command>
                     <CommandInput
-                        placeholder="Search time range..."
-                        className="h-9"
+                      placeholder="Search time range..."
+                      className="h-9"
                     />
                     <CommandList>
-                        <CommandGroup>
+                      <CommandGroup>
                         {timeRangeOptions.map((option) => (
-                            <CommandItem
+                          <CommandItem
                             key={option.value}
                             value={option.value.toString()}
                             onSelect={() => {
-                                setSelectedTimeRange(option);
-                                setOpen(false);
+                              setSelectedTimeRange(option);
+                              setOpen(false);
                             }}
-                            >
+                          >
                             {option.label}
-                            </CommandItem>
+                          </CommandItem>
                         ))}
-                        </CommandGroup>
+                      </CommandGroup>
                     </CommandList>
-                    </Command>
+                  </Command>
                 </PopoverContent>
-                </Popover>
+              </Popover>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {dashboards.map((dashboard) => (
+              {dashboards.map((dashboard) => (
                 <GrafanaEmbed
-                    key={dashboard.id}
-                    grafanaEndpoint={
+                  key={dashboard.id}
+                  grafanaEndpoint={
                     process.env.NEXT_PUBLIC_GRAFANA_URL ||
                     "http://192.0.2.202"
-                    }
-                    dashboardID={dashboard.dashboard_id || ""}
-                    panelID={dashboard.panel_id || ""}
-                    orgID={dashboard.org_id}
-                    queryParams={{
+                  }
+                  dashboardID={dashboard.dashboard_id || ""}
+                  panelID={dashboard.panel_id || ""}
+                  orgID={dashboard.org_id}
+                  queryParams={{
                     ...dashboard.query_params,
                     ...timeRangeParams,
-                    }}
+                  }}
                 />
-                ))}
+              ))}
             </div>
-            </CardContent>
+          </CardContent>
         </Card>
-        </TabsContent>
+      </TabsContent>
     </Tabs>
   );
 }

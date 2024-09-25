@@ -61,10 +61,12 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             <Label>Type:</Label>
             <span>{notebook.type || "N/A"}</span>
           </div>
-          <div className="grid grid-cols-2 items-center gap-4">
-            <Label>Framework:</Label>
-            <span>{notebook.framework || "N/A"}</span>
-          </div>
+          {notebook.type === "jupyter" && (
+            <div className="grid grid-cols-2 items-center gap-4">
+              <Label>Framework:</Label>
+              <span>{notebook.framework || "N/A"}</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 items-center gap-4">
             <Label>Nvidia GPU:</Label>
             <span>{notebook.nvidia_gpu ? "Yes" : "No"}</span>
@@ -95,6 +97,10 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             <Label>Status:</Label>
             <span>{notebook.status || "N/A"}</span>
           </div>
+          <div className="grid grid-cols-2 items-center gap-4">
+            <Label>Created At:</Label>
+            <span>{notebook.created_at || "N/A"}</span>
+          </div>
         </div>
         <div className="mt-6 flex space-x-4">
           <Button
@@ -102,11 +108,11 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             disabled={!notebook.ready}
           >
             <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
-            Connect to Notebook
+            Connect
           </Button>
           <Button variant="destructive" onClick={handleDelete}>
             <TrashIcon className="mr-2 w-4 h-4" />
-            Delete Notebook
+            Delete
           </Button>
         </div>
       </CardContent>

@@ -16,6 +16,7 @@ import {
   EyeOpenIcon,
   RocketIcon,
   ClipboardCopyIcon,
+  OpenInNewWindowIcon,
 } from "@radix-ui/react-icons";
 import {
   Select,
@@ -181,15 +182,16 @@ export default function InferenceEndpoints() {
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
                     <strong>Endpoint: </strong>
-                    {endpoint.ready ? (
-                      <span className="text-green-500">
+                    <span
+                      className={
+                        endpoint.ready ? "text-green-500" : "text-red-500"
+                      }
+                    >
+                      <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
+                      <a href={`${endpoint.endpoint}/docs`} target="_blank">
                         {endpoint.endpoint || "N/A"}
-                      </span>
-                    ) : (
-                      <span className="text-red-500">
-                        {endpoint.endpoint || "N/A"}
-                      </span>
-                    )}
+                      </a>
+                    </span>
                     <Button
                       variant="outline"
                       onClick={() =>
