@@ -11,7 +11,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RocketIcon } from "@radix-ui/react-icons";
+import {
+  EyeOpenIcon,
+  OpenInNewWindowIcon,
+  RocketIcon,
+} from "@radix-ui/react-icons";
 import { Notebook } from "@/types/notebook";
 
 export default function NotebookList() {
@@ -84,10 +88,14 @@ export default function NotebookList() {
                 disabled={!notebook.ready}
                 onClick={() => window.open(notebook.endpoint, "_blank")}
               >
+                <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
                 Connect to Notebook
               </Button>
               <Link href={`/notebooks/${notebook.id}`} passHref>
-                <Button variant="outline">View Details</Button>
+                <Button variant="secondary">
+                  <EyeOpenIcon className="mr-2 w-4 h-4" />
+                  View Details
+                </Button>
               </Link>
             </CardFooter>
           </Card>

@@ -19,8 +19,8 @@ export default function NewNotebookForm() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
-    type: "",
-    framework: "",
+    type: "jupyter",
+    framework: "pytorch",
     resources_cpu: "0.5",
     resources_memory: "1",
     nvidia_gpu: false,
@@ -34,6 +34,11 @@ export default function NewNotebookForm() {
   };
 
   const handleSelectChange = (name: string, value: string) => {
+    if (name === "type" && value === "jupyter") {
+      setFormData((prev) => ({ ...prev, framework: "pytorch" }));
+    } else if (name === "type" && value === "vscode") {
+      setFormData((prev) => ({ ...prev, framework: "" }));
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -44,12 +49,17 @@ export default function NewNotebookForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const updatedFormData = {
+        ...formData,
+        resources_memory: `${formData.resources_memory}Gi`,
+        storage_size: `${formData.storage_size}Gi`,
+      };
       const response = await fetch("/api/v1alpha1/notebooks", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(updatedFormData),
       });
 
       if (!response.ok) {
@@ -105,6 +115,7 @@ export default function NewNotebookForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="pytorch">PyTorch</SelectItem>
+              <SelectItem value="tensorflow">TensorFlow</SelectItem>
             </SelectContent>
           </Select>
         </div>
