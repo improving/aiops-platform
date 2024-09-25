@@ -47,35 +47,45 @@ def get_pod_status_and_readiness(namespace, pod_labels):
             container.ready for container in pod.status.container_statuses)
                              for pod in pods.items)
 
+        instance_status = "Unknown"
         if pods.items:
             pod = pods.items[0]
-            status = pod.status.container_statuses[0]
-            if pod.status.init_container_statuses:
-                initContainerStatus = pod.status.init_container_statuses[0]
-                if not initContainerStatus.state.terminated:
-                    logger.info("Using init container status")
-                    status = initContainerStatus
-                else:
-                    logger.info("Using container status")
+            container_status = get_container_status_obj(pod)
 
-            logger.debug(f"Pod Name: {pod.metadata.name}, Status: {status}")
-            if not status.started and status.state.waiting:
-                instance_status = status.state.waiting.reason
-            elif not status.started and status.state.terminated:
-                instance_status = "Terminated"
-            elif status.started or (not status.started
-                                    and status.state.running.started_at):
-                instance_status = "Running"
-            else:
-                instance_status = status.state
-        else:
-            instance_status = "Unknown"
+            if container_status:
+                logger.debug(
+                    f"Pod Name: {pod.metadata.name}, Status: {container_status}"
+                )
+                if not container_status.started and container_status.state.waiting:
+                    instance_status = container_status.state.waiting.reason
+                elif not container_status.started and container_status.state.terminated:
+                    instance_status = "Terminated"
+                elif container_status.started or (
+                        not container_status.started
+                        and container_status.state.running.started_at):
+                    instance_status = "Running"
+                else:
+                    instance_status = container_status.state
     except client.exceptions.ApiException as e:
         logger.exception(f"Error checking pod status and readiness: {e}")
         instance_ready = False
         instance_status = "Unknown"
 
     return instance_ready, instance_status
+
+
+def get_container_status_obj(pod):
+    container_status = None
+    if pod.status.container_statuses:
+        container_status = pod.status.container_statuses[0]
+    elif pod.status.init_container_statuses:
+        initContainerStatus = pod.status.init_container_statuses[0]
+        if not initContainerStatus.state.terminated:
+            logger.info("Using init container status")
+            container_status = initContainerStatus
+        else:
+            logger.info("Using container status")
+    return container_status
 
 
 def get_service_endpoint(namespace, service_name):

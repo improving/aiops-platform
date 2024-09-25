@@ -25,7 +25,8 @@ class NotebooksController():
         return f"{instance.name.lower()}-{str(instance.id)[:8]}"
 
     def get_service_name(self, instance: NotebookInstance):
-        return f"{self._get_release_name(instance)}-kf-notebooks-{instance.name}"[:41].rstrip("-")
+        return f"{self._get_release_name(instance)}-kf-notebooks-{instance.name}"[:41].rstrip(
+            "-")
 
     def get_pod_labels(self, instance: NotebookInstance):
         return (
