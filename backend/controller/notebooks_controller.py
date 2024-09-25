@@ -13,11 +13,10 @@ from schemas.notebook import NotebookInstance
 
 class NotebooksController():
 
-    def __init__(self, namespace="kubeflow"):
+    def __init__(self):
         self.logger = setup_logger(__name__)
         self.api_instance = client.CustomObjectsApi()
         self.core_v1_api = get_kubernetes_client()
-        self.namespace = namespace
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))
 
@@ -164,7 +163,7 @@ class NotebooksController():
                 chart_name,
                 chart,
                 values,
-                namespace=self.namespace,
+                namespace=instance.namespace,
                 create_namespace=True,
             )
             self.logger.info(f"Helm install succeeded for chart: {chart_name}")
@@ -179,7 +178,7 @@ class NotebooksController():
 
         try:
             await self.helm.install_or_upgrade_release(
-                chart_name, chart, values, namespace=self.namespace)
+                chart_name, chart, values, namespace=instance.namespace)
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except Exception as e:
             self.logger.exception(f"Helm upgrade failed: {str(e)}")
@@ -190,7 +189,7 @@ class NotebooksController():
 
         try:
             revision = await self.helm.get_current_revision(
-                chart_name, namespace=self.namespace)
+                chart_name, namespace=instance.namespace)
             self.logger.info(f"Current revision: {revision}")
             await revision.release.uninstall(wait=True)
             self.logger.info(

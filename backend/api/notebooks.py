@@ -22,7 +22,7 @@ logger = setup_logger(__name__)
 
 def filter_notebook_fields(data: dict) -> dict:
     allowed_fields = {
-        'id', 'name', 'type', 'framework', 'nvidia_gpu', 'image',
+        'id', 'name', 'namespace', 'type', 'framework', 'nvidia_gpu', 'image',
         'resources_cpu', 'resources_memory', 'resources_gpu', 'storage_size',
         'service_type', 'service_port', 'created_at', 'updated_at'
     }
@@ -103,10 +103,10 @@ async def delete_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
     return {"message": "Notebook deleted successfully"}
 
 
-def check_pod_status_and_readiness(notebook: Notebook):
+def check_pod_status_and_readiness(instance: Notebook):
     controller = NotebooksController()
-    pod_labels = controller.get_pod_labels(notebook)
-    return get_pod_status_and_readiness(controller.namespace, pod_labels)
+    pod_labels = controller.get_pod_labels(instance)
+    return get_pod_status_and_readiness(instance.namespace, pod_labels)
 
 
 def update_all_instance_endpoints():
@@ -132,14 +132,14 @@ def update_instance_endpoints(instance: Notebook, db: Session):
     service_name = controller.get_service_name(instance)
 
     try:
-        endpoint = get_service_endpoint(controller.namespace, service_name)
+        endpoint = get_service_endpoint(instance.namespace, service_name)
 
         if endpoint:
             # Update the instance endpoint
             instance.endpoint = endpoint
 
             if instance.type == "jupyter":
-                instance.endpoint = f"{endpoint}/notebook/{controller.namespace}/{service_name}/lab"
+                instance.endpoint = f"{endpoint}/notebook/{instance.namespace}/{service_name}/lab"
 
             # Update the database
             db.commit()
