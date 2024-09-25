@@ -35,7 +35,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChevronDownIcon } from "@radix-ui/react-icons";
-import { CommandList } from "cmdk";
+import { CommandList } from "@/components/ui/command";
 import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
 
 const timeRangeOptions = [

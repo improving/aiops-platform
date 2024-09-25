@@ -77,6 +77,17 @@ export default function Home() {
             },
           ]}
         />
+        <DisplayCard
+          title="Notebooks"
+          description="Explore our notebooks"
+          buttons={[
+            {
+              link: "/notebooks/",
+              text: "View Notebooks",
+              variant: "default",
+            },
+          ]}
+        />
       </div>
     </Dashboard>
   );

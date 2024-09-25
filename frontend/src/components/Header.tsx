@@ -33,6 +33,14 @@ export default function Header() {
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
+            <MenubarTrigger>Notebooks</MenubarTrigger>
+            <MenubarContent>
+              <Link href="/notebooks" passHref>
+                <MenubarItem>Home</MenubarItem>
+              </Link>
+            </MenubarContent>
+          </MenubarMenu>
+          <MenubarMenu>
             <MenubarTrigger>Models</MenubarTrigger>
             <MenubarContent>
               <Link href="/models/catalog/" passHref>
