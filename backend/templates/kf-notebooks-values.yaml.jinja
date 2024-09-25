@@ -1,0 +1,42 @@
+# Service settings
+service:
+  enabled: {{ service.enabled | default(true) }}
+  port: {{ service.port | default(80) }}
+  type: {{ service.type | default('LoadBalancer') }}
+
+# Notebook settings
+notebooks:
+  jupyter:
+    enabled: {{ notebooks.jupyter.enabled | default(false) }}
+    name: {{ name | default('jupyter-pytorch-cuda') }}
+    image:
+      repository: {{ image.repository | default('kubeflownotebookswg/jupyter-pytorch-cuda-full') }}
+      tag: {{ image.tag | default('') }}
+      pullPolicy: {{ image.pullPolicy | default('IfNotPresent') }}
+    resources:
+      limits:
+        cpu: "{{ resources.limits.cpu | default('0.6') }}"
+        memory: "{{ resources.limits.memory | default('1.2Gi') }}"
+        nvidia.com/gpu: "{{ resources.limits['nvidia.com/gpu'] | default('1') }}"
+      requests:
+        cpu: "{{ resources.requests.cpu | default('0.5') }}"
+        memory: "{{ resources.requests.memory | default('1Gi') }}"
+    storage:
+      size: "{{ storage.size | default('5Gi') }}"
+
+  vscode:
+    enabled: {{ notebooks.vscode.enabled | default(false) }}
+    name: {{ name | default('codeserver-python') }}
+    image:
+      repository: {{ image.repository | default('kubeflownotebookswg/codeserver-python') }}
+      tag: {{ image.tag | default('') }}
+      pullPolicy: {{ image.pullPolicy | default('IfNotPresent') }}
+    resources:
+      limits:
+        cpu: "{{ resources.limits.cpu | default('0.6') }}"
+        memory: "{{ resources.limits.memory | default('1.2Gi') }}"
+      requests:
+        cpu: "{{ resources.requests.cpu | default('0.5') }}"
+        memory: "{{ resources.requests.memory | default('1Gi') }}"
+    storage:
+      size: "{{ storage.size | default('5Gi') }}"

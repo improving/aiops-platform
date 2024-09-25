@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from kubernetes import client, config
+from urllib3.util.retry import Retry
 
 from logger import setup_logger
 
@@ -23,7 +24,15 @@ def load_kubernetes_config():
 
 def get_kubernetes_client():
     load_kubernetes_config()
-    return client.CoreV1Api()
+    configuration = client.Configuration.get_default_copy()
+    configuration.client_side_validation = False
+    configuration.timeout = 2
+    retry = Retry(total=3,
+                  backoff_factor=1,
+                  status_forcelist=[500, 502, 503, 504])
+    configuration.retries = retry
+    api_client = client.ApiClient(configuration)
+    return client.CoreV1Api(api_client)
 
 
 def get_pod_status_and_readiness(namespace, pod_labels):

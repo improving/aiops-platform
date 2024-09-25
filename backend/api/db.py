@@ -92,9 +92,11 @@ def add_update_columns(connection, table, existing_table, existing_columns):
 
 
 def init_db():
+    logger.info("Initializing database")
     Base.metadata.create_all(bind=engine)
     update_table_definitions()
     load_initial_data()
+    logger.info("Database initialized successfully")
 
 
 def load_initial_data():

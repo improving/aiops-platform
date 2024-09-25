@@ -36,7 +36,7 @@ class DBVectorDBInstance(Base):
 
 @router.get("/v1alpha1/vectordb_instances",
             response_model=List[VectorDBInstanceSchema])
-def get_vectordb_instances(db: Session = Depends(get_db)):
+def list_vectordb_instances(db: Session = Depends(get_db)):
     vectordb_instances = db.query(DBVectorDBInstance).all()
     for instance in vectordb_instances:
         instance_ready, instance_status = check_pod_status_and_readiness(
@@ -86,8 +86,7 @@ async def create_vectordb_instance(vectordb_instance: VectorDBInstanceSchema,
 
     dbVectorDBInstance = DBVectorDBInstance(
         vectordb_id=vectordb_instance.vectorDB.id,
-        configParams=vectordb_instance.
-        configParams,  # No need for json.dumps()
+        configParams=vectordb_instance.configParams,
         endpoint=vectordb_instance.endpoint)
     db.add(dbVectorDBInstance)
     db.commit()
