@@ -10,7 +10,9 @@ from api.inference_instance import (DBInferenceInstance,
                                     DBInferenceInstanceConfigParams)
 from api.models import DBModel
 from api.vectordb import DBVectorDB
+from api.vectordb_instance import DBVectorDBInstance
 from logger import setup_logger
+from models.notebook import Notebook
 
 from .database import Base, SessionLocal, engine
 
@@ -74,6 +76,8 @@ def add_update_columns(connection, table, existing_table, existing_columns):
                 text(
                     f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column.type.compile(dialect=engine.dialect)}'
                 ))
+            connection.commit()
+
         else:
             existing_column = existing_table.columns[column.name]
             if str(column.type) != str(existing_column.type):
@@ -85,6 +89,7 @@ def add_update_columns(connection, table, existing_table, existing_columns):
                         text(
                             f'ALTER TABLE "{table.name}" ALTER COLUMN "{column.name}" TYPE {column.type.compile(dialect=engine.dialect)}'
                         ))
+                    connection.commit()
                 except Exception as e:
                     logger.error(
                         f"Error updating column {column.name} in table {table.name}: {e}"
@@ -200,12 +205,15 @@ def load_initial_data():
 
 def reload_data():
     db = SessionLocal()
+
     try:
         # Clear existing data
         db.query(DBInferenceInstanceConfigParams).delete()
         db.query(DBInferenceInstance).delete()
         db.query(DBEngineChartDashboards).delete()
+        db.query(DBVectorDBInstance).delete()
         db.query(DBVectorDB).delete()
+        db.query(Notebook).delete()
         db.query(DBEngineCharts).delete()
         db.query(DBEngine).delete()
         db.query(DBModel).delete()
@@ -227,13 +235,6 @@ def reload_data():
 def refresh_db():
     db = SessionLocal()
     try:
-        db.query(DBInferenceInstanceConfigParams).delete()
-        db.query(DBInferenceInstance).delete()
-        db.query(DBEngine).delete()
-        db.query(DBModel).delete()
-        db.query(DBEngineCharts).delete()
-        db.commit()
-
         # Delete all tables
         Base.metadata.drop_all(bind=engine)
 
