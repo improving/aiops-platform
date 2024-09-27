@@ -1,6 +1,6 @@
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -30,9 +30,13 @@ def get_engine():
         if ":" in DATABASE_URL.split("://")[1]:
             DATABASE_PORT = DATABASE_URL.split("://")[1].split(":")[1].split(
                 "/")[0]
-        return create_engine(
-            f"postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
-        )
+        url = URL.create("postgresql+psycopg2",
+                         username=DATABASE_USER,
+                         password=DATABASE_PASSWORD,
+                         host=DATABASE_HOST,
+                         port=DATABASE_PORT,
+                         database=DATABASE_NAME)
+        return create_engine(url)
 
     raise ValueError("DATABASE_URL must be a postgres or sqlite URL")
 

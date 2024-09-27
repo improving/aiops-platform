@@ -1,7 +1,7 @@
 import csv
 import uuid
 
-from sqlalchemy import MetaData, Table, text
+from sqlalchemy import MetaData, Table, and_, text
 
 from api.engine_chart_dashboards import DBEngineChartDashboards
 from api.engine_charts import DBEngineCharts
@@ -108,99 +108,165 @@ def load_initial_data():
     db = SessionLocal()
     try:
         # Load models
-        logger.info("Loading models")
-        if db.query(DBModel).count() == 0:
-            with open("raw_data/models.csv", "r", encoding="utf-8") as f:
-                csv_reader = csv.DictReader(f)
-                for row in csv_reader:
-                    model = DBModel(
-                        id=uuid.uuid4(),
-                        name=row["name"],
-                        modelId=row["modelId"],
-                        description=row["description"],
-                        category=row["category"],
-                        subcategory=row["subcategory"],
-                        size=int(row["size"]),
-                    )
-                    db.add(model)
-        db.commit()
+        load_models(db)
 
         # Load engines
-        logger.info("Loading engines")
-        if db.query(DBEngine).count() == 0:
-            with open("raw_data/engines.csv", "r", encoding="utf-8") as f:
-                csv_reader = csv.DictReader(f)
-                for row in csv_reader:
-                    _engine = DBEngine(
-                        id=uuid.UUID(row["id"]),
-                        name=row["name"],
-                        llm_support=bool(row["llm_support"]),
-                        embedding_support=bool(row["embedding_support"]),
-                        reranking_support=bool(row["reranking_support"]),
-                        prompt_guard_support=bool(row["prompt_guard_support"]),
-                        vector_db_support=bool(row["vector_db_support"]),
-                    )
-                    db.add(_engine)
-        db.commit()
+        load_engines(db)
 
         # Load engine charts
-        logger.info("Loading engine charts")
-        if db.query(DBEngineCharts).count() == 0:
-            with open("raw_data/engine_charts.csv", "r",
-                      encoding="utf-8") as f:
-                csv_reader = csv.DictReader(f)
-                for row in csv_reader:
-                    engine_chart = DBEngineCharts(
-                        id=uuid.UUID(row["id"]),
-                        engine=row["engine"],
-                        chart_type=row["chart_type"],
-                        chart_repo=row["chart_repo"],
-                        chart_name=row["chart_name"],
-                    )
-                    db.add(engine_chart)
-        db.commit()
+        load_engine_charts(db)
 
         # Load engine chart dashboards
-        logger.info("Loading engine chart dashboards")
-        if db.query(DBEngineChartDashboards).count() == 0:
-            with open("raw_data/engine_chart_dashboards.csv",
-                      "r",
-                      encoding="utf-8") as f:
-                csv_reader = csv.DictReader(f)
-                for row in csv_reader:
-                    engine_chart_dashboard = DBEngineChartDashboards(
-                        id=uuid.uuid4(),
-                        dashboard_id=row["dashboard_id"],
-                        dashboard_name=row["dashboard_name"],
-                        engine_id=uuid.UUID(row["engine_id"]),
-                        engine_chart_id=uuid.UUID(row["engine_chart_id"]),
-                        panel_id=row["panel_id"],
-                        panel_name=row["panel_name"],
-                    )
-                    db.add(engine_chart_dashboard)
-        db.commit()
+        load_engine_chart_dashboards(db)
 
         # Load vector dbs
-        logger.info("Loading vector dbs")
-        if db.query(DBVectorDB).count() == 0:
-            with open("raw_data/vectordb.csv", "r", encoding="utf-8") as f:
-                csv_reader = csv.DictReader(f)
-                for row in csv_reader:
-                    vectordb = DBVectorDB(
-                        id=uuid.uuid4(),
-                        name=row["name"],
-                        description=row["description"],
-                        chart_repo=row["chart_repo"],
-                        chart_name=row["chart_name"],
-                    )
-                    db.add(vectordb)
-
-        db.commit()
+        load_vector_dbs(db)
     except Exception as e:
         logger.error(f"An error occurred while loading initial data: {e}")
         db.rollback()
     finally:
         db.close()
+
+
+def load_vector_dbs(db):
+    logger.info("Loading vector dbs")
+    with open("raw_data/vectordb.csv", "r", encoding="utf-8") as f:
+        validVectorDbNames = []
+        csv_reader = csv.DictReader(f)
+        for row in csv_reader:
+            validVectorDbNames.append(row["name"])
+            _vectordb = db.query(DBVectorDB).filter(
+                DBVectorDB.name == row["name"]).first()
+            if not _vectordb:
+                _vectordb = DBVectorDB(
+                    id=uuid.uuid4(),
+                    name=row["name"],
+                    description=row["description"],
+                    chart_repo=row["chart_repo"],
+                    chart_name=row["chart_name"],
+                )
+                logger.info(f"adding vector db id: {_vectordb.name}")
+                db.add(_vectordb)
+        dropped_vector_dbs = db.query(DBVectorDB).filter(
+            DBVectorDB.name.not_in(validVectorDbNames)).all()
+        for vector_db in dropped_vector_dbs:
+            logger.info(f"dropping vector db name: {vector_db.name}")
+            db.delete(vector_db)
+    db.commit()
+
+
+def load_engine_chart_dashboards(db):
+    logger.info("Loading engine chart dashboards")
+    with open("raw_data/engine_chart_dashboards.csv", "r",
+              encoding="utf-8") as f:
+        csv_reader = csv.DictReader(f)
+        for row in csv_reader:
+            _engine_chart_dashboard = db.query(DBEngineChartDashboards).filter(
+                and_(
+                    DBEngineChartDashboards.engine_chart_id == uuid.UUID(
+                        row["engine_chart_id"]),
+                    DBEngineChartDashboards.panel_id ==
+                    row["panel_id"])).first()
+            if not _engine_chart_dashboard:
+                _engine_chart_dashboard = DBEngineChartDashboards(
+                    id=uuid.uuid4(),
+                    dashboard_id=row["dashboard_id"],
+                    dashboard_name=row["dashboard_name"],
+                    engine_id=uuid.UUID(row["engine_id"]),
+                    engine_chart_id=uuid.UUID(row["engine_chart_id"]),
+                    panel_id=row["panel_id"],
+                    panel_name=row["panel_name"],
+                )
+                logger.info(
+                    f"adding engine chart dashboard id: {_engine_chart_dashboard.id}"
+                )
+                db.add(_engine_chart_dashboard)
+    db.commit()
+
+
+def load_engine_charts(db):
+    logger.info("Loading engine charts")
+    with open("raw_data/engine_charts.csv", "r", encoding="utf-8") as f:
+        validEngineChartIds = []
+        csv_reader = csv.DictReader(f)
+        for row in csv_reader:
+            validEngineChartIds.append(row["id"])
+            _engine_chart = db.query(DBEngineCharts).filter(
+                DBEngineCharts.id == row["id"]).first()
+            if not _engine_chart:
+                _engine_chart = DBEngineCharts(
+                    id=uuid.UUID(row["id"]),
+                    engine=row["engine"],
+                    chart_type=row["chart_type"],
+                    chart_repo=row["chart_repo"],
+                    chart_name=row["chart_name"],
+                )
+                logger.info(f"adding engine chart id: {_engine_chart.id}")
+                db.add(_engine_chart)
+        dropped_engine_charts = db.query(DBEngineCharts).filter(
+            DBEngineCharts.id.not_in(validEngineChartIds)).all()
+        for engine_chart in dropped_engine_charts:
+            logger.info(f"dropping engine chart id: {engine_chart.id}")
+            db.delete(engine_chart)
+    db.commit()
+
+
+def load_engines(db):
+    logger.info("Loading engines")
+    with open("raw_data/engines.csv", "r", encoding="utf-8") as f:
+        csv_reader = csv.DictReader(f)
+        validEngineNames = []
+        for row in csv_reader:
+            validEngineNames.append(row["name"])
+            _engine = db.query(DBEngine).filter(
+                DBEngine.name == row["name"]).first()
+            if not _engine:
+                _engine = DBEngine(
+                    id=uuid.UUID(row["id"]),
+                    name=row["name"],
+                    llm_support=bool(row["llm_support"]),
+                    embedding_support=bool(row["embedding_support"]),
+                    reranking_support=bool(row["reranking_support"]),
+                    prompt_guard_support=bool(row["prompt_guard_support"]),
+                    vector_db_support=bool(row["vector_db_support"]),
+                )
+                logger.info(f"adding engine name: {_engine.name}")
+                db.add(_engine)
+        dropped_engines = db.query(DBEngine).filter(
+            DBEngine.name.not_in(validEngineNames)).all()
+        for _engine in dropped_engines:
+            logger.info(f"dropping engine name: {_engine.name}")
+            db.delete(_engine)
+    db.commit()
+
+
+def load_models(db):
+    logger.info("Loading models")
+    with open("raw_data/models.csv", "r", encoding="utf-8") as f:
+        csv_reader = csv.DictReader(f)
+        validModelIds = []
+        for row in csv_reader:
+            validModelIds.append(row["modelId"])
+            model = db.query(DBModel).filter(
+                DBModel.modelId == row["modelId"]).first()
+            if not model:
+                model = DBModel(
+                    id=uuid.uuid4(),
+                    name=row["name"],
+                    modelId=row["modelId"],
+                    description=row["description"],
+                    category=row["category"],
+                    subcategory=row["subcategory"],
+                    size=int(row["size"]),
+                )
+                logger.info(f"adding model id: {model.modelId}")
+                db.add(model)
+        dropped_models = db.query(DBModel).filter(
+            DBModel.modelId.not_in(validModelIds)).all()
+        for model in dropped_models:
+            logger.info(f"dropping model id: {model.modelId}")
+            db.delete(model)
+    db.commit()
 
 
 def reload_data():
