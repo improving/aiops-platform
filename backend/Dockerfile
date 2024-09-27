@@ -17,13 +17,14 @@ RUN apt-get update && \
 # Copy the required files
 COPY api/ ./api/
 COPY controller/ ./controller/
-COPY templates/ ./templates/
-COPY schemas/ ./schemas/
+COPY db/ ./db/
 COPY models/ ./models/
 COPY raw_data/ ./raw_data/
+COPY schemas/ ./schemas/
+COPY templates/ ./templates/
+COPY utils/ ./utils/
 COPY app.py .
 COPY logger.py .
-COPY database.db .
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt

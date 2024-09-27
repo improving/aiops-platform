@@ -1,27 +1,13 @@
-import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import Column, String
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
+from db.database import get_db
+from models.vectordb import DBVectorDB
 from schemas.vectordb import VectorDBSchema
 
-from .database import Base, get_db
-
 router = APIRouter()
-
-
-# SQLAlchemy model
-class DBVectorDB(Base):
-    __tablename__ = "vectordb"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    description = Column(String, nullable=False)
-    chart_repo = Column(String, nullable=False)
-    chart_name = Column(String, nullable=False)
 
 
 # API to get vectordb catalog

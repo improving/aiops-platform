@@ -1,8 +1,9 @@
 import os
 
-from controller.base_controller import Controller
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
+
+from .base_controller import Controller
 
 
 class OPEAController(Controller):

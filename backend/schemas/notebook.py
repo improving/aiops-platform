@@ -5,7 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class NotebookInstance(BaseModel):
+class NotebookInstanceSchema(BaseModel):
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
     name: str
     namespace: Optional[str] = "ai-stack"

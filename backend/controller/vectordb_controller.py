@@ -4,11 +4,11 @@ from kubernetes import client
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 
-from api.kubernetes_utils import get_kubernetes_client
 from controller.base_controller import (HelmInstallError, HelmUninstallError,
                                         HelmUpgradeError)
 from logger import setup_logger
 from schemas.vectordb_instance import VectorDBInstanceSchema
+from utils.kubernetes_utils import get_kubernetes_client
 
 
 class VectorDBController():

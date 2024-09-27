@@ -3,18 +3,17 @@ import uuid
 
 from sqlalchemy import MetaData, Table, and_, text
 
-from api.engine_chart_dashboards import DBEngineChartDashboards
-from api.engine_charts import DBEngineCharts
-from api.engines import DBEngine
-from api.inference_instance import (DBInferenceInstance,
-                                    DBInferenceInstanceConfigParams)
-from api.models import DBModel
-from api.vectordb import DBVectorDB
-from api.vectordb_instance import DBVectorDBInstance
+from db.database import Base, SessionLocal, engine
 from logger import setup_logger
+from models.engine_chart_dashboards import DBEngineChartDashboards
+from models.engine_charts import DBEngineCharts
+from models.engines import DBEngine
+from models.inference_instance import (DBInferenceInstance,
+                                       DBInferenceInstanceConfigParams)
+from models.models import DBModel
 from models.notebook import Notebook
-
-from .database import Base, SessionLocal, engine
+from models.vectordb import DBVectorDB
+from models.vectordb_instance import DBVectorDBInstance
 
 logger = setup_logger(__name__)
 

@@ -4,11 +4,12 @@ from kubernetes import client
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 
-from api.kubernetes_utils import get_kubernetes_client
-from controller.base_controller import (HelmInstallError, HelmUninstallError,
-                                        HelmUpgradeError)
 from logger import setup_logger
-from schemas.notebook import NotebookInstance
+from schemas.notebook import NotebookInstanceSchema
+from utils.kubernetes_utils import get_kubernetes_client
+
+from .base_controller import (HelmInstallError, HelmUninstallError,
+                              HelmUpgradeError)
 
 
 class NotebooksController():
@@ -20,19 +21,19 @@ class NotebooksController():
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))
 
-    def _get_release_name(self, instance: NotebookInstance):
+    def _get_release_name(self, instance: NotebookInstanceSchema):
         return f"{instance.name.lower()}-{str(instance.id)[:8]}"
 
-    def get_service_name(self, instance: NotebookInstance):
+    def get_service_name(self, instance: NotebookInstanceSchema):
         return f"{self._get_release_name(instance)}-kf-notebooks-{instance.name}"[:41].rstrip(
             "-")
 
-    def get_pod_labels(self, instance: NotebookInstance):
+    def get_pod_labels(self, instance: NotebookInstanceSchema):
         return (
             f"app.kubernetes.io/instance={self._get_release_name(instance)},"
             f"app.kubernetes.io/name=kf-notebooks")
 
-    async def _prepare_helm_values(self, instance: NotebookInstance):
+    async def _prepare_helm_values(self, instance: NotebookInstanceSchema):
         template = self.jinja_env.get_template(
             "kf-notebooks-values.yaml.jinja")
         context = self._get_base_context(instance)
@@ -59,7 +60,7 @@ class NotebooksController():
 
         return image
 
-    def _get_base_context(self, instance: NotebookInstance):
+    def _get_base_context(self, instance: NotebookInstanceSchema):
         image_tag = ""
         if not instance.image or instance.image == "":
             instance.image = self._get_instance_image(instance.type,
@@ -143,7 +144,8 @@ class NotebooksController():
 
         return context
 
-    async def _add_and_update_helm_repo(self, instance: NotebookInstance):
+    async def _add_and_update_helm_repo(self,
+                                        instance: NotebookInstanceSchema):
         repo_url = "https://infracloudio.github.io/charts"
         chart_name = "kf-notebooks"
 
@@ -152,7 +154,7 @@ class NotebooksController():
 
         return chart
 
-    async def install(self, instance: NotebookInstance):
+    async def install(self, instance: NotebookInstanceSchema):
         self.logger.debug(f"Installing instance: {instance}")
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_release_name(instance)
@@ -171,7 +173,7 @@ class NotebooksController():
             self.logger.exception(f"Helm install failed: {str(e)}")
             raise HelmInstallError(f"Helm install failed: {str(e)}") from e
 
-    async def upgrade(self, instance: NotebookInstance):
+    async def upgrade(self, instance: NotebookInstanceSchema):
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_release_name(instance)
         values = await self._prepare_helm_values(instance)
@@ -184,7 +186,7 @@ class NotebooksController():
             self.logger.exception(f"Helm upgrade failed: {str(e)}")
             raise HelmUpgradeError(f"Helm upgrade failed: {str(e)}") from e
 
-    async def uninstall(self, instance: NotebookInstance):
+    async def uninstall(self, instance: NotebookInstanceSchema):
         chart_name = self._get_release_name(instance)
 
         try:

@@ -3,13 +3,14 @@ from abc import ABC, abstractmethod
 import yaml
 from jinja2 import Environment, FileSystemLoader
 from kubernetes import client
+from kubernetes.client.exceptions import ApiException
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 
-from api.kubernetes_utils import get_kubernetes_client
 from logger import setup_logger
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
+from utils.kubernetes_utils import get_kubernetes_client
 
 
 class Controller(ABC):
@@ -99,6 +100,25 @@ class Controller(ABC):
         self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
 
         return chart
+
+    def create_ns_if_needed(self):
+        try:
+            self.core_v1_api.read_namespace(self.namespace)
+            self.logger.info(f"Namespace '{self.namespace}' already exists")
+        except ApiException as e:
+            if e.status == 404:
+                self.logger.info(
+                    f"Namespace '{self.namespace}' does not exist, creating..."
+                )
+                namespace_obj = client.V1Namespace(
+                    metadata=client.V1ObjectMeta(name=self.namespace))
+                self.core_v1_api.create_namespace(namespace_obj)
+                self.logger.info(
+                    f"Namespace '{self.namespace}' created successfully")
+            else:
+                self.logger.exception(
+                    f"Failed to check namespace '{self.namespace}': {str(e)}")
+                raise
 
     async def install(self, instance: InferenceInstanceSchema,
                       engineChart: EngineChartsSchema):

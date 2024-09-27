@@ -184,6 +184,7 @@ class NIMController(Controller):
 
     async def install(self, instance: InferenceInstanceSchema,
                       engineChart: EngineChartsSchema):
+        self.create_ns_if_needed()
         await self._install_image_pull_secret(instance, engineChart)
         await self._install_ngc_api_secret(instance, engineChart)
         await super().install(instance, engineChart)

@@ -8,13 +8,13 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from urllib3.exceptions import MaxRetryError
 
-from api.database import SessionLocal, get_db
-from api.kubernetes_utils import (get_pod_status_and_readiness,
-                                  get_service_endpoint)
 from controller.notebooks_controller import NotebooksController
+from db.database import SessionLocal, get_db
 from logger import setup_logger
 from models.notebook import Notebook
-from schemas.notebook import NotebookInstance
+from schemas.notebook import NotebookInstanceSchema
+from utils.kubernetes_utils import (get_pod_status_and_readiness,
+                                    get_service_endpoint)
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -29,8 +29,8 @@ def filter_notebook_fields(data: dict) -> dict:
     return {key: value for key, value in data.items() if key in allowed_fields}
 
 
-@router.post("/v1alpha1/notebooks", response_model=NotebookInstance)
-async def create_notebook(notebook: NotebookInstance,
+@router.post("/v1alpha1/notebooks", response_model=NotebookInstanceSchema)
+async def create_notebook(notebook: NotebookInstanceSchema,
                           db: Session = Depends(get_db)):
     notebook_data = filter_notebook_fields(notebook.model_dump())
     db_notebook = Notebook(**notebook_data)
@@ -46,7 +46,7 @@ async def create_notebook(notebook: NotebookInstance,
     return db_notebook
 
 
-@router.get("/v1alpha1/notebooks", response_model=List[NotebookInstance])
+@router.get("/v1alpha1/notebooks", response_model=List[NotebookInstanceSchema])
 async def list_notebooks(db: Session = Depends(get_db)):
     notebooks = db.query(Notebook).all()
     try:
@@ -60,7 +60,7 @@ async def list_notebooks(db: Session = Depends(get_db)):
     return notebooks
 
 
-@router.get("/v1alpha1/notebooks/{id}", response_model=NotebookInstance)
+@router.get("/v1alpha1/notebooks/{id}", response_model=NotebookInstanceSchema)
 async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
     notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not notebook:
@@ -75,9 +75,9 @@ async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
     return notebook
 
 
-@router.put("/v1alpha1/notebooks/{id}", response_model=NotebookInstance)
+@router.put("/v1alpha1/notebooks/{id}", response_model=NotebookInstanceSchema)
 async def update_notebook(id: uuid.UUID,
-                          notebook: NotebookInstance,
+                          notebook: NotebookInstanceSchema,
                           db: Session = Depends(get_db)):
     db_notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not db_notebook:

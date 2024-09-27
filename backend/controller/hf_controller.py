@@ -52,6 +52,7 @@ class HuggingFaceController(Controller):
 
     async def install(self, instance: InferenceInstanceSchema,
                       engineChart: EngineChartsSchema):
+        self.create_ns_if_needed()
         await self._create_hf_api_token_secret()
         await super().install(instance, engineChart)
 

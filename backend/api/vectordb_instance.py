@@ -4,34 +4,23 @@ from typing import List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import APIRouter, Depends, HTTPException, Path
 from kubernetes import client
-from sqlalchemy import JSON, UUID, Column, ForeignKey, String, or_
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
 
-from api.database import Base, SessionLocal, get_db
-from api.kubernetes_utils import (get_pod_status_and_readiness,
-                                  get_service_endpoint)
-from api.vectordb import DBVectorDB
 from controller.vectordb_controller import VectorDBController
+from db.database import SessionLocal, get_db
 from logger import setup_logger
+from models.vectordb import DBVectorDB
+from models.vectordb_instance import DBVectorDBInstance
 from schemas.vectordb import VectorDBSchema
 from schemas.vectordb_instance import VectorDBInstanceSchema
+from utils.kubernetes_utils import (get_pod_status_and_readiness,
+                                    get_service_endpoint)
 
 router = APIRouter()
 
 # Initialize the logger
 logger = setup_logger(__name__)
-
-
-# SQLAlchemy model
-class DBVectorDBInstance(Base):
-    __tablename__ = "vectordb_instances"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    vectordb_id = Column(UUID(as_uuid=True), ForeignKey('vectordb.id'))
-    configParams = Column(JSON, nullable=True)  # Change this line
-    endpoint = Column(String, nullable=True)
-
-    vectorDB = relationship("DBVectorDB")
 
 
 @router.get("/v1alpha1/vectordb_instances",

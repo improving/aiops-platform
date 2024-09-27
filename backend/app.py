@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 
-from api.db import init_db, refresh_db, reload_data
 from api.engines import router as engines_router
 from api.hosts import router as hosts_router
 from api.inference_instance import router as inference_instance_router
@@ -8,6 +7,7 @@ from api.models import router as models_router
 from api.notebooks import router as notebooks_router
 from api.vectordb import router as vectordb_router
 from api.vectordb_instance import router as vectordb_instance_router
+from db.db import init_db, refresh_db, reload_data
 
 app = FastAPI()
 

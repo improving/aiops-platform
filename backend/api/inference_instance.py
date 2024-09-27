@@ -6,28 +6,27 @@ from typing import List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes import client
-from sqlalchemy import Column, ForeignKey, Integer, String, and_, or_
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
 
-from api.database import SessionLocal
-from api.engine_chart_dashboards import DBEngineChartDashboards
-from api.engine_charts import DBEngineCharts
-from api.inference_instance_dashboards import InferenceInstanceDashboards
+from db.database import SessionLocal, get_db
 from logger import setup_logger
+from models.engine_chart_dashboards import DBEngineChartDashboards
+from models.engine_charts import DBEngineCharts
+from models.engines import DBEngine
+from models.inference_instance import (DBInferenceInstance,
+                                       DBInferenceInstanceConfigParams)
+from models.inference_instance_dashboards import DBInferenceInstanceDashboards
+from models.models import DBModel
 from schemas.engine import EngineSchema
 from schemas.inference_instance import (InferenceInstanceConfigParamsSchema,
                                         InferenceInstanceSchema)
 from schemas.inference_instance_dashboards import \
     InferenceInstanceDashboardsSchema
 from schemas.model import ModelSchema
-
-from .controller_utils import get_controller
-from .database import Base, get_db
-from .engines import DBEngine
-from .kubernetes_utils import (get_pod_status_and_readiness,
-                               get_service_endpoint)
-from .models import DBModel
+from utils.controller_utils import get_controller
+from utils.kubernetes_utils import (get_pod_status_and_readiness,
+                                    get_service_endpoint)
 
 router = APIRouter()
 
@@ -36,37 +35,6 @@ logger = setup_logger(__name__)
 
 # Static org_id for all dashboards
 org_id = "1"
-
-
-# SQLAlchemy models
-class DBInferenceInstanceConfigParams(Base):
-    __tablename__ = "inference_instance_config_params"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    maxInputLength = Column(Integer)
-    maxTokens = Column(Integer)
-    maxBatchPrefillTokens = Column(Integer)
-    maxBatchTotalTokens = Column(Integer)
-    quantization = Column(String)
-    image = Column(String)
-
-
-class DBInferenceInstance(Base):
-    __tablename__ = "inference_instances"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    model_id = Column(UUID(as_uuid=True), ForeignKey('models.id'))
-    engine_id = Column(UUID(as_uuid=True), ForeignKey('engines.id'))
-    host = Column(String)
-    endpoint = Column(String)
-    healthEndpoint = Column(String)
-    metricsEndpoint = Column(String)
-    config_id = Column(UUID(as_uuid=True),
-                       ForeignKey('inference_instance_config_params.id'))
-
-    model = relationship("DBModel")
-    engine = relationship("DBEngine")
-    config = relationship("DBInferenceInstanceConfigParams")
 
 
 @router.get("/v1alpha1/inferenceInstance",
@@ -126,8 +94,10 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
 async def get_inference_instance_dashboards(id: uuid.UUID,
                                             db: Session = Depends(get_db)):
     try:
-        db_instance_dashboards = db.query(InferenceInstanceDashboards).filter(
-            InferenceInstanceDashboards.inference_instance_id == id).all()
+        db_instance_dashboards = db.query(
+            DBInferenceInstanceDashboards).filter(
+                DBInferenceInstanceDashboards.inference_instance_id ==
+                id).all()
 
         if not db_instance_dashboards:
             return []
@@ -326,8 +296,8 @@ async def delete_inference_instance(id: uuid.UUID,
         engine_chart = db.query(DBEngineCharts).filter(
             and_(DBEngineCharts.engine == engine.name,
                  DBEngineCharts.chart_type == model.category)).first()
-        instance_dashboards = db.query(InferenceInstanceDashboards).filter(
-            InferenceInstanceDashboards.inference_instance_id == id).all()
+        instance_dashboards = db.query(DBInferenceInstanceDashboards).filter(
+            DBInferenceInstanceDashboards.inference_instance_id == id).all()
 
         full_instance = InferenceInstanceSchema(
             id=db_instance.id,
@@ -391,7 +361,7 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
                 "var-namespace": namespace,
                 "var-service": service_name,
             }
-            inference_instance_dashboard = InferenceInstanceDashboards(
+            inference_instance_dashboard = DBInferenceInstanceDashboards(
                 id=uuid.uuid4(),
                 inference_instance_id=instance.id,
                 engine_chart_dashboard_id=chart_dashboard.id,

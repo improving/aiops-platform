@@ -3,10 +3,10 @@ import uuid
 from sqlalchemy import Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSON, UUID
 
-from .database import Base
+from db.database import Base
 
 
-class InferenceInstanceDashboards(Base):
+class DBInferenceInstanceDashboards(Base):
     __tablename__ = "inference_instance_dashboards"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
