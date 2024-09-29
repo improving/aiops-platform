@@ -112,7 +112,14 @@ export default function ModelCatalog() {
         {filteredModels.map((model) => (
           <Card key={model.id}>
             <CardHeader>
-              <CardTitle>{model.name}</CardTitle>
+              <CardTitle>
+                <Link
+                  href={`/models/${model.id}`}
+                  className="underline hover:text-blue-500"
+                >
+                  {model.name}
+                </Link>
+              </CardTitle>
               <CardDescription>{model.modelId}</CardDescription>
             </CardHeader>
             <CardContent>

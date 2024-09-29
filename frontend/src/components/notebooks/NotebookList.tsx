@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  EyeOpenIcon,
   OpenInNewWindowIcon,
   RocketIcon,
 } from "@radix-ui/react-icons";
@@ -64,7 +63,14 @@ export default function NotebookList() {
         {filteredNotebooks.map((notebook) => (
           <Card key={notebook.id}>
             <CardHeader>
-              <CardTitle>{notebook.name}</CardTitle>
+              <CardTitle>
+                <Link
+                  href={`/notebooks/${notebook.id}`}
+                  className="hover:text-blue-500 underline"
+                >
+                  {notebook.name}
+                </Link>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2 mb-3">
@@ -101,12 +107,6 @@ export default function NotebookList() {
                 <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
                 Connect
               </Button>
-              <Link href={`/notebooks/${notebook.id}`} passHref>
-                <Button variant="secondary">
-                  <EyeOpenIcon className="mr-2 w-4 h-4" />
-                  View Details
-                </Button>
-              </Link>
             </CardFooter>
           </Card>
         ))}

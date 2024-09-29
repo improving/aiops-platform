@@ -159,7 +159,14 @@ export default function InferenceEndpoints() {
             {filteredEndpoints.map((endpoint) => (
               <Card key={endpoint.id}>
                 <CardHeader>
-                  <CardTitle>{endpoint.model.name}</CardTitle>
+                  <CardTitle>
+                    <Link
+                      href={`/models/endpoints/${endpoint.id}`}
+                      className="hover:text-blue-500 underline"
+                    >
+                      {endpoint.model.name}
+                    </Link>
+                  </CardTitle>
                   <CardDescription>ID: {endpoint.id}</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -203,14 +210,7 @@ export default function InferenceEndpoints() {
                     </Button>
                   </p>
                 </CardContent>
-                <CardFooter>
-                  <Link href={`/models/endpoints/${endpoint.id}`} passHref>
-                    <Button>
-                      <EyeOpenIcon className="mr-2 w-4 h-4" />
-                      View Details
-                    </Button>
-                  </Link>
-                </CardFooter>
+                <CardFooter></CardFooter>
               </Card>
             ))}
           </div>

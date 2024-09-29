@@ -76,3 +76,11 @@ export type {
   Host,
   Model,
 };
+
+export interface Adapter {
+  id: string;
+  name: string;
+  hf_id: string;
+  path?: string;
+  base_model: Model;
+}

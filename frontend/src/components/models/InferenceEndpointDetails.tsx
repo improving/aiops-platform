@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   TrashIcon,
@@ -60,6 +60,7 @@ export default function InferenceEndpointDetailsPage({
   params: { id: string };
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [inferenceInstance, setInferenceInstance] =
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +72,9 @@ export default function InferenceEndpointDetailsPage({
     timeRangeOptions[0]
   );
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(
+    searchParams.get("tab") || "details"
+  );
 
   useEffect(() => {
     const fetchInferenceInstance = async () => {
@@ -110,6 +114,13 @@ export default function InferenceEndpointDetailsPage({
     fetchDashboards();
   }, [params.id]);
 
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    router.push(`/models/endpoints/${params.id}?tab=${value}`, {
+      scroll: false,
+    });
+  };
+
   const handleDelete = async () => {
     try {
       const response = await fetch(
@@ -127,6 +138,7 @@ export default function InferenceEndpointDetailsPage({
       setError("Failed to delete inference instance");
     }
   };
+
   const timeRangeParams = useMemo(() => {
     const to = Date.now();
     const from = to - selectedTimeRange.value;
@@ -146,7 +158,7 @@ export default function InferenceEndpointDetailsPage({
   }
 
   return (
-    <Tabs defaultValue="details" className="w-full">
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
       <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
