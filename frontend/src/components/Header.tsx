@@ -18,7 +18,7 @@ export default function Header() {
       <div className="container mx-auto px-4 flex justify-between items-center mt-1 mb-1">
         <Menubar className="flex-grow">
           <MenubarMenu>
-            <MenubarTrigger className="font-bold">Hub</MenubarTrigger>
+            <MenubarTrigger className="font-bold">AI Hub</MenubarTrigger>
             <MenubarContent>
               <Link href="/" passHref>
                 <MenubarItem>Home</MenubarItem>

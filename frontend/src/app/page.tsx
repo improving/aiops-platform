@@ -43,7 +43,7 @@ function DisplayCard({
 
 export default function Home() {
   return (
-    <Dashboard title="Welcome to Hub">
+    <Dashboard title="Welcome to AI Hub">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <DisplayCard
           title="Models"

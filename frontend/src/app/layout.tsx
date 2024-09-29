@@ -7,7 +7,7 @@ import Dashboard from "@/components/Dashboard";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Hub",
+  title: "AI Hub",
   description: "Explore and deploy AI services",
 };
 
