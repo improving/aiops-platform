@@ -1,23 +1,40 @@
 import uuid
 
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, Table
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+
+# Define the association table
+DBInferenceInstanceModelAdapters = Table(
+    'inference_instance_model_adapters', Base.metadata,
+    Column('config_id', UUID(as_uuid=True),
+           ForeignKey('inference_instance_config_params.id')),
+    Column('model_adapter_id', UUID(as_uuid=True),
+           ForeignKey('model_adapters.id')))
 
 
 # SQLAlchemy models
 class DBInferenceInstanceConfigParams(Base):
     __tablename__ = "inference_instance_config_params"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True),
+                primary_key=True,
+                default=uuid.uuid4,
+                index=True)
     maxInputLength = Column(Integer)
     maxTokens = Column(Integer)
     maxBatchPrefillTokens = Column(Integer)
     maxBatchTotalTokens = Column(Integer)
     quantization = Column(String)
     image = Column(String)
+
+    # Define the many-to-many relationship
+    lora_adapters = relationship(
+        "DBModelAdapters",
+        secondary=DBInferenceInstanceModelAdapters,
+        back_populates="inference_instance_config_params")
 
 
 class DBInferenceInstance(Base):

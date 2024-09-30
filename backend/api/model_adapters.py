@@ -2,7 +2,7 @@ import traceback
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -142,4 +142,3 @@ def delete_model_adapter(model_id: UUID,
     db_adapter = get_model_adapter(db, model_id, adapter_id)
     db.delete(db_adapter)
     db.commit()
-    return Response(status_code=204)

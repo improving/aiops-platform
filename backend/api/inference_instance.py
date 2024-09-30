@@ -17,10 +17,12 @@ from models.engines import DBEngine
 from models.inference_instance import (DBInferenceInstance,
                                        DBInferenceInstanceConfigParams)
 from models.inference_instance_dashboards import DBInferenceInstanceDashboards
+from models.model_adapters import DBModelAdapters
 from models.models import DBModel
 from schemas.engine import EngineSchema
 from schemas.inference_instance import (InferenceInstanceConfigParamsSchema,
-                                        InferenceInstanceSchema)
+                                        InferenceInstanceSchema,
+                                        ModelAdapterReferenceSchema)
 from schemas.inference_instance_dashboards import \
     InferenceInstanceDashboardsSchema
 from schemas.model import ModelSchema
@@ -72,8 +74,7 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             model=ModelSchema.model_validate(instance.model),
             engine=EngineSchema.model_validate(instance.engine),
             host=instance.host,
-            config=InferenceInstanceConfigParamsSchema.model_validate(
-                instance.config) if instance.config else None,
+            config=get_inference_instance_config_schema(instance.config),
             endpoint=instance.endpoint,
             healthEndpoint=instance.healthEndpoint,
             metricsEndpoint=instance.metricsEndpoint,
@@ -161,8 +162,13 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
             raise HTTPException(status_code=400,
                                 detail="HuggingFace API token not set.")
 
-        config_data = instance.config.dict() if instance.config else {}
+        config_data = instance.config.model_dump() if instance.config else {}
+
+        # Handle lora_adapters separately
+        lora_adapters = update_config_with_lora_adapters(
+            db, config_data.pop('lora_adapters', []))
         db_config = DBInferenceInstanceConfigParams(**config_data)
+        db_config.lora_adapters = lora_adapters
 
         db_instance = DBInferenceInstance(
             model_id=instance.model.id,
@@ -172,6 +178,7 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
             healthEndpoint=instance.healthEndpoint or "",
             metricsEndpoint=instance.metricsEndpoint or "",
             config=db_config)
+
         db.add(db_config)
         db.add(db_instance)
         db.commit()
@@ -182,8 +189,7 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
             model=ModelSchema.model_validate(model),
             engine=EngineSchema.model_validate(engine),
             host=db_instance.host,
-            config=InferenceInstanceConfigParamsSchema.model_validate(
-                db_config) if db_config else None,
+            config=get_inference_instance_config_schema(db_config),
             endpoint=db_instance.endpoint,
             healthEndpoint=db_instance.healthEndpoint,
             metricsEndpoint=db_instance.metricsEndpoint)
@@ -214,8 +220,23 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
         logger.exception("HTTPException in create_inference_instance")
         raise
     except Exception as e:
+        db.rollback()
         logger.exception(f"Error in create_inference_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def update_config_with_lora_adapters(db, lora_adapters):
+    lora_adapters_list = []
+    for adapter in lora_adapters:
+        existing_adapter = db.query(DBModelAdapters).filter(
+            DBModelAdapters.id == adapter['id']).first()
+        if existing_adapter:
+            lora_adapters_list.append(existing_adapter)
+        else:
+            logger.error(f"Model adapter with id {adapter['id']} not found")
+            raise HTTPException(status_code=404,
+                                detail="Model adapter not found")
+    return lora_adapters_list
 
 
 @router.patch("/v1alpha1/inferenceInstance/{id}",
@@ -231,10 +252,10 @@ async def update_inference_instance(id: uuid.UUID,
             raise HTTPException(status_code=404,
                                 detail="Inference instance not found")
 
-        for key, value in updated_instance.dict(exclude_unset=True).items():
+        for key, value in updated_instance.model_dump(
+                exclude_unset=True).items():
             if key == 'config':
-                for config_key, config_value in value.items():
-                    setattr(db_instance.config, config_key, config_value)
+                update_config_params(db, db_instance, value)
             else:
                 setattr(db_instance, key, value)
 
@@ -251,8 +272,7 @@ async def update_inference_instance(id: uuid.UUID,
             model=ModelSchema.model_validate(model),
             engine=EngineSchema.model_validate(engine),
             host=db_instance.host,
-            config=InferenceInstanceConfigParamsSchema.model_validate(
-                db_instance.config) if db_instance.config else None,
+            config=get_inference_instance_config_schema(db_instance.config),
             endpoint=db_instance.endpoint,
             healthEndpoint=db_instance.healthEndpoint,
             metricsEndpoint=db_instance.metricsEndpoint)
@@ -276,6 +296,44 @@ async def update_inference_instance(id: uuid.UUID,
     except Exception as e:
         logger.exception(f"Error in update_inference_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def get_inference_instance_config_schema(db_config):
+    return InferenceInstanceConfigParamsSchema(
+        id=db_config.id,
+        maxInputLength=db_config.maxInputLength,
+        maxTokens=db_config.maxTokens,
+        maxBatchPrefillTokens=db_config.maxBatchPrefillTokens,
+        maxBatchTotalTokens=db_config.maxBatchTotalTokens,
+        quantization=db_config.quantization,
+        image=db_config.image,
+        lora_adapters=[
+            ModelAdapterReferenceSchema(id=adapter.id, name=adapter.name)
+            for adapter in db_config.lora_adapters
+        ]) if db_config else None
+
+
+def update_config_params(db, db_instance, value):
+    for config_key, config_value in value.items():
+        if config_key == 'lora_adapters':
+            update_lora_adapters_in_inference_instance_config(
+                db, db_instance, config_key, config_value)
+        else:
+            setattr(db_instance.config, config_key, config_value)
+
+
+def update_lora_adapters_in_inference_instance_config(db, db_instance,
+                                                      config_key,
+                                                      config_value):
+    for adapter in config_value:
+        existing_adapter = db.query(DBModelAdapters).filter(
+            DBModelAdapters.id == adapter['id']).first()
+        if existing_adapter:
+            setattr(db_instance.config, config_key, config_value)
+        else:
+            logger.error(f"Model adapter with id {adapter['id']} not found")
+            raise HTTPException(status_code=404,
+                                detail="Model adapter not found")
 
 
 @router.delete("/v1alpha1/inferenceInstance/{id}")
@@ -304,8 +362,19 @@ async def delete_inference_instance(id: uuid.UUID,
             model=ModelSchema.model_validate(model),
             engine=EngineSchema.model_validate(engine),
             host=db_instance.host,
-            config=InferenceInstanceConfigParamsSchema.model_validate(
-                db_instance.config) if db_instance.config else None,
+            config=InferenceInstanceConfigParamsSchema(
+                id=db_instance.config.id,
+                maxInputLength=db_instance.config.maxInputLength,
+                maxTokens=db_instance.config.maxTokens,
+                maxBatchPrefillTokens=db_instance.config.maxBatchPrefillTokens,
+                maxBatchTotalTokens=db_instance.config.maxBatchTotalTokens,
+                quantization=db_instance.config.quantization,
+                image=db_instance.config.image,
+                lora_adapters=[
+                    ModelAdapterReferenceSchema(id=adapter.id,
+                                                name=adapter.name)
+                    for adapter in db_instance.config.lora_adapters
+                ]),
             endpoint=db_instance.endpoint,
             healthEndpoint=db_instance.healthEndpoint,
             metricsEndpoint=db_instance.metricsEndpoint)
@@ -325,9 +394,9 @@ async def delete_inference_instance(id: uuid.UUID,
                 for dashboard in instance_dashboards:
                     db.delete(dashboard)
 
-                db.delete(db_instance.config)
-                db.delete(db_instance)
-                db.commit()
+            db.delete(db_instance.config)
+            db.delete(db_instance)
+            db.commit()
         except Exception as e:
             logger.exception(f"Error deleting dashboards: {e}")
 
@@ -459,7 +528,7 @@ def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
 scheduler = AsyncIOScheduler()
 
 # Schedule the update_all_instance_endpoints function to run every 5 seconds
-scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
+# scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
 
 # Start the scheduler
 scheduler.start()

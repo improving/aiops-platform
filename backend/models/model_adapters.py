@@ -7,6 +7,8 @@ from sqlalchemy.orm import relationship
 
 from db.database import Base
 
+from .inference_instance import DBInferenceInstanceModelAdapters
+
 
 class DBModelAdapters(Base):
     __tablename__ = "model_adapters"
@@ -19,7 +21,11 @@ class DBModelAdapters(Base):
     path = Column(String)
     hf_id = Column(String)
 
-    base_model = relationship("DBModel")
+    inference_instance_config_params = relationship(
+        "DBInferenceInstanceConfigParams",
+        secondary=DBInferenceInstanceModelAdapters,
+        back_populates="lora_adapters")
+    base_model = relationship("DBModel", back_populates="model_adapters")
 
     __table_args__ = (
         UniqueConstraint('model_id', 'name', name='uq_model_adapter_name'),

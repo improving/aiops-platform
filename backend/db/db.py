@@ -54,6 +54,7 @@ def update_table_definitions():
             if table_name not in Base.metadata.tables:
                 logger.info(f"Dropping table {table_name}")
                 connection.execute(text(f'DROP TABLE "{table_name}"'))
+                connection.commit()
 
         logger.info("Table definitions updated successfully")
     except Exception as e:

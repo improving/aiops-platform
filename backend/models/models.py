@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy import BigInteger, Column, String
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from db.database import Base
 
@@ -17,3 +18,6 @@ class DBModel(Base):
     category = Column(String)
     subcategory = Column(String)
     size = Column(BigInteger)
+
+    model_adapters = relationship("DBModelAdapters",
+                                  back_populates="base_model")

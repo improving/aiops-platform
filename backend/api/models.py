@@ -17,6 +17,8 @@ def get_models(db: Session = Depends(get_db)):
     models = db.query(DBModel).all()
     if not models:
         raise HTTPException(status_code=404, detail="No models found")
+    for model in models:
+        model.countAdapters = len(model.model_adapters)
     return models
 
 
@@ -25,4 +27,5 @@ def get_model(id: uuid.UUID, db: Session = Depends(get_db)):
     model = db.query(DBModel).filter(DBModel.id == id).first()
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
+    model.countAdapters = len(model.model_adapters)
     return model

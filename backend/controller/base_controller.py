@@ -171,7 +171,7 @@ class Controller(ABC):
             self.logger.info(
                 f"Helm uninstall succeeded for chart: {chart_name}")
         except ReleaseNotFoundError:
-            self.logger.error(f"Release not found: {chart_name}")
+            self.logger.warning(f"Release not found: {chart_name}")
         except Exception as e:  # Consider replacing with a more specific exception
             self.logger.exception(f"Helm uninstall failed: {str(e)}")
             raise HelmUninstallError(

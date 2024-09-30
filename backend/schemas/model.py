@@ -12,5 +12,6 @@ class ModelSchema(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     size: Optional[int] = None
+    countAdapters: Optional[int] = 0
 
     model_config = ConfigDict(from_attributes=True)
