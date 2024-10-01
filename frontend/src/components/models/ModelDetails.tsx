@@ -8,6 +8,7 @@ import {
   TrashIcon,
   PlusIcon,
   RocketIcon,
+  HandIcon,
 } from "@radix-ui/react-icons";
 import {
   Dialog,
@@ -37,6 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Model, Adapter } from "@/types/models";
+import Link from "next/link";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -274,10 +276,18 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleLaunchModel}>
-              <RocketIcon className="mr-2 h-4 w-4" />
-              Launch Model
-            </Button>
+            <div className="flex justify-between space-x-8">
+              <Button onClick={handleLaunchModel}>
+                <RocketIcon className="mr-2 h-4 w-4" />
+                Launch Model
+              </Button>
+              <Link href={`/models/${model.id}/finetune`} passHref>
+                <Button variant="secondary">
+                  <HandIcon className="mr-2 w-4 h-4" />
+                  Fine-tune
+                </Button>
+              </Link>
+            </div>
           </CardFooter>
         </Card>
       </TabsContent>

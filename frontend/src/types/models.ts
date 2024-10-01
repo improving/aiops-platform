@@ -14,8 +14,13 @@ interface InferenceInstance {
   metricsEndpoint: string;
   ready: boolean;
   status: string;
+  config: InferenceInstanceConfig;
 }
 
+interface InferenceInstanceConfig {
+  id: string;
+  lora_adapters: Adapter[];
+}
 
 interface InferenceInstanceDashboard {
   id: string;
@@ -61,13 +66,61 @@ interface Model {
   category: string;
   subcategory: string;
   size: number;
+  countAdapters: number;
+}
+interface Adapter {
+  id: string;
+  name: string;
+  hf_id: string;
+  path?: string;
+  base_model: Model;
 }
 
-// interface Model {
-//   id: string;
-//   name: string;
-//   category: "llm" | "embedding" | "reranker" | "prompt_guard" | "vector_db";
-// }
+interface Dataset {
+  path: string;
+  train_split: "train";
+  valid_split: null;
+  chat_template: "tokenizer" | "chatml" | "zephyr" | null;
+  column_mapping: {
+    text_column: string | null;
+    prompt_text_column: string | null;
+    rejected_text_column: string | null;
+  };
+}
+
+interface FineTuneParams {
+  unsloth: boolean; // default false
+  block_size: number;
+  model_max_length: number;
+  epochs: number;
+  batch_size: number;
+  lr: number; // default 1e-5
+
+  // peft params
+  quantization: "int4" | "int8" | null;
+  target_modules: "all-linear" | null;
+  merge_adapter: false;
+  peft: true;
+  lora_r: number; // default 16
+  lora_alpha: number; // default 32
+  lora_dropout: number; // default 0.05
+
+  padding: "left" | "right" | null; // default right
+  optimizer: "adamw_torch" | "paged_adamw_8bit" | null; // default paged_adamw_8bit
+  scheduler: "cosine" | "linear" | null; // default cosine
+  gradient_accumulation: number; // default 4
+  mixed_precision: "fp16" | "bf16" | null;
+}
+
+interface FineTuneConfig {
+  task: string;
+  base_model: string;
+  project_name: string;
+  log: "tensorboard";
+  backend: "local";
+  data: Dataset;
+  params: FineTuneParams;
+}
 
 export type {
   InferenceInstance,
@@ -75,12 +128,8 @@ export type {
   Engine,
   Host,
   Model,
+  Adapter,
+  FineTuneConfig,
+  FineTuneParams,
+  Dataset,
 };
-
-export interface Adapter {
-  id: string;
-  name: string;
-  hf_id: string;
-  path?: string;
-  base_model: Model;
-}

@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
-import { Engine, Host, Model } from "@/types/models";
+import { Adapter, Engine, Host, Model } from "@/types/models";
+import { Label } from "@/components/ui/label";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -40,6 +42,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [model, setModel] = useState<Model | null>(null);
   const [filteredEngines, setFilteredEngines] = useState<Engine[]>([]);
+  const [adapters, setAdapters] = useState<Adapter[]>([]);
+  const [selectedAdapters, setSelectedAdapters] = useState<Adapter[]>([]);
   const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
@@ -102,9 +106,30 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         console.error("Error fetching model:", error);
       }
     };
+    const fetchAdapters = async () => {
+      try {
+        const response = await fetch(`/api/v1alpha1/model/${params.id}/adapters`);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
+          );
+        }
+        const data = await response.json();
+        setAdapters(data);
+      } catch (error: any) {
+        toast({
+          title: "Error Fetching Adapters",
+          description: error.message,
+        });
+        console.error("Error fetching adapters:", error);
+      }
+    };
+      
     fetchEngines();
     fetchHosts();
     fetchModel();
+    fetchAdapters();
   }, [params.id, toast]);
 
   useEffect(() => {
@@ -134,7 +159,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
     const payload = {
       model: {
-        id: params.id, // This is the model ID from the URL
+        id: params.id,
       },
       engine: {
         id: formData.engineId,
@@ -147,7 +172,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         maxBatchTotalTokens: 0,
         quantization: "",
         image: "",
-      }, // Config with default values as per the instruction
+        lora_adapters: selectedAdapters, // This is now a list of adapter objects
+      },
     };
 
     try {
@@ -220,6 +246,14 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
   const addSecret = () => {
     setSecrets([...secrets, { name: "", value: "" }]);
+  };
+
+  const handleAdapterChange = (adapter: Adapter, checked: boolean) => {
+    setSelectedAdapters(prev =>
+      checked
+        ? [...prev, adapter]
+        : prev.filter(a => a.id !== adapter.id)
+    );
   };
 
   return (
@@ -329,6 +363,26 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                   ))}
                 </SelectContent>
               </Select>
+              
+              {formData.engineId && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-2">Select Adapters</h3>
+                  <div className="space-y-2">
+                    {adapters.map((adapter) => (
+                      <div key={adapter.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={adapter.id}
+                          checked={selectedAdapters.some(a => a.id === adapter.id)}
+                          onCheckedChange={(checked) =>
+                            handleAdapterChange(adapter, checked as boolean)
+                          }
+                        />
+                        <Label htmlFor={adapter.id}>{adapter.name}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
             <CardFooter>
               <Button type="button" onClick={handleNext}>

@@ -19,7 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RocketIcon } from "@radix-ui/react-icons";
+import { HandIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Model } from "@/types/models";
 
 function formatSize(bytes: number): string {
@@ -130,6 +130,13 @@ export default function ModelCatalog() {
                 <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
                   {model.subcategory}
                 </span>
+                {model.countAdapters > 0 && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 hover:text-blue-900 underline">
+                    <Link href={`/models/${model.id}?tab=adapters`}>
+                      {model.countAdapters} adapters
+                    </Link>
+                  </span>
+                )}
               </div>
               <p className="text-gray-700 mb-4">{model.description}</p>
               <p className="text-sm text-gray-600 mb-4">
@@ -137,12 +144,20 @@ export default function ModelCatalog() {
               </p>
             </CardContent>
             <CardFooter>
-              <Link href={`/models/launch/${model.id}`} passHref>
-                <Button>
-                  <RocketIcon className="mr-2 w-4 h-4" />
-                  Launch
-                </Button>
-              </Link>
+              <div className="flex justify-between w-full">
+                <Link href={`/models/launch/${model.id}`} passHref>
+                  <Button>
+                    <RocketIcon className="mr-2 w-4 h-4" />
+                    Launch
+                  </Button>
+                </Link>
+                <Link href={`/models/${model.id}/finetune`} passHref>
+                  <Button variant="secondary">
+                    <HandIcon className="mr-2 w-4 h-4" />
+                    Fine-tune
+                  </Button>
+                </Link>
+              </div>
             </CardFooter>
           </Card>
         ))}

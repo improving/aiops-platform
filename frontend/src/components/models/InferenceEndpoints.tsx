@@ -186,6 +186,11 @@ export default function InferenceEndpoints() {
                         {endpoint.status || "In Progress"}
                       </span>
                     )}
+                    {endpoint.config.lora_adapters.length > 0 && (
+                      <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                        {endpoint.config.lora_adapters.length} Adapters
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
                     <strong>Endpoint: </strong>

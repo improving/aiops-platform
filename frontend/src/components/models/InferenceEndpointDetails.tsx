@@ -41,6 +41,7 @@ import {
 import { ChevronDownIcon } from "@radix-ui/react-icons";
 import { CommandList } from "@/components/ui/command";
 import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -75,6 +76,7 @@ export default function InferenceEndpointDetailsPage({
   const [activeTab, setActiveTab] = useState(
     searchParams.get("tab") || "details"
   );
+  const [selectedAdapter, setSelectedAdapter] = useState<any | null>(null);
 
   useEffect(() => {
     const fetchInferenceInstance = async () => {
@@ -229,6 +231,21 @@ export default function InferenceEndpointDetailsPage({
                 <Label>Metrics Endpoint</Label>
                 <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
               </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>Adapters</Label>
+                <span>
+                  {inferenceInstance.config.lora_adapters.map((adapter) => (
+                    <Button
+                      key={adapter.id}
+                      variant="outline"
+                      className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm mr-2 mb-2"
+                      onClick={() => setSelectedAdapter(adapter)}
+                    >
+                      {adapter.name}
+                    </Button>
+                  ))}
+                </span>
+              </div>
             </div>
           </CardContent>
           <CardFooter>
@@ -329,6 +346,28 @@ export default function InferenceEndpointDetailsPage({
           </CardContent>
         </Card>
       </TabsContent>
+
+      <Dialog open={!!selectedAdapter} onOpenChange={() => setSelectedAdapter(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{selectedAdapter?.name} Details</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] mt-4">
+            {selectedAdapter && (
+              <div className="grid gap-4">
+                {Object.entries(selectedAdapter).map(([key, value]) => (
+                  <div key={key} className="grid grid-cols-2 items-start gap-4">
+                    <Label className="font-medium">{key}</Label>
+                    <span className="text-sm">
+                      {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </Tabs>
   );
 }

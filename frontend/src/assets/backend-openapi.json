@@ -100,7 +100,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/InferenceInstanceSchema"
+                    "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
                   },
                   "type": "array",
                   "title": "Response List Inference Instances V1Alpha1 Inferenceinstance Get"
@@ -117,19 +117,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InferenceInstanceSchema"
+                "$ref": "#/components/schemas/InferenceInstanceSchema-Input"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InferenceInstanceSchema"
+                  "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
                 }
               }
             }
@@ -169,7 +169,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InferenceInstanceSchema"
+                  "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
                 }
               }
             }
@@ -186,9 +186,9 @@
           }
         }
       },
-      "patch": {
+      "put": {
         "summary": "Update Inference Instance",
-        "operationId": "update_inference_instance_v1alpha1_inferenceInstance__id__patch",
+        "operationId": "update_inference_instance_v1alpha1_inferenceInstance__id__put",
         "parameters": [
           {
             "name": "id",
@@ -206,7 +206,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InferenceInstanceSchema"
+                "$ref": "#/components/schemas/InferenceInstanceSchema-Input"
               }
             }
           }
@@ -217,7 +217,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InferenceInstanceSchema"
+                  "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
                 }
               }
             }
@@ -1280,6 +1280,14 @@
               }
             ],
             "title": "Image"
+          },
+          "lora_adapters": {
+            "items": {
+              "$ref": "#/components/schemas/ModelAdapterReferenceSchema"
+            },
+            "type": "array",
+            "title": "Lora Adapters",
+            "default": []
           }
         },
         "type": "object",
@@ -1353,7 +1361,7 @@
         ],
         "title": "InferenceInstanceDashboardsSchema"
       },
-      "InferenceInstanceSchema": {
+      "InferenceInstanceSchema-Input": {
         "properties": {
           "id": {
             "anyOf": [
@@ -1452,6 +1460,152 @@
         ],
         "title": "InferenceInstanceSchema"
       },
+      "InferenceInstanceSchema-Output": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelSchema"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineSchema"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InferenceInstanceConfigParamsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "healthEndpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthendpoint"
+          },
+          "metricsEndpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metricsendpoint"
+          },
+          "ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready",
+            "default": false
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "engine",
+          "host"
+        ],
+        "title": "InferenceInstanceSchema"
+      },
+      "ModelAdapterReferenceSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "hf_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hf Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "ModelAdapterReferenceSchema"
+      },
       "ModelAdapterSchema": {
         "properties": {
           "id": {
@@ -1467,7 +1621,14 @@
             "title": "Id"
           },
           "base_model": {
-            "$ref": "#/components/schemas/ModelSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "type": "string",
@@ -1498,7 +1659,6 @@
         },
         "type": "object",
         "required": [
-          "base_model",
           "name"
         ],
         "title": "ModelAdapterSchema"
@@ -1575,6 +1735,18 @@
               }
             ],
             "title": "Size"
+          },
+          "countAdapters": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Countadapters",
+            "default": 0
           }
         },
         "type": "object",
