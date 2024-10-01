@@ -144,7 +144,7 @@ export default function ModelCatalog() {
               </p>
             </CardContent>
             <CardFooter>
-              <div className="flex justify-between w-full">
+              <div className="flex justify-between space-x-4">
                 <Link href={`/models/launch/${model.id}`} passHref>
                   <Button>
                     <RocketIcon className="mr-2 w-4 h-4" />
