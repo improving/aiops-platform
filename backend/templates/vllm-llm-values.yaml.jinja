@@ -7,6 +7,12 @@ resources:
   limits:
     nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
 
+{% if args.lora_adapters is defined %}
+args:
+  - "--enable-lora"
+  - "--lora-modules {{ args.lora_adapters }}"
+{% endif %}
+
 env:
   - name: HF_API_TOKEN
     valueFrom:

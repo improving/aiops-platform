@@ -159,8 +159,7 @@ class Controller(ABC):
             raise HelmUpgradeError(
                 f"Helm upgrade failed: {str(e)}") from e  # {{ edit_2 }}
 
-    async def uninstall(self, instance: InferenceInstanceSchema,
-                        engineChart: EngineChartsSchema):
+    async def uninstall(self, instance: InferenceInstanceSchema):
         chart_name = self._get_release_name(instance)
 
         try:

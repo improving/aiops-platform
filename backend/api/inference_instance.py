@@ -1,5 +1,6 @@
 import json
 import os
+import pprint
 import uuid
 from typing import List
 
@@ -19,13 +20,9 @@ from models.inference_instance import (DBInferenceInstance,
 from models.inference_instance_dashboards import DBInferenceInstanceDashboards
 from models.model_adapters import DBModelAdapters
 from models.models import DBModel
-from schemas.engine import EngineSchema
-from schemas.inference_instance import (InferenceInstanceConfigParamsSchema,
-                                        InferenceInstanceSchema,
-                                        ModelAdapterReferenceSchema)
+from schemas.inference_instance import InferenceInstanceSchema
 from schemas.inference_instance_dashboards import \
     InferenceInstanceDashboardsSchema
-from schemas.model import ModelSchema
 from utils.controller_utils import get_controller
 from utils.kubernetes_utils import (get_pod_status_and_readiness,
                                     get_service_endpoint)
@@ -66,22 +63,10 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404,
                                 detail="Inference instance not found")
 
-        instance_ready, instance_status = check_pod_status_and_readiness(
+        instance.ready, instance.status = check_pod_status_and_readiness(
             instance, db)
 
-        full_instance = InferenceInstanceSchema(
-            id=instance.id,
-            model=ModelSchema.model_validate(instance.model),
-            engine=EngineSchema.model_validate(instance.engine),
-            host=instance.host,
-            config=get_inference_instance_config_schema(instance.config),
-            endpoint=instance.endpoint,
-            healthEndpoint=instance.healthEndpoint,
-            metricsEndpoint=instance.metricsEndpoint,
-            ready=instance_ready,
-            status=instance_status)
-
-        return full_instance
+        return instance
     except HTTPException:
         logger.exception("HTTPException in get_inference_instance")
         raise
@@ -127,7 +112,8 @@ async def get_inference_instance_dashboards(id: uuid.UUID,
 
 
 @router.post("/v1alpha1/inferenceInstance",
-             response_model=InferenceInstanceSchema)
+             response_model=InferenceInstanceSchema,
+             status_code=201)
 async def create_inference_instance(instance: InferenceInstanceSchema,
                                     db: Session = Depends(get_db)):
     try:
@@ -184,15 +170,11 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
         db.commit()
         db.refresh(db_instance)
 
-        full_instance = InferenceInstanceSchema(
-            id=db_instance.id,
-            model=ModelSchema.model_validate(model),
-            engine=EngineSchema.model_validate(engine),
-            host=db_instance.host,
-            config=get_inference_instance_config_schema(db_config),
-            endpoint=db_instance.endpoint,
-            healthEndpoint=db_instance.healthEndpoint,
-            metricsEndpoint=db_instance.metricsEndpoint)
+        full_instance = InferenceInstanceSchema.model_validate(db_instance)
+
+        logger.debug(
+            f"######\n\nFull instance:\n{pprint.pformat(full_instance.model_dump(), indent=4, width=120)}\n\n######"
+        )
 
         controller = get_controller(engine.name)
 
@@ -207,13 +189,7 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
                 status_code=500,
                 detail=f"Failed to install Helm chart: {str(e)}")
 
-        try:
-            await create_instance_dashboards(full_instance, engine_chart, db)
-        except Exception as e:
-            logger.exception(f"Failed to create dashboards: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to create dashboards: {str(e)}")
+        await create_instance_dashboards(full_instance, engine_chart, db)
 
         return full_instance
     except HTTPException:
@@ -239,8 +215,8 @@ def update_config_with_lora_adapters(db, lora_adapters):
     return lora_adapters_list
 
 
-@router.patch("/v1alpha1/inferenceInstance/{id}",
-              response_model=InferenceInstanceSchema)
+@router.put("/v1alpha1/inferenceInstance/{id}",
+            response_model=InferenceInstanceSchema)
 async def update_inference_instance(id: uuid.UUID,
                                     updated_instance: InferenceInstanceSchema,
                                     db: Session = Depends(get_db)):
@@ -267,15 +243,7 @@ async def update_inference_instance(id: uuid.UUID,
             and_(DBEngineCharts.engine == engine.name,
                  DBEngineCharts.chart_type == model.category)).first()
 
-        full_instance = InferenceInstanceSchema(
-            id=db_instance.id,
-            model=ModelSchema.model_validate(model),
-            engine=EngineSchema.model_validate(engine),
-            host=db_instance.host,
-            config=get_inference_instance_config_schema(db_instance.config),
-            endpoint=db_instance.endpoint,
-            healthEndpoint=db_instance.healthEndpoint,
-            metricsEndpoint=db_instance.metricsEndpoint)
+        full_instance = InferenceInstanceSchema.model_validate(db_instance)
 
         controller = get_controller(engine.name)
 
@@ -296,21 +264,6 @@ async def update_inference_instance(id: uuid.UUID,
     except Exception as e:
         logger.exception(f"Error in update_inference_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
-
-def get_inference_instance_config_schema(db_config):
-    return InferenceInstanceConfigParamsSchema(
-        id=db_config.id,
-        maxInputLength=db_config.maxInputLength,
-        maxTokens=db_config.maxTokens,
-        maxBatchPrefillTokens=db_config.maxBatchPrefillTokens,
-        maxBatchTotalTokens=db_config.maxBatchTotalTokens,
-        quantization=db_config.quantization,
-        image=db_config.image,
-        lora_adapters=[
-            ModelAdapterReferenceSchema(id=adapter.id, name=adapter.name)
-            for adapter in db_config.lora_adapters
-        ]) if db_config else None
 
 
 def update_config_params(db, db_instance, value):
@@ -347,42 +300,11 @@ async def delete_inference_instance(id: uuid.UUID,
             raise HTTPException(status_code=404,
                                 detail="Inference instance not found")
 
-        model = db.query(DBModel).filter(
-            DBModel.id == db_instance.model_id).first()
-        engine = db.query(DBEngine).filter(
-            DBEngine.id == db_instance.engine_id).first()
-        engine_chart = db.query(DBEngineCharts).filter(
-            and_(DBEngineCharts.engine == engine.name,
-                 DBEngineCharts.chart_type == model.category)).first()
-        instance_dashboards = db.query(DBInferenceInstanceDashboards).filter(
-            DBInferenceInstanceDashboards.inference_instance_id == id).all()
-
-        full_instance = InferenceInstanceSchema(
-            id=db_instance.id,
-            model=ModelSchema.model_validate(model),
-            engine=EngineSchema.model_validate(engine),
-            host=db_instance.host,
-            config=InferenceInstanceConfigParamsSchema(
-                id=db_instance.config.id,
-                maxInputLength=db_instance.config.maxInputLength,
-                maxTokens=db_instance.config.maxTokens,
-                maxBatchPrefillTokens=db_instance.config.maxBatchPrefillTokens,
-                maxBatchTotalTokens=db_instance.config.maxBatchTotalTokens,
-                quantization=db_instance.config.quantization,
-                image=db_instance.config.image,
-                lora_adapters=[
-                    ModelAdapterReferenceSchema(id=adapter.id,
-                                                name=adapter.name)
-                    for adapter in db_instance.config.lora_adapters
-                ]),
-            endpoint=db_instance.endpoint,
-            healthEndpoint=db_instance.healthEndpoint,
-            metricsEndpoint=db_instance.metricsEndpoint)
-
-        controller = get_controller(engine.name)
+        full_instance = InferenceInstanceSchema.model_validate(db_instance)
+        controller = get_controller(full_instance.engine.name)
 
         try:
-            await controller.uninstall(full_instance, engine_chart)
+            await controller.uninstall(full_instance)
         except Exception as e:
             logger.exception(f"Failed to remove Helm chart: {str(e)}")
             raise HTTPException(
@@ -390,6 +312,10 @@ async def delete_inference_instance(id: uuid.UUID,
                 detail=f"Failed to remove Helm chart: {str(e)}")
 
         try:
+            instance_dashboards = db.query(
+                DBInferenceInstanceDashboards).filter(
+                    DBInferenceInstanceDashboards.inference_instance_id ==
+                    id).all()
             if instance_dashboards:
                 for dashboard in instance_dashboards:
                     db.delete(dashboard)

@@ -206,9 +206,8 @@ class NIMController(Controller):
                     f"Failed to delete secret '{secret_name}': {str(e)}")
                 raise
 
-    async def uninstall(self, instance: InferenceInstanceSchema,
-                        engineChart: EngineChartsSchema):
-        await super().uninstall(instance, engineChart)
+    async def uninstall(self, instance: InferenceInstanceSchema):
+        await super().uninstall(instance)
         # TODO: check db for any nim charts installed. If there are any, then don't delete the secret.
         # await self._uninstall_secrets(instance, engineChart)
 

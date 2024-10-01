@@ -21,6 +21,21 @@ class VLLMController(Controller):
             context["quantization"] = str(instance.config.quantization.lower())
             context["dtype"] = "auto"
 
+        # populate the argument `lora-modules` with a space separated list of adapter ids/paths
+        if instance.config and instance.config.lora_adapters:
+            lora_adapters = []
+            for i, adapter_to_use in enumerate(instance.config.lora_adapters,
+                                               start=1):
+                key = f"adapter{i}"
+                if adapter_to_use.hf_id:
+                    value = adapter_to_use.hf_id
+                else:
+                    value = f"/model/{adapter_to_use.path}".replace("//", "/")
+                lora_adapters.append(f"{key}={value}")
+
+            if len(lora_adapters) > 0:
+                context["args"] = {"lora_adapters": " ".join(lora_adapters)}
+
         return context
 
     def get_service_name(self, instance: InferenceInstanceSchema,

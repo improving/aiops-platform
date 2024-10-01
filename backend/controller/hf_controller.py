@@ -48,6 +48,20 @@ class HuggingFaceController(Controller):
         if instance.config and instance.config.maxTokens:
             context["env"]["MAX_TOTAL_TOKENS"] = str(instance.config.maxTokens)
 
+        self.logger.info(f"Lora adapters: {instance.config.lora_adapters}")
+
+        if instance.config and instance.config.lora_adapters:
+            lora_adapters_paths = []
+            for adapter_to_use in instance.config.lora_adapters:
+                if adapter_to_use.hf_id:
+                    lora_adapters_paths.append(adapter_to_use.hf_id)
+                elif adapter_to_use.path:
+                    lora_adapters_paths.append(
+                        f"/data/{adapter_to_use.path}".replace("//", "/"))
+
+            if lora_adapters_paths:
+                context["env"]["lora_adapters"] = ",".join(lora_adapters_paths)
+
         return context
 
     async def install(self, instance: InferenceInstanceSchema,

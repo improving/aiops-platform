@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .engine import EngineSchema
 from .model import ModelSchema
@@ -11,7 +11,11 @@ from .model import ModelSchema
 
 class ModelAdapterReferenceSchema(BaseModel):
     id: uuid.UUID
-    name: str
+    name: Optional[str] = None
+    path: Optional[str] = None
+    hf_id: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InferenceInstanceConfigParamsSchema(BaseModel):
@@ -23,6 +27,8 @@ class InferenceInstanceConfigParamsSchema(BaseModel):
     quantization: Optional[str] = None
     image: Optional[str] = None
     lora_adapters: List[ModelAdapterReferenceSchema] = []
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InferenceInstanceSchema(BaseModel):
@@ -36,3 +42,5 @@ class InferenceInstanceSchema(BaseModel):
     metricsEndpoint: Optional[str] = None
     ready: Optional[bool] = False
     status: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)

@@ -192,7 +192,7 @@ def load_engine_charts(db):
         for row in csv_reader:
             validEngineChartIds.append(row["id"])
             _engine_chart = db.query(DBEngineCharts).filter(
-                DBEngineCharts.id == row["id"]).first()
+                DBEngineCharts.id == uuid.UUID(row["id"])).first()
             if not _engine_chart:
                 _engine_chart = DBEngineCharts(
                     id=uuid.UUID(row["id"]),
