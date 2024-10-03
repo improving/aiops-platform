@@ -9,6 +9,8 @@ import {
   PlusIcon,
   RocketIcon,
   HandIcon,
+  EyeOpenIcon,
+  FileTextIcon,
 } from "@radix-ui/react-icons";
 import {
   Dialog,
@@ -37,8 +39,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Model, Adapter } from "@/types/models";
+import { Model, Adapter, FineTuneJob } from "@/types/models";
 import Link from "next/link";
+import yaml from "yaml";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -66,6 +69,11 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   const [activeTab, setActiveTab] = useState(
     searchParams.get("tab") || "details"
   );
+  const [fineTuneJobs, setFineTuneJobs] = useState<FineTuneJob[]>([]);
+  const [isViewParamsDialogOpen, setIsViewParamsDialogOpen] = useState(false);
+  const [isViewLogsDialogOpen, setIsViewLogsDialogOpen] = useState(false);
+  const [selectedJobParams, setSelectedJobParams] = useState<string>("");
+  const [selectedJobLogs, setSelectedJobLogs] = useState<string>("");
 
   useEffect(() => {
     const fetchModelDetails = async () => {
@@ -100,8 +108,31 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
       }
     };
 
+    const fetchFineTuneJobs = async () => {
+      try {
+        const response = await fetch(
+          `/api/v1alpha1/models/${params.id}/finetune`
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch fine-tune jobs");
+        }
+        const data = await response.json();
+        setFineTuneJobs(
+          data.sort(
+            (a: FineTuneJob, b: FineTuneJob) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime()
+          )
+        );
+      } catch (error) {
+        console.error("Error fetching fine-tune jobs:", error);
+        setError("Failed to load fine-tune jobs");
+      }
+    };
+
     fetchModelDetails();
     fetchAdapters();
+    fetchFineTuneJobs();
   }, [params.id]);
 
   const handleTabChange = (value: string) => {
@@ -224,6 +255,48 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleViewParams = (params: Record<string, any>) => {
+    setSelectedJobParams(yaml.stringify(params, null, 2));
+    setIsViewParamsDialogOpen(true);
+  };
+
+  const handleViewLogs = async (jobId: string) => {
+    try {
+      const response = await fetch(
+        `/api/v1alpha1/models/${params.id}/finetune/${jobId}/logs`
+      );
+      if (!response.ok) {
+        throw new Error("Failed to fetch logs");
+      }
+      const logs = await response.text();
+      setSelectedJobLogs(logs);
+      setIsViewLogsDialogOpen(true);
+    } catch (error) {
+      console.error("Error fetching logs:", error);
+      setError("Failed to load logs");
+    }
+  };
+
+  const handleDeleteFineTuneJob = async (jobId: string) => {
+    if (confirm("Are you sure you want to delete this fine-tune job?")) {
+      try {
+        const response = await fetch(
+          `/api/v1alpha1/models/${params.id}/finetune/${jobId}`,
+          {
+            method: "DELETE",
+          }
+        );
+        if (!response.ok) {
+          throw new Error("Failed to delete fine-tune job");
+        }
+        setFineTuneJobs(fineTuneJobs.filter((job) => job.id !== jobId));
+      } catch (error) {
+        console.error("Error deleting fine-tune job:", error);
+        setError("Failed to delete fine-tune job");
+      }
+    }
+  };
+
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -238,9 +311,10 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="adapters">Adapters</TabsTrigger>
+        <TabsTrigger value="finetune">Fine-tune Jobs</TabsTrigger>
       </TabsList>
       <TabsContent value="details">
         <Card>
@@ -404,6 +478,77 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           </CardContent>
         </Card>
       </TabsContent>
+      <TabsContent value="finetune">
+        <Card>
+          <CardHeader>
+            <CardTitle>Fine-tune Jobs</CardTitle>
+            <div className="flex justify-end">
+              <Link href={`/models/${model.id}/finetune`} passHref>
+                <Button>
+                  <HandIcon className="mr-2 w-4 h-4" />
+                  Fine-tune
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Params</TableHead>
+                  <TableHead>Logs</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {fineTuneJobs.map((job) => (
+                  <TableRow key={job.id}>
+                    <TableCell>{job.id}</TableCell>
+                    <TableCell>{job.name}</TableCell>
+                    <TableCell>{job.status}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-2"
+                        onClick={() => handleViewParams(job.params)}
+                      >
+                        <EyeOpenIcon className="mr-2 h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-2"
+                        onClick={() => handleViewLogs(job.id)}
+                      >
+                        <FileTextIcon className="mr-2 h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(job.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteFineTuneJob(job.id)}
+                      >
+                        <TrashIcon className="mr-2 h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
 
       {/* Edit Adapter Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -460,6 +605,36 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           <DialogFooter>
             <Button onClick={handleUpdateAdapter}>Update Adapter</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Params Dialog */}
+      <Dialog
+        open={isViewParamsDialogOpen}
+        onOpenChange={setIsViewParamsDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Fine-tune Job Parameters</DialogTitle>
+          </DialogHeader>
+          <pre className="max-h-96 overflow-auto bg-gray-100 p-4 rounded">
+            {selectedJobParams}
+          </pre>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Logs Dialog */}
+      <Dialog
+        open={isViewLogsDialogOpen}
+        onOpenChange={setIsViewLogsDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Fine-tune Job Logs</DialogTitle>
+          </DialogHeader>
+          <pre className="max-h-96 overflow-auto bg-gray-100 p-4 rounded">
+            {selectedJobLogs}
+          </pre>
         </DialogContent>
       </Dialog>
     </Tabs>

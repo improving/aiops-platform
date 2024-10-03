@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,13 +14,21 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FineTuneConfig, FineTuneParams, Dataset, Model } from "@/types/models";
 import yaml from "yaml";
+import { FileIcon, RocketIcon, UploadIcon } from "@radix-ui/react-icons";
 
 export default function ModelFineTune({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { toast } = useToast();
   const [model, setModel] = useState<Model>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function fetchModel() {
@@ -76,37 +84,43 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // console.log(fineTuneConfig);
-    console.log(yaml.stringify(fineTuneConfig));
+    console.log(fineTuneConfig);
+    //console.log(yaml.stringify(fineTuneConfig));
 
-    // try {
-    //   const response = await fetch(`/api/v1/models/${params.id}/finetune`, {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify(fineTuneConfig),
-    //   });
+    try {
+      const response = await fetch(
+        `/api/v1alpha1/models/${params.id}/finetune`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: fineTuneConfig.project_name,
+            params: fineTuneConfig,
+          }),
+        }
+      );
 
-    //   if (!response.ok) {
-    //     throw new Error("Failed to start fine-tuning process");
-    //   }
+      if (!response.ok) {
+        throw new Error("Failed to start fine-tuning process");
+      }
 
-    //   const data = await response.json();
-    //   toast({
-    //     title: "Success",
-    //     description: "Fine-tuning process started successfully",
-    //   });
-    //   // Optionally, redirect to a page showing fine-tuning progress
-    //   // router.push(`/models/${params.id}/finetune/progress`);
-    // } catch (error) {
-    //   console.error("Error starting fine-tuning process:", error);
-    //   toast({
-    //     title: "Error",
-    //     description: "Failed to start fine-tuning process",
-    //     variant: "destructive",
-    //   });
-    // }
+      const data = await response.json();
+      toast({
+        title: "Success",
+        description: "Fine-tuning process started successfully",
+      });
+      // Optionally, redirect to a page showing fine-tuning progress
+      router.push(`/models/${params.id}?tab=finetune`);
+    } catch (error) {
+      console.error("Error starting fine-tuning process:", error);
+      toast({
+        title: "Error",
+        description: "Failed to start fine-tuning process",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleParamChange = (key: keyof FineTuneParams, value: any) => {
@@ -139,8 +153,74 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     }));
   };
 
+  const handleImportYaml = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const yamlContent = e.target?.result as string;
+          const parsedYaml = yaml.parse(yamlContent) as FineTuneConfig;
+          setFineTuneConfig((prevConfig) => ({
+            ...prevConfig,
+            ...parsedYaml,
+            base_model: model?.modelId || parsedYaml.base_model,
+          }));
+          toast({
+            title: "Success",
+            description: "YAML file imported successfully",
+          });
+        } catch (error) {
+          console.error("Error parsing YAML:", error);
+          toast({
+            title: "Error",
+            description: "Failed to parse YAML file",
+            variant: "destructive",
+          });
+        }
+      };
+      reader.readAsText(file);
+    }
+    // Reset the file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="flex justify-end mb-4">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImportYaml}
+                  accept=".yaml,.yml"
+                  className="hidden"
+                />
+                <Button type="button" onClick={triggerFileInput}>
+                  <UploadIcon className="w-4 h-4 mr-2" />
+                  Import Config
+                </Button>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>
+                Import a YAML file to pre-fill the fine-tuning configuration.
+              </p>
+              <p>You can modify the values after importing.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Fine-tune Config</CardTitle>
@@ -208,7 +288,10 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select chat template" defaultValue="none"/>
+                <SelectValue
+                  placeholder="Select chat template"
+                  defaultValue="none"
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
@@ -417,7 +500,10 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
         </CardContent>
       </Card>
 
-      <Button type="submit">Start Fine-tuning</Button>
+      <Button type="submit">
+        <RocketIcon className="w-4 h-4 mr-2" />
+        Start
+      </Button>
     </form>
   );
 }

@@ -122,6 +122,16 @@ interface FineTuneConfig {
   params: FineTuneParams;
 }
 
+interface FineTuneJob {
+  name: string;
+  params: Record<string, any>;
+  id: string;
+  base_model: Model;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type {
   InferenceInstance,
   InferenceInstanceDashboard,
@@ -132,4 +142,5 @@ export type {
   FineTuneConfig,
   FineTuneParams,
   Dataset,
+  FineTuneJob,
 };
