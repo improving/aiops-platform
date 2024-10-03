@@ -6,7 +6,7 @@ from pyhelm3.errors import ReleaseNotFoundError
 
 from logger import setup_logger
 from schemas.notebook import NotebookInstanceSchema
-from utils.kubernetes_utils import get_kubernetes_client
+from utils.kubernetes_utils import get_core_v1_client
 
 from .base_controller import (HelmInstallError, HelmUninstallError,
                               HelmUpgradeError)
@@ -17,7 +17,7 @@ class NotebooksController():
     def __init__(self):
         self.logger = setup_logger(__name__)
         self.api_instance = client.CustomObjectsApi()
-        self.core_v1_api = get_kubernetes_client()
+        self.core_v1_api = get_core_v1_client()
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))
 

@@ -190,7 +190,7 @@ def load_engine_charts(db):
         validEngineChartIds = []
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            validEngineChartIds.append(row["id"])
+            validEngineChartIds.append(uuid.UUID(row["id"]))
             _engine_chart = db.query(DBEngineCharts).filter(
                 DBEngineCharts.id == uuid.UUID(row["id"])).first()
             if not _engine_chart:

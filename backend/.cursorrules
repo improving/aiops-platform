@@ -19,7 +19,6 @@ Key Principles
 
 Naming Conventions
 - Use lowercase with underscores for directories (e.g., components/auth_wizard).
-- Use camelCase for variable and function names.
 - Use PascalCase for class names.
 - Use ALL_CAPS for constants.
 - Use kebab-case for kubernetes resource names.

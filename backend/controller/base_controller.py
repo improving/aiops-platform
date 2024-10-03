@@ -10,7 +10,7 @@ from pyhelm3.errors import ReleaseNotFoundError
 from logger import setup_logger
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
-from utils.kubernetes_utils import get_kubernetes_client
+from utils.kubernetes_utils import get_core_v1_client
 
 
 class Controller(ABC):
@@ -18,7 +18,7 @@ class Controller(ABC):
     def __init__(self, namespace="ai-stack"):
         self.logger = setup_logger(__name__)
         self.api_instance = client.CustomObjectsApi()
-        self.core_v1_api = get_kubernetes_client()
+        self.core_v1_api = get_core_v1_client()
         self.namespace = namespace
         self.helm = HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))

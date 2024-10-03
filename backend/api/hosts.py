@@ -5,7 +5,7 @@ from kubernetes import client
 
 from logger import setup_logger
 from models.hosts import Host
-from utils.kubernetes_utils import get_kubernetes_client
+from utils.kubernetes_utils import get_core_v1_client
 
 logger = setup_logger(__name__)
 
@@ -16,8 +16,20 @@ router = APIRouter()
 @router.get("/v1alpha1/hosts", response_model=List[Host])
 def get_hosts(includeNotReady: bool = Query(
     default=False, description="Include nodes that are not in Ready status"),
-              v1: client.CoreV1Api = Depends(get_kubernetes_client,
+              v1: client.CoreV1Api = Depends(get_core_v1_client,
                                              use_cache=True)):
+    """
+    Retrieve information about Kubernetes hosts.
+
+    Args:
+        includeNotReady (bool): If True, include nodes that are not in Ready status.
+
+    Returns:
+        List[Host]: A list of Host objects containing information about each node.
+
+    Raises:
+        HTTPException: If there's an error retrieving node information from Kubernetes.
+    """
     try:
         nodes = v1.list_node()
     except Exception as e:

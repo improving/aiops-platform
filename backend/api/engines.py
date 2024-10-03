@@ -13,6 +13,15 @@ router = APIRouter()
 # API to get engine information
 @router.get("/v1alpha1/engines", response_model=List[EngineSchema])
 def get_engines(db: Session = Depends(get_db)):
+    """
+    Retrieve all engines from the database.
+
+    Returns:
+        List[EngineSchema]: A list of all engines.
+
+    Raises:
+        HTTPException: If no engines are found in the database.
+    """
     engines = db.query(DBEngine).all()
     if not engines:
         raise HTTPException(status_code=404, detail="No engines found")

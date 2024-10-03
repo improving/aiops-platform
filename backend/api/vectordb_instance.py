@@ -26,6 +26,12 @@ logger = setup_logger(__name__)
 @router.get("/v1alpha1/vectordb_instances",
             response_model=List[VectorDBInstanceSchema])
 def list_vectordb_instances(db: Session = Depends(get_db)):
+    """
+    List all vector database instances.
+
+    Returns:
+        List[VectorDBInstanceSchema]: A list of all vector database instances.
+    """
     vectordb_instances = db.query(DBVectorDBInstance).all()
     for instance in vectordb_instances:
         instance_ready, instance_status = check_pod_status_and_readiness(
@@ -40,6 +46,18 @@ def list_vectordb_instances(db: Session = Depends(get_db)):
 def get_vectordb_instance(id: uuid.UUID = Path(
     description="The ID of the vector database instance to retrieve"),
                           db: Session = Depends(get_db)):
+    """
+    Retrieve a specific vector database instance by ID.
+
+    Args:
+        id (uuid.UUID): The ID of the vector database instance to retrieve.
+
+    Returns:
+        VectorDBInstanceSchema: The requested vector database instance.
+
+    Raises:
+        HTTPException: If the vector database instance is not found or there's an internal error.
+    """
     try:
         vectordb_instance = db.query(DBVectorDBInstance).filter(
             DBVectorDBInstance.id == id).first()
@@ -67,6 +85,18 @@ def get_vectordb_instance(id: uuid.UUID = Path(
              status_code=201)
 async def create_vectordb_instance(vectordb_instance: VectorDBInstanceSchema,
                                    db: Session = Depends(get_db)):
+    """
+    Create a new vector database instance.
+
+    Args:
+        vectordb_instance (VectorDBInstanceSchema): The vector database instance data.
+
+    Returns:
+        VectorDBInstanceSchema: The created vector database instance.
+
+    Raises:
+        HTTPException: If there's an error creating the vector database instance.
+    """
     dbVectorDB = db.query(DBVectorDB).filter(
         DBVectorDB.id == vectordb_instance.vectorDB.id).first()
     if not dbVectorDB:
@@ -109,6 +139,19 @@ async def update_vectordb_instance(
     id: uuid.UUID = Path(
         description="The ID of the vector database instance to update"),
     db: Session = Depends(get_db)):
+    """
+    Update an existing vector database instance.
+
+    Args:
+        id (uuid.UUID): The ID of the vector database instance to update.
+        instanceSchema (VectorDBInstanceSchema): The updated vector database instance data.
+
+    Returns:
+        VectorDBInstanceSchema: The updated vector database instance.
+
+    Raises:
+        HTTPException: If the vector database instance is not found or there's an error during the update.
+    """
     dbVectorDBInstance = db.query(DBVectorDBInstance).filter(
         DBVectorDBInstance.id == id).first()
     if not dbVectorDBInstance:
@@ -140,6 +183,18 @@ async def update_vectordb_instance(
 async def delete_vectordb_instance(id: uuid.UUID = Path(
     description="The ID of the vector database instance to delete"),
                                    db: Session = Depends(get_db)):
+    """
+    Delete a vector database instance.
+
+    Args:
+        id (uuid.UUID): The ID of the vector database instance to delete.
+
+    Returns:
+        dict: A message confirming the deletion.
+
+    Raises:
+        HTTPException: If the vector database instance is not found or there's an error during deletion.
+    """
     dbVectorDBInstance = db.query(DBVectorDBInstance).filter(
         DBVectorDBInstance.id == id).first()
     if not dbVectorDBInstance:
@@ -166,6 +221,15 @@ async def delete_vectordb_instance(id: uuid.UUID = Path(
 
 
 def check_pod_status_and_readiness(instance: DBVectorDBInstance):
+    """
+    Check the status and readiness of a vector database instance's pod.
+
+    Args:
+        instance (DBVectorDBInstance): The vector database instance to check.
+
+    Returns:
+        tuple: A tuple containing the readiness status and the pod status.
+    """
     controller = VectorDBController()
     pod_labels = controller.get_pod_labels(instance)
 
@@ -173,6 +237,9 @@ def check_pod_status_and_readiness(instance: DBVectorDBInstance):
 
 
 def update_all_instance_endpoints():
+    """
+    Update endpoints for all vector database instances that don't have populated endpoints.
+    """
     logger.debug("Updating all instance endpoints")
     db = SessionLocal()
     try:
@@ -191,6 +258,12 @@ def update_all_instance_endpoints():
 
 
 def update_instance_endpoints(instance: DBVectorDBInstance, db: Session):
+    """
+    Update the endpoints for a specific vector database instance.
+
+    Args:
+        instance (DBVectorDBInstance): The vector database instance to update.
+    """
     logger.info(f"Updating endpoints for instance {instance.id}")
     controller = VectorDBController()
     service_name = controller.get_service_name(instance)

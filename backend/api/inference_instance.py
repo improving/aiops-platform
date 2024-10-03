@@ -39,6 +39,18 @@ org_id = "1"
 @router.get("/v1alpha1/inferenceInstance",
             response_model=List[InferenceInstanceSchema])
 async def list_inference_instances(db: Session = Depends(get_db)):
+    """
+    List all inference instances.
+
+    Args:
+        db (Session): The database session, injected by FastAPI.
+
+    Returns:
+        List[InferenceInstanceSchema]: A list of all inference instances.
+
+    Raises:
+        HTTPException: If there's an error retrieving the inference instances.
+    """
     try:
         instances = db.query(DBInferenceInstance).all()
         for instance in instances:
@@ -55,6 +67,18 @@ async def list_inference_instances(db: Session = Depends(get_db)):
 @router.get("/v1alpha1/inferenceInstance/{id}",
             response_model=InferenceInstanceSchema)
 async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Retrieve a specific inference instance by ID.
+
+    Args:
+        id (uuid.UUID): The ID of the inference instance to retrieve.
+
+    Returns:
+        InferenceInstanceSchema: The requested inference instance.
+
+    Raises:
+        HTTPException: If the inference instance is not found or there's an internal error.
+    """
     try:
         instance = db.query(DBInferenceInstance).filter(
             DBInferenceInstance.id == id).first()
@@ -79,6 +103,18 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             response_model=List[InferenceInstanceDashboardsSchema])
 async def get_inference_instance_dashboards(id: uuid.UUID,
                                             db: Session = Depends(get_db)):
+    """
+    Retrieve dashboards for a specific inference instance.
+
+    Args:
+        id (uuid.UUID): The ID of the inference instance.
+
+    Returns:
+        List[InferenceInstanceDashboardsSchema]: A list of dashboards associated with the inference instance.
+
+    Raises:
+        HTTPException: If there's an error retrieving the dashboards.
+    """
     try:
         db_instance_dashboards = db.query(
             DBInferenceInstanceDashboards).filter(
@@ -116,6 +152,18 @@ async def get_inference_instance_dashboards(id: uuid.UUID,
              status_code=201)
 async def create_inference_instance(instance: InferenceInstanceSchema,
                                     db: Session = Depends(get_db)):
+    """
+    Create a new inference instance.
+
+    Args:
+        instance (InferenceInstanceSchema): The inference instance data.
+
+    Returns:
+        InferenceInstanceSchema: The created inference instance.
+
+    Raises:
+        HTTPException: If there's an error creating the inference instance.
+    """
     try:
         model = db.query(DBModel).filter(
             DBModel.id == instance.model.id).first()
@@ -173,7 +221,7 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
 
         logger.debug(
-            f"######\n\nFull instance:\n{pprint.pformat(full_instance.model_dump(), indent=4, width=120)}\n\n######"
+            f"Full instance:\n{pprint.pformat(full_instance.model_dump(), indent=4, width=120)}"
         )
 
         controller = get_controller(engine.name)
@@ -202,6 +250,18 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
 
 
 def update_config_with_lora_adapters(db, lora_adapters):
+    """
+    Update the configuration with LoRA adapters.
+
+    Args:
+        lora_adapters (list): A list of LoRA adapter configurations.
+
+    Returns:
+        list: A list of DBModelAdapters objects.
+
+    Raises:
+        HTTPException: If a model adapter is not found.
+    """
     lora_adapters_list = []
     for adapter in lora_adapters:
         existing_adapter = db.query(DBModelAdapters).filter(
@@ -220,6 +280,19 @@ def update_config_with_lora_adapters(db, lora_adapters):
 async def update_inference_instance(id: uuid.UUID,
                                     updated_instance: InferenceInstanceSchema,
                                     db: Session = Depends(get_db)):
+    """
+    Update an existing inference instance.
+
+    Args:
+        id (uuid.UUID): The ID of the inference instance to update.
+        updated_instance (InferenceInstanceSchema): The updated inference instance data.
+
+    Returns:
+        InferenceInstanceSchema: The updated inference instance.
+
+    Raises:
+        HTTPException: If the inference instance is not found or there's an error during the update.
+    """
     try:
         db_instance = db.query(DBInferenceInstance).filter(
             DBInferenceInstance.id == id).first()
@@ -267,6 +340,13 @@ async def update_inference_instance(id: uuid.UUID,
 
 
 def update_config_params(db, db_instance, value):
+    """
+    Update the configuration parameters of an inference instance.
+
+    Args:
+        db_instance (DBInferenceInstance): The inference instance to update.
+        value (dict): The new configuration values.
+    """
     for config_key, config_value in value.items():
         if config_key == 'lora_adapters':
             update_lora_adapters_in_inference_instance_config(
@@ -278,6 +358,17 @@ def update_config_params(db, db_instance, value):
 def update_lora_adapters_in_inference_instance_config(db, db_instance,
                                                       config_key,
                                                       config_value):
+    """
+    Update the LoRA adapters in the inference instance configuration.
+
+    Args:
+        db_instance (DBInferenceInstance): The inference instance to update.
+        config_key (str): The configuration key for LoRA adapters.
+        config_value (list): The new LoRA adapter configurations.
+
+    Raises:
+        HTTPException: If a model adapter is not found.
+    """
     for adapter in config_value:
         existing_adapter = db.query(DBModelAdapters).filter(
             DBModelAdapters.id == adapter['id']).first()
@@ -292,6 +383,18 @@ def update_lora_adapters_in_inference_instance_config(db, db_instance,
 @router.delete("/v1alpha1/inferenceInstance/{id}")
 async def delete_inference_instance(id: uuid.UUID,
                                     db: Session = Depends(get_db)):
+    """
+    Delete an inference instance.
+
+    Args:
+        id (uuid.UUID): The ID of the inference instance to delete.
+
+    Returns:
+        dict: A message confirming the deletion.
+
+    Raises:
+        HTTPException: If the inference instance is not found or there's an error during deletion.
+    """
     try:
         db_instance = db.query(DBInferenceInstance).filter(
             DBInferenceInstance.id == id).first()
@@ -338,6 +441,17 @@ async def delete_inference_instance(id: uuid.UUID,
 async def create_instance_dashboards(instance: InferenceInstanceSchema,
                                      engine_chart: DBEngineCharts,
                                      db: Session):
+    """
+    Create dashboards for an inference instance.
+
+    Args:
+        instance (InferenceInstanceSchema): The inference instance to create dashboards for.
+        engine_chart (DBEngineCharts): The engine chart to create dashboards for.
+        db (Session): The database session.
+
+    Raises:
+        HTTPException: If no dashboards are found for the engine chart.
+    """
     try:
         engine_chart_dashboards = db.query(DBEngineChartDashboards).filter(
             and_(DBEngineChartDashboards.engine_id == instance.engine.id,
@@ -372,6 +486,9 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
 
 
 def update_all_instance_endpoints():
+    """
+    Update all inference instance endpoints.
+    """
     logger.debug("Updating all inference instance endpoints")
     db = SessionLocal()
     try:
@@ -391,6 +508,13 @@ def update_all_instance_endpoints():
 
 
 def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
+    """
+    Update the endpoints for an inference instance.
+
+    Args:
+        instance (DBInferenceInstance): The inference instance to update.
+        db (Session): The database session.
+    """
     logger.info(f"Updating endpoints for instance {instance.id}")
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
@@ -430,6 +554,18 @@ def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
 
 
 def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
+    """
+    Check the status and readiness of an inference instance's pod.
+
+    Args:
+        instance (DBInferenceInstance): The inference instance to check.
+
+    Returns:
+        tuple: A tuple containing the readiness status and the pod status.
+
+    Raises:
+        HTTPException: If the associated engine or engine chart is not found.
+    """
     # Get the associated engine
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
@@ -454,7 +590,7 @@ def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
 scheduler = AsyncIOScheduler()
 
 # Schedule the update_all_instance_endpoints function to run every 5 seconds
-# scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
+scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
 
 # Start the scheduler
 scheduler.start()

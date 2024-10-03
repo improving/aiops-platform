@@ -32,6 +32,18 @@ def filter_notebook_fields(data: dict) -> dict:
 @router.post("/v1alpha1/notebooks", response_model=NotebookInstanceSchema)
 async def create_notebook(notebook: NotebookInstanceSchema,
                           db: Session = Depends(get_db)):
+    """
+    Create a new notebook instance.
+
+    Args:
+        notebook (NotebookInstanceSchema): The notebook instance data.
+
+    Returns:
+        NotebookInstanceSchema: The created notebook instance.
+
+    Raises:
+        HTTPException: If there's an error creating the notebook instance.
+    """
     notebook_data = filter_notebook_fields(notebook.model_dump())
     db_notebook = Notebook(**notebook_data)
     controller = NotebooksController()
@@ -48,6 +60,15 @@ async def create_notebook(notebook: NotebookInstanceSchema,
 
 @router.get("/v1alpha1/notebooks", response_model=List[NotebookInstanceSchema])
 async def list_notebooks(db: Session = Depends(get_db)):
+    """
+    List all notebook instances.
+
+    Returns:
+        List[NotebookInstanceSchema]: A list of all notebook instances.
+
+    Raises:
+        HTTPException: If there's an error retrieving the notebook instances.
+    """
     notebooks = db.query(Notebook).all()
     try:
         for notebook in notebooks:
@@ -62,6 +83,18 @@ async def list_notebooks(db: Session = Depends(get_db)):
 
 @router.get("/v1alpha1/notebooks/{id}", response_model=NotebookInstanceSchema)
 async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Retrieve a specific notebook instance by ID.
+
+    Args:
+        id (uuid.UUID): The ID of the notebook instance to retrieve.
+
+    Returns:
+        NotebookInstanceSchema: The requested notebook instance.
+
+    Raises:
+        HTTPException: If the notebook is not found or there's an error checking its status.
+    """
     notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
@@ -79,6 +112,19 @@ async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
 async def update_notebook(id: uuid.UUID,
                           notebook: NotebookInstanceSchema,
                           db: Session = Depends(get_db)):
+    """
+    Update an existing notebook instance.
+
+    Args:
+        id (uuid.UUID): The ID of the notebook instance to update.
+        notebook (NotebookInstanceSchema): The updated notebook instance data.
+
+    Returns:
+        NotebookInstanceSchema: The updated notebook instance.
+
+    Raises:
+        HTTPException: If the notebook is not found.
+    """
     db_notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not db_notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
@@ -93,6 +139,18 @@ async def update_notebook(id: uuid.UUID,
 
 @router.delete("/v1alpha1/notebooks/{id}")
 async def delete_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Delete a notebook instance.
+
+    Args:
+        id (uuid.UUID): The ID of the notebook instance to delete.
+
+    Returns:
+        dict: A message confirming the deletion.
+
+    Raises:
+        HTTPException: If the notebook is not found.
+    """
     db_notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not db_notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
@@ -104,12 +162,24 @@ async def delete_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 def check_pod_status_and_readiness(instance: Notebook):
+    """
+    Check the status and readiness of a notebook instance's pod.
+
+    Args:
+        instance (Notebook): The notebook instance to check.
+
+    Returns:
+        tuple: A tuple containing the readiness status and the pod status.
+    """
     controller = NotebooksController()
     pod_labels = controller.get_pod_labels(instance)
     return get_pod_status_and_readiness(instance.namespace, pod_labels)
 
 
 def update_all_instance_endpoints():
+    """
+    Update endpoints for all notebook instances that don't have populated endpoints.
+    """
     logger.debug("Updating all instance endpoints")
     db = SessionLocal()
     try:
@@ -127,6 +197,12 @@ def update_all_instance_endpoints():
 
 
 def update_instance_endpoints(instance: Notebook, db: Session):
+    """
+    Update the endpoints for a specific notebook instance.
+
+    Args:
+        instance (Notebook): The notebook instance to update.
+    """
     logger.info(f"Updating endpoints for instance {instance.id}")
     controller = NotebooksController()
     service_name = controller.get_service_name(instance)

@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import BigInteger, Column, String
+from sqlalchemy import BigInteger, Column, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -18,6 +19,13 @@ class DBModel(Base):
     category = Column(String)
     subcategory = Column(String)
     size = Column(BigInteger)
+    created_at = Column(DateTime(timezone=True),
+                        default=datetime.now,
+                        nullable=False)
+    updated_at = Column(DateTime(timezone=True),
+                        default=datetime.now,
+                        onupdate=datetime.now,
+                        nullable=False)
 
     model_adapters = relationship("DBModelAdapters",
                                   back_populates="base_model")
