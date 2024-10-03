@@ -20,6 +20,7 @@ COPY controller/ ./controller/
 COPY db/ ./db/
 COPY models/ ./models/
 COPY raw_data/ ./raw_data/
+COPY repositories/ ./repositories/
 COPY schemas/ ./schemas/
 COPY templates/ ./templates/
 COPY utils/ ./utils/
