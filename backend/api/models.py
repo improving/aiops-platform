@@ -50,3 +50,50 @@ def get_model(id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Model not found")
     model.countAdapters = len(model.model_adapters)
     return model
+
+
+@router.post("/v1alpha1/models", response_model=ModelSchema)
+def create_model(model: ModelSchema, db: Session = Depends(get_db)):
+    """
+    Create a new model in the database. Remember to checkin the model
+    to the code repository.
+
+    Args:
+        model (ModelSchema): The model data to create.
+
+    Returns:
+        ModelSchema: The created model.
+    """
+    db_model = DBModel(**model.model_dump(exclude={"countAdapters"}))
+    db.add(db_model)
+    db.commit()
+    db.refresh(db_model)
+    return db_model
+
+
+@router.put("/v1alpha1/models/{id}", response_model=ModelSchema)
+def update_model(id: uuid.UUID,
+                 model: ModelSchema,
+                 db: Session = Depends(get_db)):
+    """
+    Update an existing model in the database.
+
+    Args:
+        model (ModelSchema): The updated model data.
+
+    Returns:
+        ModelSchema: The updated model.
+    """
+    db_model = db.query(DBModel).filter(DBModel.id == id).first()
+    if not db_model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    db_model.name = model.name
+    db_model.modelId = model.modelId
+    db_model.description = model.description
+    db_model.category = model.category
+    db_model.subcategory = model.subcategory
+    db_model.size = model.size
+    db.commit()
+    db.refresh(db_model)
+    db_model.countAdapters = len(db_model.model_adapters)
+    return db_model

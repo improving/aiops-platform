@@ -8,12 +8,8 @@ from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine
-from models.inference_instance import (DBInferenceInstance,
-                                       DBInferenceInstanceConfigParams)
 from models.models import DBModel
-from models.notebook import Notebook
 from models.vectordb import DBVectorDB
-from models.vectordb_instance import DBVectorDBInstance
 
 logger = setup_logger(__name__)
 
@@ -131,10 +127,8 @@ def load_initial_data():
 def load_vector_dbs(db):
     logger.info("Loading vector dbs")
     with open("raw_data/vectordb.csv", "r", encoding="utf-8") as f:
-        validVectorDbNames = []
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            validVectorDbNames.append(row["name"])
             _vectordb = db.query(DBVectorDB).filter(
                 DBVectorDB.name == row["name"]).first()
             if not _vectordb:
@@ -147,11 +141,12 @@ def load_vector_dbs(db):
                 )
                 logger.info(f"adding vector db id: {_vectordb.name}")
                 db.add(_vectordb)
-        dropped_vector_dbs = db.query(DBVectorDB).filter(
-            DBVectorDB.name.not_in(validVectorDbNames)).all()
-        for vector_db in dropped_vector_dbs:
-            logger.info(f"dropping vector db name: {vector_db.name}")
-            db.delete(vector_db)
+            else:
+                logger.info(f"Updating vector db: {_vectordb.name}")
+                _vectordb.name = row["name"]
+                _vectordb.description = row["description"]
+                _vectordb.chart_repo = row["chart_repo"]
+                _vectordb.chart_name = row["chart_name"]
     db.commit()
 
 
@@ -181,16 +176,25 @@ def load_engine_chart_dashboards(db):
                     f"adding engine chart dashboard id: {_engine_chart_dashboard.id}"
                 )
                 db.add(_engine_chart_dashboard)
+            else:
+                logger.info(
+                    f"Updating engine chart dashboard: {_engine_chart_dashboard.id}"
+                )
+                _engine_chart_dashboard.dashboard_id = row["dashboard_id"]
+                _engine_chart_dashboard.dashboard_name = row["dashboard_name"]
+                _engine_chart_dashboard.engine_id = uuid.UUID(row["engine_id"])
+                _engine_chart_dashboard.engine_chart_id = uuid.UUID(
+                    row["engine_chart_id"])
+                _engine_chart_dashboard.panel_id = row["panel_id"]
+                _engine_chart_dashboard.panel_name = row["panel_name"]
     db.commit()
 
 
 def load_engine_charts(db):
     logger.info("Loading engine charts")
     with open("raw_data/engine_charts.csv", "r", encoding="utf-8") as f:
-        validEngineChartIds = []
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            validEngineChartIds.append(uuid.UUID(row["id"]))
             _engine_chart = db.query(DBEngineCharts).filter(
                 DBEngineCharts.id == uuid.UUID(row["id"])).first()
             if not _engine_chart:
@@ -200,14 +204,17 @@ def load_engine_charts(db):
                     chart_type=row["chart_type"],
                     chart_repo=row["chart_repo"],
                     chart_name=row["chart_name"],
+                    chart_version=row["chart_version"],
                 )
                 logger.info(f"adding engine chart id: {_engine_chart.id}")
                 db.add(_engine_chart)
-        dropped_engine_charts = db.query(DBEngineCharts).filter(
-            DBEngineCharts.id.not_in(validEngineChartIds)).all()
-        for engine_chart in dropped_engine_charts:
-            logger.info(f"dropping engine chart id: {engine_chart.id}")
-            db.delete(engine_chart)
+            else:
+                logger.info(f"Updating engine chart: {_engine_chart.id}")
+                _engine_chart.engine = row["engine"]
+                _engine_chart.chart_type = row["chart_type"]
+                _engine_chart.chart_repo = row["chart_repo"]
+                _engine_chart.chart_name = row["chart_name"]
+                _engine_chart.chart_version = row["chart_version"]
     db.commit()
 
 
@@ -215,9 +222,7 @@ def load_engines(db):
     logger.info("Loading engines")
     with open("raw_data/engines.csv", "r", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
-        validEngineNames = []
         for row in csv_reader:
-            validEngineNames.append(row["name"])
             _engine = db.query(DBEngine).filter(
                 DBEngine.name == row["name"]).first()
             if not _engine:
@@ -232,11 +237,15 @@ def load_engines(db):
                 )
                 logger.info(f"adding engine name: {_engine.name}")
                 db.add(_engine)
-        dropped_engines = db.query(DBEngine).filter(
-            DBEngine.name.not_in(validEngineNames)).all()
-        for _engine in dropped_engines:
-            logger.info(f"dropping engine name: {_engine.name}")
-            db.delete(_engine)
+            else:
+                logger.info(f"Updating engine: {_engine.name}")
+                _engine.name = row["name"]
+                _engine.llm_support = bool(row["llm_support"])
+                _engine.embedding_support = bool(row["embedding_support"])
+                _engine.reranking_support = bool(row["reranking_support"])
+                _engine.prompt_guard_support = bool(
+                    row["prompt_guard_support"])
+                _engine.vector_db_support = bool(row["vector_db_support"])
     db.commit()
 
 
@@ -244,9 +253,7 @@ def load_models(db):
     logger.info("Loading models")
     with open("raw_data/models.csv", "r", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
-        validModelIds = []
         for row in csv_reader:
-            validModelIds.append(row["modelId"])
             model = db.query(DBModel).filter(
                 DBModel.modelId == row["modelId"]).first()
             if not model:
@@ -261,11 +268,14 @@ def load_models(db):
                 )
                 logger.info(f"adding model id: {model.modelId}")
                 db.add(model)
-        dropped_models = db.query(DBModel).filter(
-            DBModel.modelId.not_in(validModelIds)).all()
-        for model in dropped_models:
-            logger.info(f"dropping model id: {model.modelId}")
-            db.delete(model)
+            else:
+                logger.info(f"Updating model id: {model.modelId}")
+                model.name = row["name"]
+                model.modelId = row["modelId"]
+                model.description = row["description"]
+                model.category = row["category"]
+                model.subcategory = row["subcategory"]
+                model.size = int(row["size"])
     db.commit()
 
 
@@ -273,19 +283,6 @@ def reload_data():
     db = SessionLocal()
 
     try:
-        # Clear existing data
-        db.query(DBInferenceInstanceConfigParams).delete()
-        db.query(DBInferenceInstance).delete()
-        db.query(DBEngineChartDashboards).delete()
-        db.query(DBVectorDBInstance).delete()
-        db.query(DBVectorDB).delete()
-        db.query(Notebook).delete()
-        db.query(DBEngineCharts).delete()
-        db.query(DBEngine).delete()
-        db.query(DBModel).delete()
-        db.query(DBEngineCharts).delete()
-        db.commit()
-
         # Reload data
         load_initial_data()
 

@@ -14,3 +14,4 @@ class DBEngineCharts(Base):
     chart_type = Column(String, nullable=False)
     chart_repo = Column(String, nullable=False)
     chart_name = Column(String, nullable=False)
+    chart_version = Column(String, nullable=True)

@@ -1,11 +1,11 @@
 import uuid
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ModelSchema(BaseModel):
-    id: uuid.UUID
+    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
     name: Optional[str] = None
     modelId: Optional[str] = None
     description: Optional[str] = None

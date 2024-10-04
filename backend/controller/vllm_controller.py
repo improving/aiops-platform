@@ -10,6 +10,7 @@ class VLLMController(Controller):
                                      engineChart: EngineChartsSchema):
         context = {
             "model": instance.model.modelId,
+            "args": {},
             "volumeMounts": {
                 "hf_cache": {
                     "mountPath": "/model"

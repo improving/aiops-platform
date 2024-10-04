@@ -96,7 +96,9 @@ class Controller(ABC):
         repo_url = engineChart.chart_repo
         chart_name = engineChart.chart_name
 
-        chart = await self.helm.get_chart(chart_name, repo=repo_url)
+        chart = await self.helm.get_chart(chart_name,
+                                          repo=repo_url,
+                                          version=engineChart.chart_version)
         self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
 
         return chart
