@@ -10,7 +10,10 @@ resources:
 {% if args.lora_adapters is defined %}
 args:
   - "--enable-lora"
-  - "--lora-modules {{ args.lora_adapters }}"
+  - "--lora-modules"
+  {% for adapter in args.lora_adapters %}
+  - "{{ adapter }}"
+  {% endfor %}
 {% endif %}
 
 env:

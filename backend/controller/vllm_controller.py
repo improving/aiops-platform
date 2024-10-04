@@ -28,14 +28,17 @@ class VLLMController(Controller):
             for i, adapter_to_use in enumerate(instance.config.lora_adapters,
                                                start=1):
                 key = f"adapter{i}"
-                if adapter_to_use.hf_id:
+                if adapter_to_use.path:
+                    value = f"/model/{adapter_to_use.path}".replace("//", "/")
+                elif adapter_to_use.hf_id:
                     value = adapter_to_use.hf_id
                 else:
-                    value = f"/model/{adapter_to_use.path}".replace("//", "/")
+                    raise ValueError(
+                        f"Invalid adapter config: {adapter_to_use}")
                 lora_adapters.append(f"{key}={value}")
 
             if len(lora_adapters) > 0:
-                context["args"] = {"lora_adapters": " ".join(lora_adapters)}
+                context["args"]["lora_adapters"] = lora_adapters
 
         return context
 
