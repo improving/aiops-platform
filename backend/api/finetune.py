@@ -8,7 +8,8 @@ from controller.finetune_controller import FinetuneController
 from db.database import get_db
 from logger import setup_logger
 from repositories.finetune_repository import FinetuneRepository
-from schemas.finetune import Finetune, FinetuneCreate, FinetuneUpdate
+from schemas.finetune import (FinetuneCreateSchema, FinetuneSchema,
+                              FinetuneUpdateSchema)
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -16,7 +17,7 @@ finetune_controller = FinetuneController()
 
 
 @router.get("/v1alpha1/models/{model_id}/finetune",
-            response_model=List[Finetune])
+            response_model=List[FinetuneSchema])
 async def list_finetunes(model_id: UUID, db: Session = Depends(get_db)):
     """
     List all finetune jobs available in the cluster.
@@ -43,10 +44,10 @@ async def list_finetunes(model_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/v1alpha1/models/{model_id}/finetune",
-             response_model=Finetune,
+             response_model=FinetuneSchema,
              status_code=201)
 async def create_finetune(model_id: UUID,
-                          finetune: FinetuneCreate,
+                          finetune: FinetuneCreateSchema,
                           db: Session = Depends(get_db)):
     """
     Create a new finetune job.
@@ -79,7 +80,7 @@ async def create_finetune(model_id: UUID,
 
 
 @router.get("/v1alpha1/models/{model_id}/finetune/{finetune_id}",
-            response_model=Finetune)
+            response_model=FinetuneSchema)
 async def get_finetune(model_id: UUID,
                        finetune_id: UUID,
                        db: Session = Depends(get_db)):
@@ -115,10 +116,10 @@ async def get_finetune(model_id: UUID,
 
 
 @router.put("/v1alpha1/models/{model_id}/finetune/{finetune_id}",
-            response_model=Finetune)
+            response_model=FinetuneSchema)
 async def update_finetune(model_id: UUID,
                           finetune_id: UUID,
-                          finetune: FinetuneUpdate,
+                          finetune: FinetuneUpdateSchema,
                           db: Session = Depends(get_db)):
     """
     Update a finetune job.

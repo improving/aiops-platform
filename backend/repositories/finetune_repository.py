@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from logger import setup_logger
 from models.finetune import DBFinetune
-from schemas.finetune import FinetuneCreate, FinetuneUpdate
+from schemas.finetune import FinetuneCreateSchema, FinetuneUpdateSchema
 
 logger = setup_logger(__name__)
 
@@ -28,7 +28,8 @@ class FinetuneRepository:
             DBFinetune.id == finetune_id,
             DBFinetune.model_id == model_id).first()
 
-    def create(self, model_id: UUID, finetune: FinetuneCreate) -> DBFinetune:
+    def create(self, model_id: UUID,
+               finetune: FinetuneCreateSchema) -> DBFinetune:
         logger.info(f"Creating finetune job for model {model_id}")
         db_finetune = DBFinetune(**finetune.model_dump(), model_id=model_id)
         self.db.add(db_finetune)
@@ -37,7 +38,7 @@ class FinetuneRepository:
         return db_finetune
 
     def update(self, model_id: UUID, finetune_id: UUID,
-               finetune: FinetuneUpdate) -> Optional[DBFinetune]:
+               finetune: FinetuneUpdateSchema) -> Optional[DBFinetune]:
         db_finetune = self.get_by_id(model_id, finetune_id)
         if db_finetune:
             update_data = finetune.model_dump(exclude_unset=True)

@@ -7,24 +7,24 @@ from pydantic import BaseModel, ConfigDict
 from schemas.model import ModelSchema
 
 
-class FinetuneBase(BaseModel):
+class FinetuneBaseSchema(BaseModel):
     name: str
     params: Dict
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class FinetuneCreate(FinetuneBase):
+class FinetuneCreateSchema(FinetuneBaseSchema):
     pass
 
 
-class FinetuneUpdate(BaseModel):
+class FinetuneUpdateSchema(BaseModel):
     name: Optional[str] = None
-    model: Optional[ModelSchema] = None
+    base_model: Optional[ModelSchema] = None
     params: Optional[Dict] = None
 
 
-class Finetune(FinetuneBase):
+class FinetuneSchema(FinetuneBaseSchema):
     id: uuid.UUID
     base_model: Optional[ModelSchema] = None
     status: Optional[str] = None
