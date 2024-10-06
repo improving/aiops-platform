@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,8 +19,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { HandIcon, RocketIcon } from "@radix-ui/react-icons";
+import { HandIcon, RocketIcon, PlusIcon } from "@radix-ui/react-icons";
 import { Model } from "@/types/models";
+import { useToast } from "@/components/hooks/use-toast";
+import ImportModelDialog from "@/components/models/ImportModelDialog";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -37,12 +39,10 @@ export default function ModelCatalog() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedSubcategory, setSelectedSubcategory] = useState("all");
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    fetchModels();
-  }, []);
-
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       const response = await fetch("/api/v1alpha1/models");
       if (!response.ok) {
@@ -52,7 +52,25 @@ export default function ModelCatalog() {
       setModels(data);
     } catch (error) {
       console.error("Error fetching models:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch models. Please try again.",
+        variant: "destructive",
+      });
     }
+  }, [toast]); // Added fetchModels to the dependency array
+
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
+
+  const handleImportSuccess = () => {
+    setIsImportDialogOpen(false);
+    fetchModels();
+    toast({
+      title: "Success",
+      description: "Model imported successfully.",
+    });
   };
 
   const filteredModels = models.filter(
@@ -107,6 +125,10 @@ export default function ModelCatalog() {
             ))}
           </SelectContent>
         </Select>
+        <Button onClick={() => setIsImportDialogOpen(true)}>
+          <PlusIcon className="mr-2 w-4 h-4" />
+          Import Model
+        </Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredModels.map((model) => (
@@ -162,6 +184,11 @@ export default function ModelCatalog() {
           </Card>
         ))}
       </div>
+      <ImportModelDialog
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
     </>
   );
 }
