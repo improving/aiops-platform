@@ -88,6 +88,17 @@ export default function Home() {
             },
           ]}
         />
+        <DisplayCard
+          title="Develop"
+          description="Interactively develop AI applications"
+          buttons={[
+            {
+              link: "/develop/",
+              text: "Develop AI Applications",
+              variant: "default",
+            },
+          ]}
+        />
       </div>
     </Dashboard>
   );

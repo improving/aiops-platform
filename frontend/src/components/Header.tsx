@@ -17,13 +17,13 @@ const menuItems = [
   {
     label: "Models",
     items: [
-      { 
-        label: "Catalog", 
+      {
+        label: "Catalog",
         href: "/models/catalog/",
         description: "Browse and select from a variety of AI models"
       },
-      { 
-        label: "Instances", 
+      {
+        label: "Instances",
         href: "/models/endpoints",
         description: "Manage and monitor your deployed model instances"
       },
@@ -32,13 +32,13 @@ const menuItems = [
   {
     label: "Vector Databases",
     items: [
-      { 
-        label: "Catalog", 
+      {
+        label: "Catalog",
         href: "/vector-databases/catalog",
         description: "Explore available vector database solutions"
       },
-      { 
-        label: "Instances", 
+      {
+        label: "Instances",
         href: "/vector-databases/endpoints",
         description: "Manage your vector database deployments"
       },
@@ -94,6 +94,13 @@ export default function Header() {
                 </NavigationMenuContent>
               </NavigationMenuItem>
             ))}
+            <NavigationMenuItem>
+              <Link href="/develop" legacyBehavior passHref>
+                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                  Develop
+                </NavigationMenuLink>
+              </Link>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
         <div className="flex items-center space-x-4">
