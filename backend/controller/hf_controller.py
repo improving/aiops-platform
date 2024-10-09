@@ -25,7 +25,6 @@ class HuggingFaceController(Controller):
             "volumes": {
                 "hf_cache": {
                     "claimName": "hf-cache",
-                    "mountPath": "/root/.cache/huggingface/hub"
                 },
                 "shm": {
                     "sizeLimit": "1Gi"
@@ -40,7 +39,12 @@ class HuggingFaceController(Controller):
             },
             "readinessProbe": {
                 "httpGet": {},
-            }
+            },
+            "volumeMounts": {
+                "hf_cache": {
+                    "mountPath": "/root/.cache/huggingface/hub"
+                }
+            },
         }
 
         if instance.config and instance.config.maxInputLength:
