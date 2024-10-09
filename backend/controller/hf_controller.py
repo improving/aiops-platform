@@ -19,11 +19,13 @@ class HuggingFaceController(Controller):
                 "modelID": instance.model.modelId
             },
             "env": {
-                "HF_HUB_OFFLINE": "1"
+                "HF_HUB_OFFLINE": "1",
+                "HF_HOME": "/root/.cache/huggingface"
             },
             "volumes": {
                 "hf_cache": {
-                    "claimName": "hf-cache"
+                    "claimName": "hf-cache",
+                    "mountPath": "/root/.cache/huggingface/hub"
                 },
                 "shm": {
                     "sizeLimit": "1Gi"
@@ -57,7 +59,8 @@ class HuggingFaceController(Controller):
                     lora_adapters_paths.append(adapter_to_use.hf_id)
                 elif adapter_to_use.path:
                     lora_adapters_paths.append(
-                        f"/data/{adapter_to_use.path}".replace("//", "/"))
+                        f"/root/.cache/huggingface/hub/{adapter_to_use.path}".
+                        replace("//", "/"))
 
             if lora_adapters_paths:
                 context["env"]["lora_adapters"] = ",".join(lora_adapters_paths)
