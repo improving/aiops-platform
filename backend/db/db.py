@@ -7,7 +7,7 @@ from db.database import Base, SessionLocal, engine
 from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
-from models.engines import DBEngine
+from models.engines import DBEngine, DBEngineDefaultArgs, DBEngineDefaultConfig
 from models.models import DBModel
 from models.vectordb import DBVectorDB
 
@@ -114,6 +114,12 @@ def load_initial_data():
 
         # Load engine chart dashboards
         load_engine_chart_dashboards(db)
+
+        # Load engine default configs
+        load_engine_default_configs(db)
+
+        # Load engine default args
+        load_engine_default_args(db)
 
         # Load vector dbs
         load_vector_dbs(db)
@@ -246,6 +252,71 @@ def load_engines(db):
                 _engine.prompt_guard_support = bool(
                     row["prompt_guard_support"])
                 _engine.vector_db_support = bool(row["vector_db_support"])
+    db.commit()
+
+
+def load_engine_default_configs(db):
+    logger.info("Loading engine default configs")
+    with open("raw_data/engine_default_configs.csv", "r",
+              encoding="utf-8") as f:
+        csv_reader = csv.DictReader(f)
+        for row in csv_reader:
+            _engine_default_config = db.query(DBEngineDefaultConfig).filter(
+                DBEngineDefaultConfig.engine_id == uuid.UUID(row["engine_id"]),
+                DBEngineDefaultConfig.name == row["name"]).first()
+            if not _engine_default_config:
+                _engine_default_config = DBEngineDefaultConfig(
+                    id=uuid.uuid4(),
+                    engine_id=uuid.UUID(row["engine_id"]),
+                    chart_type=row["chart_type"],
+                    name=row["name"],
+                    defaultValue=row["defaultValue"],
+                    editable=bool(row["editable"]),
+                )
+                logger.info(
+                    f"adding engine default config id: {_engine_default_config.id}"
+                )
+                db.add(_engine_default_config)
+            else:
+                logger.info(
+                    f"Updating engine default config: {_engine_default_config.id}"
+                )
+                _engine_default_config.engine_id = uuid.UUID(row["engine_id"])
+                _engine_default_config.chart_type = row["chart_type"]
+                _engine_default_config.name = row["name"]
+                _engine_default_config.defaultValue = row["defaultValue"]
+                _engine_default_config.editable = bool(row["editable"])
+    db.commit()
+
+
+def load_engine_default_args(db):
+    logger.info("Loading engine default args")
+    with open("raw_data/engine_default_args.csv", "r", encoding="utf-8") as f:
+        csv_reader = csv.DictReader(f)
+        for row in csv_reader:
+            _engine_default_arg = db.query(DBEngineDefaultArgs).filter(
+                DBEngineDefaultArgs.engine_id == uuid.UUID(row["engine_id"]),
+                DBEngineDefaultArgs.name == row["name"]).first()
+            if not _engine_default_arg:
+                _engine_default_arg = DBEngineDefaultArgs(
+                    id=uuid.uuid4(),
+                    engine_id=uuid.UUID(row["engine_id"]),
+                    chart_type=row["chart_type"],
+                    name=row["name"],
+                    defaultValue=row["defaultValue"],
+                    editable=bool(row["editable"]),
+                )
+                logger.info(
+                    f"adding engine default arg id: {_engine_default_arg.id}")
+                db.add(_engine_default_arg)
+            else:
+                logger.info(
+                    f"Updating engine default arg: {_engine_default_arg.id}")
+                _engine_default_arg.engine_id = uuid.UUID(row["engine_id"])
+                _engine_default_arg.chart_type = row["chart_type"]
+                _engine_default_arg.name = row["name"]
+                _engine_default_arg.defaultValue = row["defaultValue"]
+                _engine_default_arg.editable = bool(row["editable"])
     db.commit()
 
 

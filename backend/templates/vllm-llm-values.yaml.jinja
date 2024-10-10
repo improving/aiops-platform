@@ -1,5 +1,10 @@
 config:
   model: {{ model | default('meta-llama/Meta-Llama-3.1-8B-Instruct') }}
+{% if configs is defined %}
+{% for config in configs %}
+  {{ config.name }}: {{ config.value }}
+{% endfor %}
+{% endif %}
 
 resources:
   requests:
@@ -7,13 +12,21 @@ resources:
   limits:
     nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
 
-{% if args.lora_adapters is defined %}
+{% if args is defined or lora_adapters is defined %}
 args:
+{% if args is defined %}
+{% for arg in args %}
+  - {{ arg.name }}
+  - {{ arg.value }}
+{% endfor %}
+{% endif %}
+{% if lora_adapters is defined %}
   - "--enable-lora"
   - "--lora-modules"
-  {% for adapter in args.lora_adapters %}
+{% for adapter in lora_adapters %}
   - "{{ adapter }}"
-  {% endfor %}
+{% endfor %}
+{% endif %}
 {% endif %}
 
 env:
@@ -22,10 +35,16 @@ env:
       secretKeyRef:
         name: {{ hf_api_token_secret_name | default('hf-api-token') }}
         key: {{ hf_api_token_secret_key | default('HF_API_TOKEN') }}
-  - name: HF_HUB_OFFLINE
-    value: "{{ hf_hub_offline | default('1') }}"
-  - name: HF_HUB_CACHE
-    value: "{{ hf_hub_cache | default('/model') }}"
+##  - name: HF_HUB_OFFLINE
+##    value: "{{ hf_hub_offline | default('1') }}"
+##  - name: HF_HUB_CACHE
+##    value: "{{ hf_hub_cache | default('/model') }}"
+  {% if env is defined %}
+  {% for env_var in env %}
+  - name: {{ env_var.name }}
+    value: "{{ env_var.value }}"
+  {% endfor %}
+  {% endif %}
 
 nodeSelector:
   kubernetes.io/hostname: {{ nodeSelector.hostname | default('gpu-node-3') }}

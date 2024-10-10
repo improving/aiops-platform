@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Table
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Table
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -29,6 +29,8 @@ class DBInferenceInstanceConfigParams(Base):
     maxBatchTotalTokens = Column(Integer)
     quantization = Column(String)
     image = Column(String)
+    env_vars = Column(JSON)
+    args = Column(JSON)
 
     # Define the many-to-many relationship
     lora_adapters = relationship(

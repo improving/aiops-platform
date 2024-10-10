@@ -26,6 +26,8 @@ class InferenceInstanceConfigParamsSchema(BaseModel):
     maxBatchTotalTokens: Optional[int] = None
     quantization: Optional[str] = None
     image: Optional[str] = None
+    env_vars: Optional[dict[str, str]] = None
+    args: Optional[dict[str, str]] = None
     lora_adapters: List[ModelAdapterReferenceSchema] = []
 
     model_config = ConfigDict(from_attributes=True)

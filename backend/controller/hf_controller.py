@@ -18,10 +18,7 @@ class HuggingFaceController(Controller):
             "config": {
                 "modelID": instance.model.modelId
             },
-            "env": {
-                "HF_HUB_OFFLINE": "1",
-                "HF_HOME": "/root/.cache/huggingface"
-            },
+            "env": [],
             "volumes": {
                 "hf_cache": {
                     "claimName": "hf-cache",
@@ -48,13 +45,18 @@ class HuggingFaceController(Controller):
         }
 
         if instance.config and instance.config.maxInputLength:
-            context["env"]["MAX_INPUT_TOKENS"] = str(
-                instance.config.maxInputLength)
+            context["env"].append({
+                "name": "MAX_INPUT_TOKENS",
+                "value": str(instance.config.maxInputLength)
+            })
 
         if instance.config and instance.config.maxTokens:
-            context["env"]["MAX_TOTAL_TOKENS"] = str(instance.config.maxTokens)
+            context["env"].append({
+                "name": "MAX_TOTAL_TOKENS",
+                "value": str(instance.config.maxTokens)
+            })
 
-        self.logger.info(f"Lora adapters: {instance.config.lora_adapters}")
+        self.get_env_vars(instance, context)
 
         if instance.config and instance.config.lora_adapters:
             lora_adapters_paths = []
@@ -67,9 +69,39 @@ class HuggingFaceController(Controller):
                         replace("//", "/"))
 
             if lora_adapters_paths:
-                context["env"]["lora_adapters"] = ",".join(lora_adapters_paths)
+                context["env"].append({
+                    "name": "lora_adapters",
+                    "value": ",".join(lora_adapters_paths)
+                })
 
         return context
+
+    def get_env_vars(self, instance: InferenceInstanceSchema, context):
+        env_vars = []
+
+        # Load the default values first
+        default_env = {}
+        if instance.engine.default_config:
+            model_type = instance.model.category
+            for default_config in instance.engine.default_config:
+                if default_config.chart_type == model_type:
+                    default_env[
+                        default_config.name] = default_config.defaultValue
+
+        # Merge with instance.config.env_vars, preferring the latter
+        if instance.config and instance.config.env_vars:
+            for key, value in instance.config.env_vars.items():
+                default_env[key] = value
+
+        # Create the final env_vars list
+        for key, value in default_env.items():
+            env_vars.append({
+                "name": key,
+                "value": str(value)  # Ensure the value is a string
+            })
+
+        self.logger.info(f"Final env vars: {env_vars}")
+        context["env"] = env_vars
 
     async def install(self, instance: InferenceInstanceSchema,
                       engineChart: EngineChartsSchema):
