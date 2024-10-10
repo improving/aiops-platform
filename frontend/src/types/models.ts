@@ -34,6 +34,20 @@ interface InferenceInstanceDashboard {
   };
 }
 
+interface EngineDefaultConfigArgs {
+  name: string;
+  chart_type: string;
+  defaultValue: string;
+  editable: boolean;
+}
+
+interface EngineDefaultConfigEnvVars {
+  name: string;
+  chart_type: string;
+  defaultValue: string;
+  editable: boolean;
+}
+
 interface Engine {
   id: string;
   name: string;
@@ -42,6 +56,8 @@ interface Engine {
   reranking_support: boolean;
   prompt_guard_support: boolean;
   vector_db_support: boolean;
+  default_config: EngineDefaultConfigEnvVars[];
+  default_args: EngineDefaultConfigArgs[];
 }
 
 interface Host {
@@ -143,4 +159,6 @@ export type {
   FineTuneParams,
   Dataset,
   FineTuneJob,
+  EngineDefaultConfigEnvVars,
+  EngineDefaultConfigArgs,
 };

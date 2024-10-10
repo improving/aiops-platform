@@ -24,10 +24,24 @@ import { RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
 import { Adapter, Engine, Host, Model } from "@/types/models";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
-type EnvVar = { name: string; value: string };
+type EnvVar = {
+  name: string;
+  value: string;
+  editable: boolean;
+  new: boolean;
+  updated: boolean;
+};
+type CLIArg = {
+  name: string;
+  value: string;
+  editable: boolean;
+  new: boolean;
+  updated: boolean;
+};
 
 export default function LaunchModel({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -36,8 +50,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     hostId: "",
     engineId: "",
   });
-  const [envVars, setEnvVars] = useState<EnvVar[]>([{ name: "", value: "" }]);
-  const [secrets, setSecrets] = useState<EnvVar[]>([{ name: "", value: "" }]);
+  const [args, setArgs] = useState<CLIArg[]>([]);
+  const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [model, setModel] = useState<Model | null>(null);
@@ -45,6 +59,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [adapters, setAdapters] = useState<Adapter[]>([]);
   const [selectedAdapters, setSelectedAdapters] = useState<Adapter[]>([]);
   const { toast } = useToast(); // Initialize toast
+  const [enableTracing, setEnableTracing] = useState(false);
 
   useEffect(() => {
     const fetchEngines = async () => {
@@ -108,7 +123,9 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     };
     const fetchAdapters = async () => {
       try {
-        const response = await fetch(`/api/v1alpha1/model/${params.id}/adapters`);
+        const response = await fetch(
+          `/api/v1alpha1/model/${params.id}/adapters`
+        );
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(
@@ -125,7 +142,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         console.error("Error fetching adapters:", error);
       }
     };
-      
+
     fetchEngines();
     fetchHosts();
     fetchModel();
@@ -154,8 +171,102 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     }
   }, [model, engines]);
 
+  useEffect(() => {
+    if (formData.engineId) {
+      const selectedEngine = engines.find(
+        (engine) => engine.id === formData.engineId
+      );
+      if (selectedEngine) {
+        const defaultArgs: CLIArg[] = selectedEngine.default_args.map(
+          (arg) => ({
+            name: arg.name,
+            value: arg.defaultValue,
+            editable: arg.editable,
+            new: false,
+            updated: false,
+          })
+        );
+
+        const defaultEnvVars: EnvVar[] = selectedEngine.default_config.map(
+          (env) => ({
+            name: env.name,
+            value: env.defaultValue,
+            editable: env.editable,
+            new: false,
+            updated: false,
+          })
+        );
+
+        setArgs(defaultArgs);
+        setEnvVars(defaultEnvVars);
+      }
+    }
+  }, [formData.engineId, engines]);
+
+  const handleArgChange = (
+    index: number,
+    field: "name" | "value",
+    value: string
+  ) => {
+    setArgs((prev) =>
+      prev.map((arg, i) =>
+        i === index ? { ...arg, [field]: value, updated: true } : arg
+      )
+    );
+  };
+
+  const handleEnvVarChange = (
+    index: number,
+    field: "name" | "value",
+    value: string
+  ) => {
+    setEnvVars((prev) =>
+      prev.map((env, i) =>
+        i === index ? { ...env, [field]: value, updated: true } : env
+      )
+    );
+  };
+
+  const addNewArgField = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setArgs((prev) => [
+      ...prev,
+      { name: "", value: "", editable: true, new: true, updated: true },
+    ]);
+  };
+
+  const addNewEnvVarField = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setEnvVars((prev) => [
+      ...prev,
+      { name: "", value: "", editable: true, new: true, updated: true },
+    ]);
+  };
+
+  const deleteArg = (index: number) => {
+    setArgs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const deleteEnvVar = (index: number) => {
+    setEnvVars((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate that all argument and environment variable names are non-empty
+    const invalidArgs = args.filter((arg) => arg.name.trim() === "");
+    const invalidEnvVars = envVars.filter((env) => env.name.trim() === "");
+
+    if (invalidArgs.length > 0 || invalidEnvVars.length > 0) {
+      toast({
+        title: "Validation Error",
+        description:
+          "All argument and environment variable names must be non-empty.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const payload = {
       model: {
@@ -172,7 +283,14 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         maxBatchTotalTokens: 0,
         quantization: "",
         image: "",
-        lora_adapters: selectedAdapters, // This is now a list of adapter objects
+        lora_adapters: selectedAdapters,
+        args: args
+          .filter((arg) => arg.new || arg.updated)
+          .reduce((acc, arg) => ({ ...acc, [arg.name]: arg.value }), {}),
+        env_vars: envVars
+          .filter((env) => env.new || env.updated)
+          .reduce((acc, env) => ({ ...acc, [env.name]: env.value }), {}),
+        enable_tracing: enableTracing,
       },
     };
 
@@ -212,58 +330,71 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleTabChange = (value: string) => {
+    if (value !== "accelerators" && !formData.hostId) {
+      toast({
+        title: "Host Selection Required",
+        description:
+          "Please select a host from the Accelerators tab before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (value === "envVars" && !formData.engineId) {
+      toast({
+        title: "Engine Selection Required",
+        description:
+          "Please select an engine from the Deploy Config tab before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setActiveTab(value);
+  };
+
   const handleNext = () => {
     if (activeTab === "accelerators") {
+      if (!formData.hostId) {
+        toast({
+          title: "Host Selection Required",
+          description: "Please select a host before proceeding.",
+          variant: "destructive",
+        });
+        return;
+      }
       setActiveTab("deployConfig");
     } else if (activeTab === "deployConfig") {
+      if (!formData.engineId) {
+        toast({
+          title: "Engine Selection Required",
+          description: "Please select an engine before proceeding.",
+          variant: "destructive",
+        });
+        return;
+      }
       setActiveTab("envVars");
     }
   };
 
-  const handleEnvVarChange = (
-    index: number,
-    field: "name" | "value",
-    value: string
-  ) => {
-    const newEnvVars = [...envVars];
-    newEnvVars[index][field] = value;
-    setEnvVars(newEnvVars);
-  };
-
-  const handleSecretChange = (
-    index: number,
-    field: "name" | "value",
-    value: string
-  ) => {
-    const newSecrets = [...secrets];
-    newSecrets[index][field] = value;
-    setSecrets(newSecrets);
-  };
-
-  const addEnvVar = () => {
-    setEnvVars([...envVars, { name: "", value: "" }]);
-  };
-
-  const addSecret = () => {
-    setSecrets([...secrets, { name: "", value: "" }]);
-  };
-
   const handleAdapterChange = (adapter: Adapter, checked: boolean) => {
-    setSelectedAdapters(prev =>
-      checked
-        ? [...prev, adapter]
-        : prev.filter(a => a.id !== adapter.id)
+    setSelectedAdapters((prev) =>
+      checked ? [...prev, adapter] : prev.filter((a) => a.id !== adapter.id)
     );
   };
 
   return (
     <form onSubmit={handleSubmit} className="max-w-6xl mx-auto">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="accelerators">Accelerators</TabsTrigger>
-          <TabsTrigger value="deployConfig">Deploy Config</TabsTrigger>
-          <TabsTrigger value="envVars">
-            Environment Variables and Secrets
+          <TabsTrigger value="deployConfig" disabled={!formData.hostId}>
+            Deploy Config
+          </TabsTrigger>
+          <TabsTrigger
+            value="envVars"
+            disabled={!formData.hostId || !formData.engineId}
+          >
+            CLI Args and Env Variables
           </TabsTrigger>
         </TabsList>
         <TabsContent value="accelerators">
@@ -363,24 +494,44 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                   ))}
                 </SelectContent>
               </Select>
-              
+
               {formData.engineId && (
                 <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-2">Select Adapters</h3>
-                  <div className="space-y-2">
-                    {adapters.map((adapter) => (
-                      <div key={adapter.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={adapter.id}
-                          checked={selectedAdapters.some(a => a.id === adapter.id)}
-                          onCheckedChange={(checked) =>
-                            handleAdapterChange(adapter, checked as boolean)
-                          }
-                        />
-                        <Label htmlFor={adapter.id}>{adapter.name}</Label>
-                      </div>
-                    ))}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="enable-tracing"
+                      checked={enableTracing}
+                      onCheckedChange={setEnableTracing}
+                    />
+                    <Label htmlFor="enable-tracing">Enable Tracing</Label>
                   </div>
+
+                  {adapters.length > 0 && (
+                    <>
+                      <h3 className="text-lg font-semibold mb-2">
+                        Select Adapters
+                      </h3>
+                      <div className="space-y-2">
+                        {adapters.map((adapter) => (
+                          <div
+                            key={adapter.id}
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
+                              id={adapter.id}
+                              checked={selectedAdapters.some(
+                                (a) => a.id === adapter.id
+                              )}
+                              onCheckedChange={(checked) =>
+                                handleAdapterChange(adapter, checked as boolean)
+                              }
+                            />
+                            <Label htmlFor={adapter.id}>{adapter.name}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -395,54 +546,83 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         <TabsContent value="envVars">
           <Card>
             <CardHeader>
-              <CardTitle>Environment Variables and Secrets</CardTitle>
+              <CardTitle>CLI Args and Environment Variables</CardTitle>
             </CardHeader>
             <CardContent>
-              <h2 className="text-xl font-bold mb-4">Environment Variables</h2>
-              {envVars.map((envVar, index) => (
+              <h2 className="text-xl font-bold mb-4">CLI Arguments</h2>
+              {args.map((arg, index) => (
                 <div key={index} className="mb-4 flex space-x-2">
                   <Input
-                    value={envVar.name}
+                    value={arg.name}
+                    readOnly={!arg.editable || !arg.new}
+                    onChange={(e) =>
+                      handleArgChange(index, "name", e.target.value)
+                    }
+                    placeholder="Argument Name"
+                    required
+                  />
+                  <Input
+                    value={arg.value}
+                    onChange={(e) =>
+                      handleArgChange(index, "value", e.target.value)
+                    }
+                    placeholder="Value"
+                    readOnly={!arg.editable}
+                  />
+                  {arg.new && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => deleteArg(index)}
+                    >
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button type="button" variant="outline" onClick={addNewArgField}>
+                Add Argument
+              </Button>
+
+              <h2 className="text-xl font-bold mb-4 mt-6">
+                Environment Variables
+              </h2>
+              {envVars.map((env, index) => (
+                <div key={index} className="mb-4 flex space-x-2">
+                  <Input
+                    value={env.name}
+                    readOnly={!env.editable || !env.new}
                     onChange={(e) =>
                       handleEnvVarChange(index, "name", e.target.value)
                     }
-                    placeholder="Name"
+                    placeholder="Variable Name"
+                    required
                   />
                   <Input
-                    value={envVar.value}
+                    value={env.value}
                     onChange={(e) =>
                       handleEnvVarChange(index, "value", e.target.value)
                     }
                     placeholder="Value"
+                    readOnly={!env.editable}
                   />
+                  {env.new && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => deleteEnvVar(index)}
+                    >
+                      Delete
+                    </Button>
+                  )}
                 </div>
               ))}
-              <Button variant="outline" onClick={addEnvVar} className="mb-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addNewEnvVarField}
+              >
                 Add Environment Variable
-              </Button>
-
-              <h2 className="text-xl font-bold mb-4 mt-6">Secrets</h2>
-              {secrets.map((secret, index) => (
-                <div key={index} className="mb-4 flex space-x-2">
-                  <Input
-                    value={secret.name}
-                    onChange={(e) =>
-                      handleSecretChange(index, "name", e.target.value)
-                    }
-                    placeholder="Name"
-                  />
-                  <Input
-                    type="password"
-                    value={secret.value}
-                    onChange={(e) =>
-                      handleSecretChange(index, "value", e.target.value)
-                    }
-                    placeholder="Value"
-                  />
-                </div>
-              ))}
-              <Button variant="outline" onClick={addSecret} className="mb-4">
-                Add Secret
               </Button>
             </CardContent>
             <CardFooter>

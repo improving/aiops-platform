@@ -42,6 +42,8 @@ import { ChevronDownIcon } from "@radix-ui/react-icons";
 import { CommandList } from "@/components/ui/command";
 import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import JaegerEmbed from "@/components/JaegerEmbed";
+import { Input } from "@/components/ui/input";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -77,6 +79,8 @@ export default function InferenceEndpointDetailsPage({
     searchParams.get("tab") || "details"
   );
   const [selectedAdapter, setSelectedAdapter] = useState<any | null>(null);
+  const [serviceName, setServiceName] = useState<string | null>(null);
+  const [jaegerLimit, setJaegerLimit] = useState(20);
 
   useEffect(() => {
     const fetchInferenceInstance = async () => {
@@ -115,6 +119,15 @@ export default function InferenceEndpointDetailsPage({
     };
     fetchDashboards();
   }, [params.id]);
+
+  useEffect(() => {
+    if (dashboards.length > 0) {
+      const serviceParam = dashboards[0].query_params["var-service"];
+      if (serviceParam) {
+        setServiceName(serviceParam);
+      }
+    }
+  }, [dashboards]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -161,9 +174,10 @@ export default function InferenceEndpointDetailsPage({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="details">Details</TabsTrigger>
         <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
+        <TabsTrigger value="tracing">Tracing</TabsTrigger>
       </TabsList>
       <TabsContent value="details">
         <Card>
@@ -346,8 +360,85 @@ export default function InferenceEndpointDetailsPage({
           </CardContent>
         </Card>
       </TabsContent>
-
-      <Dialog open={!!selectedAdapter} onOpenChange={() => setSelectedAdapter(null)}>
+      <TabsContent value="tracing">
+        <Card>
+          <CardHeader>
+            <CardTitle>Traces</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-row items-center space-x-6">
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-[200px] justify-between"
+                  >
+                    {selectedTimeRange.label}
+                    <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput
+                      placeholder="Search time range..."
+                      className="h-9"
+                    />
+                    <CommandList>
+                      <CommandGroup>
+                        {timeRangeOptions.map((option) => (
+                          <CommandItem
+                            key={option.value}
+                            value={option.value.toString()}
+                            onSelect={() => {
+                              setSelectedTimeRange(option);
+                              setOpen(false);
+                            }}
+                          >
+                            {option.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <div className="flex flex-row items-center space-x-2">
+                <Label htmlFor="jaeger-limit" className="mb-1">Limit</Label>
+                <Input
+                  id="jaeger-limit"
+                  type="number"
+                  value={jaegerLimit}
+                  onChange={(e) => setJaegerLimit(Number(e.target.value))}
+                  min={1}
+                  max={1000}
+                  className="w-[100px]"
+                />
+              </div>
+            </div>
+            {serviceName && (
+              <JaegerEmbed
+                jaegerEndpoint={
+                  process.env.NEXT_PUBLIC_JAEGER_URL ||
+                  "http://192.0.2.208:16686"
+                }
+                serviceName={serviceName}
+                start={Date.now() - selectedTimeRange.value}
+                end={Date.now()}
+                limit={jaegerLimit}
+                lookback={
+                  (selectedTimeRange.value / (60 * 1000)).toString() + "m"
+                }
+              />
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      <Dialog
+        open={!!selectedAdapter}
+        onOpenChange={() => setSelectedAdapter(null)}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{selectedAdapter?.name} Details</DialogTitle>
@@ -359,7 +450,9 @@ export default function InferenceEndpointDetailsPage({
                   <div key={key} className="grid grid-cols-2 items-start gap-4">
                     <Label className="font-medium">{key}</Label>
                     <span className="text-sm">
-                      {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                      {typeof value === "object"
+                        ? JSON.stringify(value, null, 2)
+                        : String(value)}
                     </span>
                   </div>
                 ))}

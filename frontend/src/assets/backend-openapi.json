@@ -1208,7 +1208,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Finetune"
+                    "$ref": "#/components/schemas/FinetuneSchema"
                   },
                   "title": "Response List Finetunes V1Alpha1 Models  Model Id  Finetune Get"
                 }
@@ -1251,7 +1251,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FinetuneCreate"
+                "$ref": "#/components/schemas/FinetuneCreateSchema"
               }
             }
           }
@@ -1262,7 +1262,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Finetune"
+                  "$ref": "#/components/schemas/FinetuneSchema"
                 }
               }
             }
@@ -1316,7 +1316,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Finetune"
+                  "$ref": "#/components/schemas/FinetuneSchema"
                 }
               }
             }
@@ -1367,7 +1367,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FinetuneUpdate"
+                "$ref": "#/components/schemas/FinetuneUpdateSchema"
               }
             }
           }
@@ -1378,7 +1378,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Finetune"
+                  "$ref": "#/components/schemas/FinetuneSchema"
                 }
               }
             }
@@ -1553,6 +1553,108 @@
   },
   "components": {
     "schemas": {
+      "EngineDefaultConfigArgs": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "chart_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Type"
+          },
+          "defaultValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaultvalue"
+          },
+          "editable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "EngineDefaultConfigArgs"
+      },
+      "EngineDefaultConfigEnvVars": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "chart_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Type"
+          },
+          "defaultValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaultvalue"
+          },
+          "editable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "EngineDefaultConfigEnvVars"
+      },
       "EngineSchema": {
         "properties": {
           "id": {
@@ -1630,6 +1732,34 @@
             ],
             "title": "Vector Db Support",
             "default": false
+          },
+          "default_config": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EngineDefaultConfigEnvVars"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Config"
+          },
+          "default_args": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EngineDefaultConfigArgs"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Args"
           }
         },
         "type": "object",
@@ -1638,7 +1768,25 @@
         ],
         "title": "EngineSchema"
       },
-      "Finetune": {
+      "FinetuneCreateSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "params": {
+            "type": "object",
+            "title": "Params"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "params"
+        ],
+        "title": "FinetuneCreateSchema"
+      },
+      "FinetuneSchema": {
         "properties": {
           "name": {
             "type": "string",
@@ -1693,27 +1841,9 @@
           "created_at",
           "updated_at"
         ],
-        "title": "Finetune"
+        "title": "FinetuneSchema"
       },
-      "FinetuneCreate": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "params": {
-            "type": "object",
-            "title": "Params"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "params"
-        ],
-        "title": "FinetuneCreate"
-      },
-      "FinetuneUpdate": {
+      "FinetuneUpdateSchema": {
         "properties": {
           "name": {
             "anyOf": [
@@ -1726,7 +1856,7 @@
             ],
             "title": "Name"
           },
-          "model": {
+          "base_model": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ModelSchema"
@@ -1749,7 +1879,7 @@
           }
         },
         "type": "object",
-        "title": "FinetuneUpdate"
+        "title": "FinetuneUpdateSchema"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1907,6 +2037,34 @@
             ],
             "title": "Image"
           },
+          "env_vars": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Vars"
+          },
+          "args": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Args"
+          },
           "lora_adapters": {
             "items": {
               "$ref": "#/components/schemas/ModelAdapterReferenceSchema"
@@ -1914,6 +2072,18 @@
             "type": "array",
             "title": "Lora Adapters",
             "default": []
+          },
+          "enable_tracing": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Tracing",
+            "default": false
           }
         },
         "type": "object",
