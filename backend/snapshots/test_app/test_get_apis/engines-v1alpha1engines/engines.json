@@ -1,0 +1,97 @@
+[
+  {
+    "id": "551d8d80-6b00-4907-b8a8-44f4df5b7da1",
+    "name": "HuggingFace",
+    "llm_support": true,
+    "embedding_support": true,
+    "reranking_support": true,
+    "prompt_guard_support": false,
+    "vector_db_support": false,
+    "default_config": [
+      {
+        "name": "MAX_INPUT_TOKENS",
+        "chart_type": "llm",
+        "defaultValue": "6144",
+        "editable": true
+      },
+      {
+        "name": "MAX_TOTAL_TOKENS",
+        "chart_type": "llm",
+        "defaultValue": "8192",
+        "editable": true
+      },
+      {
+        "name": "HF_HUB_OFFLINE",
+        "chart_type": "llm",
+        "defaultValue": "1",
+        "editable": true
+      },
+      {
+        "name": "HF_HOME",
+        "chart_type": "llm",
+        "defaultValue": "/root/.cache/huggingface",
+        "editable": true
+      }
+    ],
+    "default_args": []
+  },
+  {
+    "id": "f2fd8a4a-5cfa-4c40-b834-8cf8d86343fc",
+    "name": "NIM",
+    "llm_support": true,
+    "embedding_support": true,
+    "reranking_support": true,
+    "prompt_guard_support": false,
+    "vector_db_support": false,
+    "default_config": [],
+    "default_args": []
+  },
+  {
+    "id": "49faea0e-40a8-4e14-832b-10d494f6bae0",
+    "name": "vLLM",
+    "llm_support": true,
+    "embedding_support": false,
+    "reranking_support": false,
+    "prompt_guard_support": false,
+    "vector_db_support": false,
+    "default_config": [
+      {
+        "name": "HF_HUB_OFFLINE",
+        "chart_type": "llm",
+        "defaultValue": "1",
+        "editable": true
+      },
+      {
+        "name": "HF_HUB_CACHE",
+        "chart_type": "llm",
+        "defaultValue": "/model",
+        "editable": true
+      }
+    ],
+    "default_args": [
+      {
+        "name": "max_model_len",
+        "chart_type": "llm",
+        "defaultValue": "4192",
+        "editable": true
+      },
+      {
+        "name": "port",
+        "chart_type": "llm",
+        "defaultValue": "8000",
+        "editable": true
+      }
+    ]
+  },
+  {
+    "id": "a975bb3b-d23b-48b1-af18-0c75b0ffe2d1",
+    "name": "OPEA",
+    "llm_support": false,
+    "embedding_support": false,
+    "reranking_support": false,
+    "prompt_guard_support": true,
+    "vector_db_support": false,
+    "default_config": [],
+    "default_args": []
+  }
+]

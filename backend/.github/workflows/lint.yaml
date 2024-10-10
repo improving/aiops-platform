@@ -41,7 +41,7 @@ jobs:
       - name: Run Tests
         id: tests
         run: |
-          pytest
+          ./hack/runtest.sh
 
       - name: Check for modifications
         run: |

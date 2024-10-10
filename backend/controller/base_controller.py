@@ -15,12 +15,16 @@ from utils.kubernetes_utils import get_core_v1_client
 
 class Controller(ABC):
 
-    def __init__(self, namespace="ai-stack"):
+    def __init__(self,
+                 namespace: str = "ai-stack",
+                 api_instance: client.CustomObjectsApi = None,
+                 core_v1_api: client.CoreV1Api = None,
+                 helm_client: HelmClient = None):
         self.logger = setup_logger(__name__)
-        self.api_instance = client.CustomObjectsApi()
-        self.core_v1_api = get_core_v1_client()
+        self.api_instance = api_instance or client.CustomObjectsApi()
+        self.core_v1_api = core_v1_api or get_core_v1_client()
         self.namespace = namespace
-        self.helm = HelmClient()
+        self.helm = helm_client or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))
 
     def _get_release_name(self, instance: InferenceInstanceSchema):
@@ -37,8 +41,8 @@ class Controller(ABC):
             f"app.kubernetes.io/instance={self._get_release_name(instance)},"
             f"app.kubernetes.io/name={engineChart.chart_name}")
 
-    async def _prepare_helm_values(self, instance: InferenceInstanceSchema,
-                                   engineChart: EngineChartsSchema):
+    async def prepare_helm_values(self, instance: InferenceInstanceSchema,
+                                  engineChart: EngineChartsSchema):
         template = self.jinja_env.get_template(
             f"{instance.engine.name.lower()}-{instance.model.category}-values.yaml.jinja"
         )
@@ -127,7 +131,7 @@ class Controller(ABC):
         self.logger.debug(f"Installing instance: {instance}")
         chart = await self._add_and_update_helm_repo(instance, engineChart)
         chart_name = self._get_release_name(instance)
-        values = await self._prepare_helm_values(instance, engineChart)
+        values = await self.prepare_helm_values(instance, engineChart)
 
         try:
             await self.helm.install_or_upgrade_release(
@@ -150,7 +154,7 @@ class Controller(ABC):
                       engineChart: EngineChartsSchema):
         chart = await self._add_and_update_helm_repo(instance, engineChart)
         chart_name = self._get_release_name(instance)
-        values = await self._prepare_helm_values(instance, engineChart)
+        values = await self.prepare_helm_values(instance, engineChart)
 
         try:
             await self.helm.install_or_upgrade_release(

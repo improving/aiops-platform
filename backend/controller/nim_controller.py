@@ -14,8 +14,9 @@ from .base_controller import Controller
 
 class NIMController(Controller):
 
-    def __init__(self):
-        super().__init__(namespace="nim")
+    def __init__(self, *args, **kwargs):
+        kwargs["namespace"] = "nim"
+        super().__init__(*args, **kwargs)
 
     def get_service_name(self, instance: InferenceInstanceSchema,
                          engineChart: EngineChartsSchema):

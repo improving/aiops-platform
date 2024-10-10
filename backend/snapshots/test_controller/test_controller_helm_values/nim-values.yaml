@@ -1,0 +1,26 @@
+image:
+  repository: nvcr.io/nim/meta/llama3-8b-instruct
+  tag: 1.0.3
+imagePullSecrets:
+- name: nvcrimagepullsecret
+metrics:
+  enabled: true
+  serviceMonitor:
+    additionalLabels:
+      release: prometheus
+    enabled: true
+model:
+  ngcAPISecret: ngc-api
+nodeSelector:
+  kubernetes.io/hostname: gpu-node-3
+persistence:
+  enabled: true
+  existingClaim: nim-pvc
+resources:
+  limits:
+    nvidia.com/gpu: 1
+  requests:
+    nvidia.com/gpu: 1
+service:
+  port: 80
+  type: LoadBalancer

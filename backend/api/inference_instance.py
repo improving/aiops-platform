@@ -10,6 +10,7 @@ from kubernetes import client
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from controller import get_controller
 from db.database import SessionLocal, get_db
 from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
@@ -23,7 +24,6 @@ from models.models import DBModel
 from schemas.inference_instance import InferenceInstanceSchema
 from schemas.inference_instance_dashboards import \
     InferenceInstanceDashboardsSchema
-from utils.controller_utils import get_controller
 from utils.kubernetes_utils import (get_pod_status_and_readiness,
                                     get_service_endpoint)
 
