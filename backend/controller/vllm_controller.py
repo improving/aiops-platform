@@ -1,3 +1,5 @@
+import os
+
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
 
@@ -20,6 +22,15 @@ class VLLMController(Controller):
                 }
             }
         }
+
+        if instance.config and instance.config.enable_tracing:
+            if instance.config.args is None:
+                instance.config.args = {}
+            instance.config.args["--otlp-traces-endpoint"] = os.environ.get(
+                "TRACING_URL",
+                "grpc://infra-jaeger-collector.observability.svc:4317")
+            instance.config.args["--collect-detailed-traces"] = os.environ.get(
+                "VLLM_COLLECT_DETAILED_TRACES", "all")
 
         if instance.config and instance.config.quantization:
             context["quantization"] = str(instance.config.quantization.lower())
@@ -108,10 +119,14 @@ class VLLMController(Controller):
                     "value": str(value)  # Ensure the value is a string
                 })
             else:
-                args.append({
+                arg = {
                     "name": key,
                     "value": str(value)  # Ensure the value is a string
-                })
+                }
+
+                if value == "" or value is None:
+                    arg.pop("value")
+                args.append(arg)
 
         self.logger.info(f"Final args: {args}")
         context["args"] = args

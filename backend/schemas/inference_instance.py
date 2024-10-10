@@ -29,6 +29,7 @@ class InferenceInstanceConfigParamsSchema(BaseModel):
     env_vars: Optional[dict[str, str]] = None
     args: Optional[dict[str, str]] = None
     lora_adapters: List[ModelAdapterReferenceSchema] = []
+    enable_tracing: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 

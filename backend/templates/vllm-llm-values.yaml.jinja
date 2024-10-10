@@ -17,7 +17,9 @@ args:
 {% if args is defined %}
 {% for arg in args %}
   - {{ arg.name }}
+{% if arg.value is defined and arg.value is not none %}
   - {{ arg.value }}
+{% endif %}
 {% endfor %}
 {% endif %}
 {% if lora_adapters is defined %}

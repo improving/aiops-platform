@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Table
+from sqlalchemy import (JSON, Boolean, Column, ForeignKey, Integer, String,
+                        Table)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -31,6 +32,7 @@ class DBInferenceInstanceConfigParams(Base):
     image = Column(String)
     env_vars = Column(JSON)
     args = Column(JSON)
+    enable_tracing = Column(Boolean)
 
     # Define the many-to-many relationship
     lora_adapters = relationship(

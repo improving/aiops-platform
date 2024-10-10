@@ -44,6 +44,16 @@ class HuggingFaceController(Controller):
             },
         }
 
+        if instance.config.enable_tracing:
+            if instance.config.env_vars is None:
+                instance.config.env_vars = {}
+            instance.config.env_vars["OTLP_ENDPOINT"] = os.environ.get(
+                "TRACING_URL",
+                "grpc://infra-jaeger-collector.observability.svc:4317")
+            instance.config.env_vars[
+                "OTLP_SERVICE_NAME"] = self.get_service_name(
+                    instance, engineChart)
+
         if instance.config and instance.config.maxInputLength:
             context["env"].append({
                 "name": "MAX_INPUT_TOKENS",
