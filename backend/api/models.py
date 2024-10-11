@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from db.database import get_db
+from models.inference_instance import DBInferenceInstance
 from models.models import DBModel
 from schemas.model import ModelSchema
 
@@ -97,3 +98,28 @@ def update_model(id: uuid.UUID,
     db.refresh(db_model)
     db_model.countAdapters = len(db_model.model_adapters)
     return db_model
+
+
+@router.delete("/v1alpha1/models/{id}")
+def delete_model(id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Delete a model from the database.
+
+    Returns:
+        dict: A message confirming the deletion.
+
+    Raises:
+        HTTPException: If the model is not found or is still in use by instances.
+    """
+    db_model = db.query(DBModel).filter(DBModel.id == id).first()
+    if not db_model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    ## Check if any instances are using this model
+    instances = (db.query(DBInferenceInstance).filter(
+        DBInferenceInstance.model_id == id).count())
+    if instances > 0:
+        raise HTTPException(status_code=400,
+                            detail="Model is still in use by instances")
+    db.delete(db_model)
+    db.commit()
+    return {"message": "Model deleted successfully"}

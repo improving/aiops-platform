@@ -6,10 +6,12 @@ import yaml
 from fastapi.testclient import TestClient
 
 from app import app
-from controller import get_controller
+from controller import NotebooksController, VectorDBController, get_controller
 from schemas import (EngineChartsSchema, EngineSchema,
                      InferenceInstanceConfigParamsSchema,
-                     InferenceInstanceSchema, ModelSchema)
+                     InferenceInstanceSchema, ModelSchema,
+                     NotebookInstanceSchema, VectorDBInstanceSchema,
+                     VectorDBSchema)
 
 
 def test_controller():
@@ -19,7 +21,7 @@ def test_controller():
 
 
 @pytest.mark.asyncio
-async def test_controller_helm_values(snapshot):  # pylint: disable=R0914
+async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
     client = TestClient(app)
     engines = client.get("/v1alpha1/engines").json()
     models = client.get("/v1alpha1/models").json()
@@ -91,3 +93,57 @@ async def test_controller_helm_values(snapshot):  # pylint: disable=R0914
         values_yaml = yaml.dump(values)
         snapshot.assert_match(values_yaml,
                               engine_name.lower() + "-values.yaml")
+
+
+@pytest.mark.asyncio
+async def test_notebook_controller_helm_values(snapshot):
+    controller = NotebooksController(core_v1_api=mock.Mock())
+    test_data = [
+        NotebookInstanceSchema(
+            name="notebook-jupyter",
+            type="jupyter",
+            framework="pytorch",
+            resources_cpu="0.5",
+            resources_memory="1Gi",
+            nvidia_gpu=False,
+            storage_size="5Gi",
+        ),
+        NotebookInstanceSchema(
+            name="notebook-vscode",
+            type="vscode",
+            framework="",
+            resources_cpu="1",
+            resources_memory="4Gi",
+            nvidia_gpu=False,
+            storage_size="5Gi",
+        ),
+        NotebookInstanceSchema(
+            name="notebook-gpu",
+            type="jupyter",
+            framework="pytorch",
+            resources_cpu="2",
+            resources_memory="16Gi",
+            nvidia_gpu=True,
+            resources_gpu="2",
+            storage_size="10Gi",
+        ),
+    ]
+    for data in test_data:
+        values = await controller.prepare_helm_values(data)
+        values_yaml = yaml.dump(values)
+        snapshot.assert_match(values_yaml, f"notebook-values-{data.name}.yaml")
+
+
+@pytest.mark.asyncio
+async def test_vectordb_controller_helm_values(snapshot):
+    client = TestClient(app)
+    vectordbs = client.get("/v1alpha1/vectordb").json()
+    vector_db_schemas = [VectorDBSchema(**vectordb) for vectordb in vectordbs]
+    controller = VectorDBController(core_v1_api=mock.Mock())
+    assert controller is not None
+    for vector_db_schema in vector_db_schemas:
+        instance = VectorDBInstanceSchema(vectorDB=vector_db_schema)
+        values = await controller.prepare_helm_values(instance)
+        values_yaml = yaml.dump(values)
+        snapshot.assert_match(
+            values_yaml, f"vectordb-values-{vector_db_schema.chart_name}.yaml")

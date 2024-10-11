@@ -11,14 +11,20 @@ from schemas.vectordb_instance import VectorDBInstanceSchema
 from utils.kubernetes_utils import get_core_v1_client
 
 
-class VectorDBController():
+class VectorDBController:
 
-    def __init__(self, namespace="ai-stack"):
+    def __init__(
+        self,
+        namespace="ai-stack",
+        api_instance: client.CustomObjectsApi = None,
+        core_v1_api: client.CoreV1Api = None,
+        helm_client: HelmClient = None,
+    ):
         self.logger = setup_logger(__name__)
-        self.api_instance = client.CustomObjectsApi()
-        self.core_v1_api = get_core_v1_client()
+        self.api_instance = api_instance or client.CustomObjectsApi()
+        self.core_v1_api = core_v1_api or get_core_v1_client()
         self.namespace = namespace
-        self.helm = HelmClient()
+        self.helm = helm_client or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))
 
     def _get_release_name(self, instance: VectorDBInstanceSchema):
@@ -32,7 +38,7 @@ class VectorDBController():
             f"app.kubernetes.io/instance={self._get_release_name(instance)},"
             f"app.kubernetes.io/name={instance.vectorDB.chart_name}")
 
-    async def _prepare_helm_values(self, instance: VectorDBInstanceSchema):
+    async def prepare_helm_values(self, instance: VectorDBInstanceSchema):
         template = self.jinja_env.get_template(
             f"{instance.vectorDB.chart_name.lower()}-values.yaml.jinja")
 
@@ -63,7 +69,7 @@ class VectorDBController():
         self.logger.debug(f"Installing instance: {instance}")
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_release_name(instance)
-        values = await self._prepare_helm_values(instance)
+        values = await self.prepare_helm_values(instance)
 
         try:
             await self.helm.install_or_upgrade_release(
@@ -82,7 +88,7 @@ class VectorDBController():
     async def upgrade(self, instance: VectorDBInstanceSchema):
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_release_name(instance)
-        values = await self._prepare_helm_values(instance)
+        values = await self.prepare_helm_values(instance)
 
         try:
             await self.helm.install_or_upgrade_release(

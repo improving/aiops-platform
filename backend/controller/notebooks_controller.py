@@ -14,11 +14,14 @@ from .base_controller import (HelmInstallError, HelmUninstallError,
 
 class NotebooksController():
 
-    def __init__(self):
+    def __init__(self,
+                 api_instance: client.CustomObjectsApi = None,
+                 core_v1_api: client.CoreV1Api = None,
+                 helm: HelmClient = None):
         self.logger = setup_logger(__name__)
-        self.api_instance = client.CustomObjectsApi()
-        self.core_v1_api = get_core_v1_client()
-        self.helm = HelmClient()
+        self.api_instance = api_instance or client.CustomObjectsApi()
+        self.core_v1_api = core_v1_api or get_core_v1_client()
+        self.helm = helm or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader("templates"))
 
     def _get_release_name(self, instance: NotebookInstanceSchema):
@@ -33,7 +36,7 @@ class NotebooksController():
             f"app.kubernetes.io/instance={self._get_release_name(instance)},"
             f"app.kubernetes.io/name=kf-notebooks")
 
-    async def _prepare_helm_values(self, instance: NotebookInstanceSchema):
+    async def prepare_helm_values(self, instance: NotebookInstanceSchema):
         template = self.jinja_env.get_template(
             "kf-notebooks-values.yaml.jinja")
         context = self._get_base_context(instance)
@@ -93,7 +96,8 @@ class NotebooksController():
             },
             "storage": {
                 "size": instance.storage_size,
-            }
+            },
+            "nvidia_gpu": instance.nvidia_gpu,
         }
 
         # Filter out empty or None values
@@ -158,7 +162,7 @@ class NotebooksController():
         self.logger.debug(f"Installing instance: {instance}")
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_release_name(instance)
-        values = await self._prepare_helm_values(instance)
+        values = await self.prepare_helm_values(instance)
 
         try:
             await self.helm.install_or_upgrade_release(
@@ -176,7 +180,7 @@ class NotebooksController():
     async def upgrade(self, instance: NotebookInstanceSchema):
         chart = await self._add_and_update_helm_repo(instance)
         chart_name = self._get_release_name(instance)
-        values = await self._prepare_helm_values(instance)
+        values = await self.prepare_helm_values(instance)
 
         try:
             await self.helm.install_or_upgrade_release(

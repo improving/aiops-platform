@@ -1,0 +1,38 @@
+notebooks:
+  jupyter:
+    enabled: true
+    image:
+      pullPolicy: IfNotPresent
+      repository: kubeflownotebookswg/jupyter-pytorch-cuda-full
+      tag: null
+    name: notebook-gpu
+    resources:
+      limits:
+        cpu: '2'
+        memory: 16Gi
+        nvidia.com/gpu: '2'
+      requests:
+        cpu: '2'
+        memory: 16Gi
+    storage:
+      size: 10Gi
+  vscode:
+    enabled: false
+    image:
+      pullPolicy: IfNotPresent
+      repository: kubeflownotebookswg/jupyter-pytorch-cuda-full
+      tag: null
+    name: notebook-gpu
+    resources:
+      limits:
+        cpu: '2'
+        memory: 16Gi
+      requests:
+        cpu: '2'
+        memory: 16Gi
+    storage:
+      size: 10Gi
+service:
+  enabled: true
+  port: 80
+  type: LoadBalancer

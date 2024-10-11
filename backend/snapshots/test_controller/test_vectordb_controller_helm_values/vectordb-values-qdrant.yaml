@@ -1,0 +1,10 @@
+containerSecurityContext:
+  runAsGroup: 65534
+  runAsUser: 65534
+image:
+  useUnprivilegedImage: true
+podSecurityContext:
+  fsGroup: 1000
+service:
+  type: LoadBalancer
+updateVolumeFsOwnership: false

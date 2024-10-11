@@ -1,6 +1,8 @@
 #!/bin/bash
 echo "Received arguments: $@"
 
+export TEST_MODE=true
+
 # Run tests
 if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "Usage: ./hack/runtest.sh [--update-snapshots | -u] [--cleanup | -c]"
