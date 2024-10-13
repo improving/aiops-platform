@@ -144,7 +144,7 @@ export default function Header() {
               src="https://github.com/infracloudio.png"
               alt="User avatar"
             />
-            <AvatarFallback>CN</AvatarFallback>
+            <AvatarFallback>IC</AvatarFallback>
           </Avatar>
         </div>
       </div>

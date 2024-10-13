@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { VectorDBSchema } from "@/types/vectordb";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
-import { AxiosError } from "axios";
+import { parseApiError } from "@/lib/utils";
 
 interface CreateVectorDBInstanceDialogProps {
   vectorDB: VectorDBSchema;
@@ -43,21 +43,7 @@ export default function CreateVectorDBInstanceDialog({
       });
       router.push("/vector-databases/endpoints");
     } catch (error) {
-      console.error("Error creating vector database instance:", error);
-      if (error instanceof AxiosError) {
-        toast({
-          title: "Error",
-          description: `Failed to create instance: ${error.response?.data?.message || error.message}`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description:
-            "An unexpected error occurred while creating the instance",
-          variant: "destructive",
-        });
-      }
+      toast(parseApiError(error));
     } finally {
       setIsCreating(false);
       onClose();

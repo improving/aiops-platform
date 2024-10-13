@@ -23,6 +23,8 @@ import {
 import { FineTuneConfig, FineTuneParams, Dataset, Model } from "@/types/models";
 import yaml from "yaml";
 import { FileIcon, RocketIcon, UploadIcon } from "@radix-ui/react-icons";
+import { modelService } from "@/services/modelService";
+import { parseApiError } from "@/lib/utils";
 
 export default function ModelFineTune({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -32,16 +34,19 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     async function fetchModel() {
-      const response = await fetch(`/api/v1alpha1/models/${params.id}`);
-      const data = await response.json();
-      setModel(data);
-      setFineTuneConfig((prev) => ({
-        ...prev,
-        base_model: data.modelId,
-      }));
+      try {
+        const data = await modelService.getModelById(params.id);
+        setModel(data);
+        setFineTuneConfig((prev) => ({
+          ...prev,
+          base_model: data.modelId,
+        }));
+      } catch (error) {
+        toast(parseApiError(error));
+      }
     }
     fetchModel();
-  }, [params.id]);
+  }, [params.id, toast]);
 
   const [fineTuneConfig, setFineTuneConfig] = useState<FineTuneConfig>({
     task: "",
@@ -86,38 +91,18 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     e.preventDefault();
 
     try {
-      const response = await fetch(
-        `/api/v1alpha1/models/${params.id}/finetune`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: fineTuneConfig.project_name,
-            params: fineTuneConfig,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to start fine-tuning process");
-      }
-
-      const data = await response.json();
+      await modelService.startFineTuning(params.id, {
+        name: fineTuneConfig.project_name,
+        params: fineTuneConfig,
+      });
       toast({
         title: "Success",
         description: "Fine-tuning process started successfully",
+        variant: "success",
       });
-      // Optionally, redirect to a page showing fine-tuning progress
       router.push(`/models/${params.id}?tab=finetune`);
     } catch (error) {
-      console.error("Error starting fine-tuning process:", error);
-      toast({
-        title: "Error",
-        description: "Failed to start fine-tuning process",
-        variant: "destructive",
-      });
+      toast(parseApiError(error));
     }
   };
 
@@ -167,6 +152,7 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
           toast({
             title: "Success",
             description: "YAML file imported successfully",
+            variant: "success",
           });
         } catch (error) {
           console.error("Error parsing YAML:", error);

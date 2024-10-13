@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Pencil2Icon,
-  TrashIcon,
   PlusIcon,
   RocketIcon,
   HandIcon,
@@ -42,6 +41,10 @@ import {
 import { Model, Adapter, FineTuneJob } from "@/types/models";
 import Link from "next/link";
 import yaml from "yaml";
+import { modelService } from "@/services/modelService";
+import { useToast } from "@/components/hooks/use-toast";
+import { DeleteButton } from "@/components/DeleteButton";
+import { parseApiError } from "@/lib/utils";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -74,66 +77,48 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   const [isViewLogsDialogOpen, setIsViewLogsDialogOpen] = useState(false);
   const [selectedJobParams, setSelectedJobParams] = useState<string>("");
   const [selectedJobLogs, setSelectedJobLogs] = useState<string>("");
+  const { toast } = useToast();
+
+  const fetchAdapters = useCallback(async () => {
+    try {
+      const data = await modelService.getAdapters(params.id);
+      setAdapters(data);
+    } catch (error) {
+      toast(parseApiError(error));
+    }
+  }, [params.id, toast]);
 
   useEffect(() => {
     const fetchModelDetails = async () => {
       try {
-        const response = await fetch(`/api/v1alpha1/models/${params.id}`);
-        if (!response.ok) {
-          throw new Error("Failed to fetch model details");
-        }
-        const data = await response.json();
+        const data = await modelService.getModelById(params.id);
         setModel(data);
-        setLoading(false);
       } catch (error) {
-        console.error("Error fetching model details:", error);
-        setError("Failed to load model details");
+        toast(parseApiError(error));
+      } finally {
         setLoading(false);
-      }
-    };
-
-    const fetchAdapters = async () => {
-      try {
-        const response = await fetch(
-          `/api/v1alpha1/model/${params.id}/adapters`
-        );
-        if (!response.ok) {
-          throw new Error("Failed to fetch adapters");
-        }
-        const data = await response.json();
-        setAdapters(data);
-      } catch (error) {
-        console.error("Error fetching adapters:", error);
-        setError("Failed to load adapters");
       }
     };
 
     const fetchFineTuneJobs = async () => {
       try {
-        const response = await fetch(
-          `/api/v1alpha1/models/${params.id}/finetune`
-        );
-        if (!response.ok) {
-          throw new Error("Failed to fetch fine-tune jobs");
-        }
-        const data = await response.json();
+        const data = await modelService.getFineTuneJobs(params.id);
         setFineTuneJobs(
           data.sort(
-            (a: FineTuneJob, b: FineTuneJob) =>
+            (a, b) =>
               new Date(b.created_at).getTime() -
               new Date(a.created_at).getTime()
           )
         );
       } catch (error) {
-        console.error("Error fetching fine-tune jobs:", error);
-        setError("Failed to load fine-tune jobs");
+        toast(parseApiError(error));
       }
     };
 
     fetchModelDetails();
     fetchAdapters();
     fetchFineTuneJobs();
-  }, [params.id]);
+  }, [params.id, toast, fetchAdapters]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -146,67 +131,29 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
 
   const handleCreateAdapter = async () => {
     try {
-      const response = await fetch(
-        `/api/v1alpha1/model/${params.id}/adapters`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: newAdapterName,
-            path: newAdapterPath,
-            hf_id: newAdapterHfId,
-            base_model: {
-              id: model?.id,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to create adapter");
-      }
-
-      // Refresh the adapters list
-      const updatedAdapters = await fetch(
-        `/api/v1alpha1/model/${params.id}/adapters`
-      ).then((res) => res.json());
+      await modelService.createAdapter(params.id, {
+        name: newAdapterName,
+        path: newAdapterPath,
+        hf_id: newAdapterHfId,
+      });
+      const updatedAdapters = await modelService.getAdapters(params.id);
       setAdapters(updatedAdapters);
-
-      // Reset form fields and close dialog
       setNewAdapterName("");
       setNewAdapterHfId("");
       setNewAdapterPath("");
       setIsImportDialogOpen(false);
+      toast({
+        title: "Success",
+        description: "Adapter created successfully",
+        variant: "success",
+      });
     } catch (error) {
-      console.error("Error creating adapter:", error);
-      setError("Failed to create adapter");
+      toast(parseApiError(error));
     }
   };
 
   const handleDeleteAdapter = async (adapterId: string) => {
-    try {
-      const response = await fetch(
-        `/api/v1alpha1/model/${params.id}/adapters/${adapterId}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to delete adapter");
-      }
-
-      // Refresh the adapters list
-      const updatedAdapters = await fetch(
-        `/api/v1alpha1/model/${params.id}/adapters`
-      ).then((res) => res.json());
-      setAdapters(updatedAdapters);
-    } catch (error) {
-      console.error("Error deleting adapter:", error);
-      setError("Failed to delete adapter");
-    }
+    await modelService.deleteAdapter(params.id, adapterId);
   };
 
   const handleEditAdapter = (adapter: Adapter) => {
@@ -218,40 +165,22 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
     if (!editingAdapter) return;
 
     try {
-      const response = await fetch(
-        `/api/v1alpha1/model/${params.id}/adapters/${editingAdapter.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: editingAdapter.name,
-            hf_id: editingAdapter.hf_id,
-            path: editingAdapter.path,
-            base_model: {
-              id: model?.id,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to update adapter");
-      }
-
-      // Refresh the adapters list
-      const updatedAdapters = await fetch(
-        `/api/v1alpha1/model/${params.id}/adapters`
-      ).then((res) => res.json());
+      await modelService.updateAdapter(params.id, editingAdapter.id, {
+        name: editingAdapter.name,
+        hf_id: editingAdapter.hf_id,
+        path: editingAdapter.path || "",
+      });
+      const updatedAdapters = await modelService.getAdapters(params.id);
       setAdapters(updatedAdapters);
-
-      // Close the edit dialog
       setIsEditDialogOpen(false);
       setEditingAdapter(null);
+      toast({
+        title: "Success",
+        description: "Adapter updated successfully",
+        variant: "success",
+      });
     } catch (error) {
-      console.error("Error updating adapter:", error);
-      setError("Failed to update adapter");
+      toast(parseApiError(error));
     }
   };
 
@@ -262,39 +191,16 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
 
   const handleViewLogs = async (jobId: string) => {
     try {
-      const response = await fetch(
-        `/api/v1alpha1/models/${params.id}/finetune/${jobId}/logs`
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch logs");
-      }
-      const logs = await response.text();
+      const logs = await modelService.getFineTuneJobLogs(params.id, jobId);
       setSelectedJobLogs(logs);
       setIsViewLogsDialogOpen(true);
     } catch (error) {
-      console.error("Error fetching logs:", error);
-      setError("Failed to load logs");
+      toast(parseApiError(error));
     }
   };
 
   const handleDeleteFineTuneJob = async (jobId: string) => {
-    if (confirm("Are you sure you want to delete this fine-tune job?")) {
-      try {
-        const response = await fetch(
-          `/api/v1alpha1/models/${params.id}/finetune/${jobId}`,
-          {
-            method: "DELETE",
-          }
-        );
-        if (!response.ok) {
-          throw new Error("Failed to delete fine-tune job");
-        }
-        setFineTuneJobs(fineTuneJobs.filter((job) => job.id !== jobId));
-      } catch (error) {
-        console.error("Error deleting fine-tune job:", error);
-        setError("Failed to delete fine-tune job");
-      }
-    }
+    await modelService.deleteFineTuneJob(params.id, jobId);
   };
 
   if (loading) {
@@ -442,34 +348,13 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                         size="sm"
                         className="mr-2"
                         onClick={() => handleEditAdapter(adapter)}
-                      >
-                        <Pencil2Icon className="h-4 w-4" />
-                      </Button>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <TrashIcon className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>
-                              Are you sure you want to delete this adapter?
-                            </DialogTitle>
-                            <DialogDescription>
-                              This action cannot be undone.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <DialogFooter>
-                            <Button
-                              variant="destructive"
-                              onClick={() => handleDeleteAdapter(adapter.id)}
-                            >
-                              Delete
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                        icon={<Pencil2Icon className="h-4 w-4" />}
+                      ></Button>
+                      <DeleteButton
+                        buttonText=""
+                        onDelete={() => handleDeleteAdapter(adapter.id)}
+                        onSuccess={() => fetchAdapters()}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -534,13 +419,15 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                       {new Date(job.created_at).toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteFineTuneJob(job.id)}
-                      >
-                        <TrashIcon className="mr-2 h-4 w-4" />
-                      </Button>
+                      <DeleteButton
+                        buttonText=""
+                        onDelete={() => handleDeleteFineTuneJob(job.id)}
+                        onSuccess={() =>
+                          setFineTuneJobs(
+                            fineTuneJobs.filter((jobs) => jobs.id !== job.id)
+                          )
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

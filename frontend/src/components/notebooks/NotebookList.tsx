@@ -15,6 +15,7 @@ import { OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Notebook } from "@/types/notebook";
 import { notebookService } from "@/services/notebookService";
 import { useToast } from "@/components/hooks/use-toast";
+import { parseApiError } from "@/lib/utils";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -28,12 +29,7 @@ export default function NotebookList() {
         const data = await notebookService.getNotebooks();
         setNotebooks(data);
       } catch (error) {
-        console.error("Error fetching notebooks:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch notebooks",
-          variant: "destructive",
-        });
+        toast(parseApiError(error));
       } finally {
         setIsLoading(false);
       }

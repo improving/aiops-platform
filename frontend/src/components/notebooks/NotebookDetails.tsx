@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { notebookService } from "@/services/notebookService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
+import { parseApiError } from "@/lib/utils";
 
 interface NotebookDetailsProps {
   notebookId: string;
@@ -33,12 +34,7 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
         const data = await notebookService.getNotebookById(notebookId);
         setNotebook(data);
       } catch (error) {
-        console.error("Error fetching notebook details:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch notebook details",
-          variant: "destructive",
-        });
+        toast(parseApiError(error));
       } finally {
         setIsLoading(false);
       }

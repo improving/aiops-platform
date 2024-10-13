@@ -24,6 +24,8 @@ import { Model } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import ImportModelDialog from "@/components/models/ImportModelDialog";
 import Image from "next/image";
+import { modelService } from "@/services/modelService";
+import { parseApiError } from "@/lib/utils";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -58,21 +60,12 @@ export default function ModelCatalog() {
 
   const fetchModels = useCallback(async () => {
     try {
-      const response = await fetch("/api/v1alpha1/models");
-      if (!response.ok) {
-        throw new Error("Failed to fetch models");
-      }
-      const data = await response.json();
+      const data = await modelService.getModels();
       setModels(data);
     } catch (error) {
-      console.error("Error fetching models:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch models. Please try again.",
-        variant: "destructive",
-      });
+      toast(parseApiError(error));
     }
-  }, [toast]); // Added fetchModels to the dependency array
+  }, [toast]);
 
   useEffect(() => {
     fetchModels();

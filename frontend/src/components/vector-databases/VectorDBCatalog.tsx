@@ -8,6 +8,7 @@ import CreateVectorDBInstanceDialog from "./CreateVectorDBInstanceDialog";
 import { RocketIcon } from "@radix-ui/react-icons";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
+import { parseApiError } from "@/lib/utils";
 
 export default function VectorDBCatalog() {
   const [vectorDBs, setVectorDBs] = useState<VectorDBSchema[]>([]);
@@ -24,12 +25,7 @@ export default function VectorDBCatalog() {
         const data = await vectorDBService.getVectorDBs();
         setVectorDBs(data);
       } catch (error) {
-        console.error("Error fetching vector databases:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch vector databases",
-          variant: "destructive",
-        });
+        toast(parseApiError(error));
       } finally {
         setIsLoading(false);
       }

@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/hooks/use-toast";
+import { modelService } from "@/services/modelService";
+import { parseApiError } from "@/lib/utils";
 
 interface ImportModelDialogProps {
   isOpen: boolean;
@@ -13,7 +21,11 @@ interface ImportModelDialogProps {
   onSuccess: () => void;
 }
 
-export default function ImportModelDialog({ isOpen, onClose, onSuccess }: ImportModelDialogProps) {
+export default function ImportModelDialog({
+  isOpen,
+  onClose,
+  onSuccess,
+}: ImportModelDialogProps) {
   const [name, setName] = useState("");
   const [modelId, setModelId] = useState("");
   const [description, setDescription] = useState("");
@@ -28,33 +40,23 @@ export default function ImportModelDialog({ isOpen, onClose, onSuccess }: Import
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/v1alpha1/models", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          modelId,
-          description,
-          category,
-          subcategory,
-          size: parseInt(size, 10),
-        }),
+      await modelService.importModel({
+        name,
+        modelId,
+        description,
+        category,
+        subcategory,
+        size: parseInt(size, 10),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to import model");
-      }
-
+      toast({
+        title: "Success",
+        description: "Model imported successfully",
+        variant: "success",
+      });
       onSuccess();
     } catch (error) {
-      console.error("Error importing model:", error);
-      toast({
-        title: "Error",
-        description: "Failed to import model. Please try again.",
-        variant: "destructive",
-      });
+      toast(parseApiError(error));
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +112,7 @@ export default function ImportModelDialog({ isOpen, onClose, onSuccess }: Import
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} icon>
               {isLoading ? "Importing..." : "Import"}
             </Button>
           </DialogFooter>

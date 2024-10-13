@@ -4,29 +4,27 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
-  TrashIcon,
+  ChevronDownIcon,
   ClipboardCopyIcon,
   OpenInNewWindowIcon,
 } from "@radix-ui/react-icons";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
   CardFooter,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
+import JaegerEmbed from "@/components/JaegerEmbed";
+import { Input } from "@/components/ui/input";
+import { GRAFANA_URL, JAEGER_URL } from "@/constants";
+import { modelService } from "@/services/modelService";
+import { useToast } from "@/components/hooks/use-toast";
+import { DeleteButton } from "@/components/DeleteButton";
 import {
   Command,
   CommandGroup,
@@ -38,13 +36,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChevronDownIcon } from "@radix-ui/react-icons";
 import { CommandList } from "@/components/ui/command";
-import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import JaegerEmbed from "@/components/JaegerEmbed";
-import { Input } from "@/components/ui/input";
-import { GRAFANA_URL, JAEGER_URL } from "@/constants";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { parseApiError } from "@/lib/utils";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -68,7 +68,6 @@ export default function InferenceEndpointDetailsPage({
   const [inferenceInstance, setInferenceInstance] =
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [dashboards, setDashboards] = useState<InferenceInstanceDashboard[]>(
     []
   );
@@ -82,44 +81,34 @@ export default function InferenceEndpointDetailsPage({
   const [selectedAdapter, setSelectedAdapter] = useState<any | null>(null);
   const [serviceName, setServiceName] = useState<string | null>(null);
   const [jaegerLimit, setJaegerLimit] = useState(20);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchInferenceInstance = async () => {
       try {
-        const response = await fetch(
-          `/api/v1alpha1/inferenceInstance/${params.id}`
-        );
-        if (!response.ok) {
-          throw new Error("Failed to fetch inference instance");
-        }
-        const data = await response.json();
+        const data = await modelService.getInferenceInstance(params.id);
         setInferenceInstance(data);
-        setLoading(false);
       } catch (error) {
-        console.error("Error fetching inference instance:", error);
-        setError("Failed to load inference instance details");
+        toast(parseApiError(error));
+      } finally {
         setLoading(false);
       }
     };
-    fetchInferenceInstance();
 
     const fetchDashboards = async () => {
       try {
-        const response = await fetch(
-          `/api/v1alpha1/inferenceInstance/${params.id}/dashboards`
+        const data = await modelService.getInferenceInstanceDashboards(
+          params.id
         );
-        if (!response.ok) {
-          throw new Error("Failed to fetch dashboards");
-        }
-        const data = await response.json();
         setDashboards(data);
       } catch (error) {
-        console.error("Error fetching dashboards:", error);
-        setError("Failed to load dashboards");
+        toast(parseApiError(error));
       }
     };
+
+    fetchInferenceInstance();
     fetchDashboards();
-  }, [params.id]);
+  }, [params.id, toast]);
 
   useEffect(() => {
     if (dashboards.length > 0) {
@@ -138,21 +127,7 @@ export default function InferenceEndpointDetailsPage({
   };
 
   const handleDelete = async () => {
-    try {
-      const response = await fetch(
-        `/api/v1alpha1/inferenceInstance/${params.id}`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (!response.ok) {
-        throw new Error("Failed to delete inference instance");
-      }
-      router.push("/models/endpoints");
-    } catch (error) {
-      console.error("Error deleting inference instance:", error);
-      setError("Failed to delete inference instance");
-    }
+    await modelService.deleteInferenceInstance(params.id);
   };
 
   const timeRangeParams = useMemo(() => {
@@ -163,10 +138,6 @@ export default function InferenceEndpointDetailsPage({
 
   if (loading) {
     return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error}</div>;
   }
 
   if (!inferenceInstance) {
@@ -233,8 +204,8 @@ export default function InferenceEndpointDetailsPage({
                       )
                     }
                     className="ml-2"
+                    icon={<ClipboardCopyIcon className="w-4 h-4" />}
                   >
-                    <ClipboardCopyIcon className="mr-2 w-4 h-4" />
                   </Button>
                 </span>
               </div>
@@ -264,34 +235,10 @@ export default function InferenceEndpointDetailsPage({
             </div>
           </CardContent>
           <CardFooter>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="destructive">
-                  <TrashIcon className="mr-2 w-4 h-4" />
-                  Delete Inference Endpoint
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>
-                    Are you sure you want to delete this inference endpoint?
-                  </DialogTitle>
-                  <DialogDescription>
-                    This action cannot be undone.
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={handleDelete}
-                  >
-                    <TrashIcon className="mr-2 w-4 h-4" />
-                    Delete
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <DeleteButton
+              onDelete={handleDelete}
+              onSuccess={() => router.push("/models/endpoints")}
+            />
           </CardFooter>
         </Card>
       </TabsContent>

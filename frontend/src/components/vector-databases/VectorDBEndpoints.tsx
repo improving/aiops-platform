@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -10,38 +10,33 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
-import { RocketIcon, TrashIcon } from "@radix-ui/react-icons";
+import { RocketIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
-import { AxiosError } from "axios";
 import { DeleteButton } from "@/components/DeleteButton";
+import { parseApiError } from "@/lib/utils";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchInstances = async () => {
+  const fetchInstances = useCallback(async () => {
     try {
       setIsLoading(true);
       const data = await vectorDBService.getVectorDBInstances();
       setInstances(data);
     } catch (error) {
-      console.error("Error fetching vector database instances:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch vector database instances",
-        variant: "destructive",
-      });
+      toast(parseApiError(error));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchInstances();
-  }, [fetchInstances, toast]);
+  }, [fetchInstances]);
 
   const handleDelete = async (id: string) => {
     await vectorDBService.deleteVectorDBInstance(id);

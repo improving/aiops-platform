@@ -27,7 +27,7 @@ import {
 import { useToast } from "@/components/hooks/use-toast";
 import { useState } from "react";
 import { notebookService } from "@/services/notebookService";
-import { AxiosError } from "axios";
+import { parseApiError } from "@/lib/utils";
 
 const notebookSchema = z
   .object({
@@ -101,23 +101,7 @@ export default function NewNotebookForm() {
       });
       router.push("/notebooks");
     } catch (error) {
-      console.error("Error creating notebook:", error);
-      if (error instanceof AxiosError) {
-        const errorMessage = error.response?.data?.detail
-          ? error.response.data.detail.map((d: any) => d.msg).join(", ")
-          : error.message;
-        toast({
-          title: "Error creating notebook",
-          description: `HTTP ${error.response?.status}-${error.response?.statusText}: ${errorMessage}`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error creating notebook",
-          description: "An unexpected error occurred. Please try again.",
-          variant: "destructive",
-        });
-      }
+      toast(parseApiError(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -314,7 +298,7 @@ export default function NewNotebookForm() {
           disabled={!form.formState.isDirty}
           loading={isSubmitting}
         >
-          Launch
+          {isSubmitting ? "Launching..." : "Launch"}
         </Button>
       </form>
     </Form>

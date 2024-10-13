@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  EyeOpenIcon,
   RocketIcon,
   ClipboardCopyIcon,
   OpenInNewWindowIcon,
@@ -27,6 +26,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/hooks/use-toast";
 import { InferenceInstance } from "@/types/models";
+import { modelService } from "@/services/modelService";
+import { parseApiError } from "@/lib/utils";
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -34,29 +35,16 @@ export default function InferenceEndpoints() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterValue, setFilterValue] = useState("");
-  const [error, setError] = useState<string | null>(null); // Add error state
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchEndpoints = async () => {
       try {
-        const response = await fetch("/api/v1alpha1/inferenceInstance");
-        if (!response.ok) {
-          const errorData = await response.json(); // Get error details
-          throw new Error(
-            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
-          );
-        }
-        const data = await response.json();
+        const data = await modelService.getInferenceInstances();
         setEndpoints(data);
-        setLoading(false);
-      } catch (error: any) {
-        console.error("Error fetching inference instances:", error);
-        setError(error.message); // Set error state
-        toast({
-          title: "Error Fetching Inference Instances",
-          description: error.message,
-        });
+      } catch (error) {
+        toast(parseApiError(error));
+      } finally {
         setLoading(false);
       }
     };
@@ -85,10 +73,6 @@ export default function InferenceEndpoints() {
 
   if (loading) {
     return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error}</div>;
   }
 
   return (

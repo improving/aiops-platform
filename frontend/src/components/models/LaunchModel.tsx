@@ -25,6 +25,8 @@ import { useToast } from "@/components/hooks/use-toast";
 import { Adapter, Engine, Host, Model } from "@/types/models";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { modelService } from "@/services/modelService";
+import { parseApiError } from "@/lib/utils";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -60,86 +62,39 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [selectedAdapters, setSelectedAdapters] = useState<Adapter[]>([]);
   const { toast } = useToast(); // Initialize toast
   const [enableTracing, setEnableTracing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchEngines = async () => {
       try {
-        const response = await fetch("/api/v1alpha1/engines");
-        if (!response.ok) {
-          const errorData = await response.json(); // Get error details
-          throw new Error(
-            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
-          );
-        }
-        const data = await response.json();
+        const data = await modelService.getEngines();
         setEngines(data);
-      } catch (error: any) {
-        toast({
-          // Show toast on error
-          title: "Error Fetching Engines",
-          description: error.message,
-        });
-        console.error("Error fetching engines:", error);
+      } catch (error) {
+        toast(parseApiError(error));
       }
     };
     const fetchHosts = async () => {
       try {
-        const response = await fetch("/api/v1alpha1/hosts");
-        if (!response.ok) {
-          const errorData = await response.json(); // Get error details
-          throw new Error(
-            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
-          );
-        }
-        const data = await response.json();
+        const data = await modelService.getHosts();
         setHosts(data);
-      } catch (error: any) {
-        toast({
-          // Show toast on error
-          title: "Error Fetching Hosts",
-          description: error.message,
-        });
-        console.error("Error fetching hosts:", error);
+      } catch (error) {
+        toast(parseApiError(error));
       }
     };
     const fetchModel = async () => {
       try {
-        const response = await fetch(`/api/v1alpha1/models/${params.id}`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
-          );
-        }
-        const data = await response.json();
+        const data = await modelService.getModelById(params.id);
         setModel(data);
-      } catch (error: any) {
-        toast({
-          title: "Error Fetching Model",
-          description: error.message,
-        });
-        console.error("Error fetching model:", error);
+      } catch (error) {
+        toast(parseApiError(error));
       }
     };
     const fetchAdapters = async () => {
       try {
-        const response = await fetch(
-          `/api/v1alpha1/model/${params.id}/adapters`
-        );
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
-          );
-        }
-        const data = await response.json();
+        const data = await modelService.getAdapters(params.id);
         setAdapters(data);
-      } catch (error: any) {
-        toast({
-          title: "Error Fetching Adapters",
-          description: error.message,
-        });
-        console.error("Error fetching adapters:", error);
+      } catch (error) {
+        toast(parseApiError(error));
       }
     };
 
@@ -253,7 +208,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    setIsSubmitting(true);
     // Validate that all argument and environment variable names are non-empty
     const invalidArgs = args.filter((arg) => arg.name.trim() === "");
     const invalidEnvVars = envVars.filter((env) => env.name.trim() === "");
@@ -268,58 +223,38 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       return;
     }
 
-    const payload = {
-      model: {
-        id: params.id,
-      },
-      engine: {
-        id: formData.engineId,
-      },
-      host: formData.hostId,
-      config: {
-        maxInputLength: 0,
-        maxTokens: 0,
-        maxBatchPrefillTokens: 0,
-        maxBatchTotalTokens: 0,
-        quantization: "",
-        image: "",
-        lora_adapters: selectedAdapters,
-        args: args
-          .filter((arg) => arg.new || arg.updated)
-          .reduce((acc, arg) => ({ ...acc, [arg.name]: arg.value }), {}),
-        env_vars: envVars
-          .filter((env) => env.new || env.updated)
-          .reduce((acc, env) => ({ ...acc, [env.name]: env.value }), {}),
-        enable_tracing: enableTracing,
-      },
-    };
-
     try {
-      const response = await fetch("/api/v1alpha1/inferenceInstance", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const data = await modelService.createInferenceInstance({
+        model: { id: params.id },
+        engine: { id: formData.engineId },
+        host: formData.hostId,
+        config: {
+          maxInputLength: 0,
+          maxTokens: 0,
+          maxBatchPrefillTokens: 0,
+          maxBatchTotalTokens: 0,
+          quantization: "",
+          image: "",
+          lora_adapters: selectedAdapters,
+          args: args
+            .filter((arg) => arg.new || arg.updated)
+            .reduce((acc, arg) => ({ ...acc, [arg.name]: arg.value }), {}),
+          env_vars: envVars
+            .filter((env) => env.new || env.updated)
+            .reduce((acc, env) => ({ ...acc, [env.name]: env.value }), {}),
+          enable_tracing: enableTracing,
         },
-        body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json(); // Get error details
-        throw new Error(
-          `HTTP ${response.status}-${response.statusText}: ${errorData.detail}`
-        );
-      }
-
-      const data = await response.json();
-      // Redirect to the individual inference endpoint page
-      router.push(`/models/endpoints/${data.id}`);
-    } catch (error: any) {
       toast({
-        // Show toast on error
-        title: "Error Creating Inference Instance",
-        description: error.message,
+        title: "Success",
+        description: "Inference instance created successfully",
+        variant: "success",
       });
-      console.error("Error creating inference instance:", error);
+      router.push(`/models/endpoints/${data.id}`);
+    } catch (error) {
+      toast(parseApiError(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -626,9 +561,12 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
               </Button>
             </CardContent>
             <CardFooter>
-              <Button type="submit">
-                <RocketIcon className="mr-2 w-4 h-4" />
-                Create Inference Endpoint
+              <Button
+                type="submit"
+                icon={<RocketIcon className="mr-2 w-4 h-4" />}
+                loading={isSubmitting}
+              >
+                {isSubmitting ? "Creating..." : "Create Inference Endpoint"}
               </Button>
             </CardFooter>
           </Card>
