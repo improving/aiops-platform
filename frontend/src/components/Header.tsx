@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -11,7 +12,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "next-themes";
 import { ThemeDropdown } from "./ThemeDropdown";
-import { HomeIcon } from "@radix-ui/react-icons";
+import { cn } from "@/lib/utils";
 
 const menuItems = [
   {
@@ -19,13 +20,13 @@ const menuItems = [
     items: [
       {
         label: "Catalog",
-        href: "/models/catalog/",
-        description: "Browse and select from a variety of AI models"
+        href: "/models/catalog",
+        description: "Browse and select from a variety of AI models",
       },
       {
         label: "Instances",
         href: "/models/endpoints",
-        description: "Manage and monitor your deployed model instances"
+        description: "Manage and monitor your deployed model instances",
       },
     ],
   },
@@ -35,12 +36,12 @@ const menuItems = [
       {
         label: "Catalog",
         href: "/vector-databases/catalog",
-        description: "Explore available vector database solutions"
+        description: "Explore available vector database solutions",
       },
       {
         label: "Instances",
         href: "/vector-databases/endpoints",
-        description: "Manage your vector database deployments"
+        description: "Manage your vector database deployments",
       },
     ],
   },
@@ -48,6 +49,9 @@ const menuItems = [
 
 export default function Header() {
   const { setTheme } = useTheme();
+  const pathname = usePathname();
+
+  const isActive = (href: string) => pathname.startsWith(href);
 
   return (
     <header className="bg-background border-b">
@@ -56,7 +60,12 @@ export default function Header() {
           <NavigationMenuList>
             <NavigationMenuItem>
               <Link href="/" legacyBehavior passHref>
-                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                <NavigationMenuLink
+                  className={cn(
+                    navigationMenuTriggerStyle(),
+                    isActive("/") && "font-bold text-primary"
+                  )}
+                >
                   <p className="font-bold text-2xl text-primary tracking-tight">
                     AI Hub
                   </p>
@@ -65,14 +74,26 @@ export default function Header() {
             </NavigationMenuItem>
             <NavigationMenuItem>
               <Link href="/notebooks" legacyBehavior passHref>
-                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                <NavigationMenuLink
+                  className={cn(
+                    navigationMenuTriggerStyle(),
+                    isActive("/notebooks") && "font-bold text-primary"
+                  )}
+                >
                   Notebooks
                 </NavigationMenuLink>
               </Link>
             </NavigationMenuItem>
             {menuItems.map((item) => (
               <NavigationMenuItem key={item.label}>
-                <NavigationMenuTrigger>{item.label}</NavigationMenuTrigger>
+                <NavigationMenuTrigger
+                  className={cn(
+                    item.items.some((subItem) => isActive(subItem.href)) &&
+                      "font-bold text-primary"
+                  )}
+                >
+                  {item.label}
+                </NavigationMenuTrigger>
                 <NavigationMenuContent>
                   <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
                     {item.items.map((subItem) => (
@@ -80,9 +101,15 @@ export default function Header() {
                         <NavigationMenuLink asChild>
                           <Link
                             href={subItem.href}
-                            className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+                            className={cn(
+                              "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                              isActive(subItem.href) &&
+                                "bg-accent text-accent-foreground"
+                            )}
                           >
-                            <div className="text-sm font-medium leading-none">{subItem.label}</div>
+                            <div className="text-sm font-medium leading-none">
+                              {subItem.label}
+                            </div>
                             <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
                               {subItem.description}
                             </p>
@@ -96,7 +123,12 @@ export default function Header() {
             ))}
             <NavigationMenuItem>
               <Link href="/develop" legacyBehavior passHref>
-                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                <NavigationMenuLink
+                  className={cn(
+                    navigationMenuTriggerStyle(),
+                    isActive("/develop") && "font-bold text-primary"
+                  )}
+                >
                   Develop
                 </NavigationMenuLink>
               </Link>
@@ -108,7 +140,10 @@ export default function Header() {
             <ThemeDropdown setTheme={setTheme} />
           </div>
           <Avatar>
-            <AvatarImage src="https://github.com/infracloudio.png" alt="User avatar" />
+            <AvatarImage
+              src="https://github.com/infracloudio.png"
+              alt="User avatar"
+            />
             <AvatarFallback>CN</AvatarFallback>
           </Avatar>
         </div>

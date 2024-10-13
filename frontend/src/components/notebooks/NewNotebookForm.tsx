@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -14,187 +15,308 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RocketIcon } from "@radix-ui/react-icons";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useToast } from "@/components/hooks/use-toast";
+import { useState } from "react";
+import { notebookService } from "@/services/notebookService";
+import { AxiosError } from "axios";
+
+const notebookSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    type: z.enum(["jupyter", "vscode"]),
+    framework: z.enum(["pytorch", "tensorflow"]).optional(),
+    resources_cpu: z.coerce.number().min(0.5).max(4),
+    resources_memory: z.coerce.number().min(1).max(32),
+    nvidia_gpu: z.boolean(),
+    resources_gpu: z.coerce.number().min(1).max(4).optional(),
+    storage_size: z.coerce.number().min(5).max(20),
+  })
+  .refine(
+    (data) => {
+      if (data.type !== "jupyter") {
+        return (
+          data.framework === undefined &&
+          data.nvidia_gpu === false &&
+          data.resources_gpu === undefined
+        );
+      }
+      return true;
+    },
+    {
+      message: "Invalid configuration for this notebook type",
+    }
+  );
+
+type NotebookFormValues = z.infer<typeof notebookSchema>;
 
 export default function NewNotebookForm() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    name: "",
-    type: "jupyter",
-    framework: "pytorch",
-    resources_cpu: "0.5",
-    resources_memory: "1",
-    nvidia_gpu: false,
-    resources_gpu: "1",
-    storage_size: "5",
+  const { toast } = useToast();
+
+  const form = useForm<NotebookFormValues>({
+    resolver: zodResolver(notebookSchema),
+    defaultValues: {
+      name: "",
+      type: "jupyter",
+      framework: "pytorch",
+      resources_cpu: 0.5,
+      resources_memory: 1,
+      nvidia_gpu: false,
+      resources_gpu: undefined,
+      storage_size: 5,
+    },
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const { watch } = form;
+  const notebookType = watch("type");
+  const nvidiaGpu = watch("nvidia_gpu");
 
-  const handleSelectChange = (name: string, value: string) => {
-    if (name === "type" && value === "jupyter") {
-      setFormData((prev) => ({ ...prev, framework: "pytorch" }));
-    } else if (name === "type" && value === "vscode") {
-      setFormData((prev) => ({ ...prev, framework: "" }));
-    }
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSwitchChange = (checked: boolean) => {
-    setFormData((prev) => ({ ...prev, nvidia_gpu: checked }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: NotebookFormValues) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const updatedFormData = {
-        ...formData,
-        resources_memory: `${formData.resources_memory}Gi`,
-        storage_size: `${formData.storage_size}Gi`,
+        ...data,
+        resources_cpu: `${data.resources_cpu}`,
+        resources_memory: `${data.resources_memory}Gi`,
+        resources_gpu: data.resources_gpu ? `${data.resources_gpu}` : undefined,
+        storage_size: `${data.storage_size}Gi`,
       };
-      const response = await fetch("/api/v1alpha1/notebooks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updatedFormData),
+      await notebookService.createNotebook(updatedFormData);
+      toast({
+        title: "Notebook created",
+        description: "Your notebook has been successfully created.",
+        variant: "success",
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to create notebook");
-      }
-
       router.push("/notebooks");
     } catch (error) {
       console.error("Error creating notebook:", error);
+      if (error instanceof AxiosError) {
+        const errorMessage = error.response?.data?.detail
+          ? error.response.data.detail.map((d: any) => d.msg).join(", ")
+          : error.message;
+        toast({
+          title: "Error creating notebook",
+          description: `HTTP ${error.response?.status}-${error.response?.statusText}: ${errorMessage}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error creating notebook",
+          description: "An unexpected error occurred. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
           name="name"
-          value={formData.name}
-          onChange={handleInputChange}
-          required
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div>
-        <Label htmlFor="type">Type</Label>
-        <Select
+        <FormField
+          control={form.control}
           name="type"
-          value={formData.type}
-          onValueChange={(value) => handleSelectChange("type", value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="jupyter">Jupyter</SelectItem>
-            <SelectItem value="vscode">VSCode</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Type</FormLabel>
+              <Select
+                onValueChange={(e) => {
+                  if (e != "jupyter") {
+                    form.setValue("framework", undefined);
+                    form.setValue("nvidia_gpu", false);
+                    form.setValue("resources_gpu", undefined);
+                  }
+                  field.onChange(e);
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="jupyter">Jupyter</SelectItem>
+                  <SelectItem value="vscode">VSCode</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-      {formData.type === "jupyter" && (
-        <div>
-          <Label htmlFor="framework">Framework</Label>
-          <Select
+        {notebookType === "jupyter" && (
+          <FormField
+            control={form.control}
             name="framework"
-            value={formData.framework}
-            onValueChange={(value) => handleSelectChange("framework", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select framework" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pytorch">PyTorch</SelectItem>
-              <SelectItem value="tensorflow">TensorFlow</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Framework</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select framework" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="pytorch">PyTorch</SelectItem>
+                    <SelectItem value="tensorflow">TensorFlow</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-      <div>
-        <Label htmlFor="resources_cpu">Resources CPU</Label>
-        <Input
-          id="resources_cpu"
+        <FormField
+          control={form.control}
           name="resources_cpu"
-          type="number"
-          min="0.5"
-          max="4"
-          step="0.5"
-          value={formData.resources_cpu}
-          onChange={handleInputChange}
-          required
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Resources CPU</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  min={0.5}
+                  max={4}
+                  step={0.5}
+                  {...field}
+                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div>
-        <Label htmlFor="resources_memory">Resources Memory (GB)</Label>
-        <Input
-          id="resources_memory"
+        <FormField
+          control={form.control}
           name="resources_memory"
-          type="number"
-          min="1"
-          max="32"
-          value={formData.resources_memory}
-          onChange={handleInputChange}
-          required
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Resources Memory (GB)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  min={1}
+                  max={32}
+                  {...field}
+                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      {formData.type === "jupyter" && (
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="nvidia_gpu"
-            checked={formData.nvidia_gpu}
-            onCheckedChange={handleSwitchChange}
+        {notebookType === "jupyter" && (
+          <FormField
+            control={form.control}
+            name="nvidia_gpu"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Nvidia GPU</FormLabel>
+                  <FormDescription>
+                    Enable Nvidia GPU for this notebook
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={(e) => {
+                      form.setValue("resources_gpu", e ? 1 : undefined);
+                      field.onChange(e);
+                    }}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
           />
-          <Label htmlFor="nvidia_gpu">Nvidia GPU</Label>
-        </div>
-      )}
+        )}
 
-      {formData.nvidia_gpu && (
-        <div>
-          <Label htmlFor="resources_gpu">Resources GPU</Label>
-          <Input
-            id="resources_gpu"
+        {nvidiaGpu && (
+          <FormField
+            control={form.control}
             name="resources_gpu"
-            type="number"
-            min="1"
-            max="4"
-            value={formData.resources_gpu}
-            onChange={handleInputChange}
-            required
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Resources GPU</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={4}
+                    {...field}
+                    onChange={(e) => field.onChange(parseInt(e.target.value))}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </div>
-      )}
+        )}
 
-      <div>
-        <Label htmlFor="storage_size">Storage Size (GB)</Label>
-        <Input
-          id="storage_size"
+        <FormField
+          control={form.control}
           name="storage_size"
-          type="number"
-          min="5"
-          max="20"
-          value={formData.storage_size}
-          onChange={handleInputChange}
-          required
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Storage Size (GB)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  min={5}
+                  max={20}
+                  {...field}
+                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <Button type="submit">
-        <RocketIcon className="mr-2 w-4 h-4" />
-        Launch
-      </Button>
-    </form>
+        <Button
+          type="submit"
+          icon={<RocketIcon className="w-4 h-4" />}
+          disabled={!form.formState.isDirty}
+          loading={isSubmitting}
+        >
+          Launch
+        </Button>
+      </form>
+    </Form>
   );
 }

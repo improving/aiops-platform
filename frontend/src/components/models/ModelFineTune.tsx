@@ -84,8 +84,6 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log(fineTuneConfig);
-    //console.log(yaml.stringify(fineTuneConfig));
 
     try {
       const response = await fetch(

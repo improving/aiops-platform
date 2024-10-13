@@ -44,6 +44,7 @@ import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import JaegerEmbed from "@/components/JaegerEmbed";
 import { Input } from "@/components/ui/input";
+import { GRAFANA_URL, JAEGER_URL } from "@/constants";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -343,10 +344,7 @@ export default function InferenceEndpointDetailsPage({
               {dashboards.map((dashboard) => (
                 <GrafanaEmbed
                   key={dashboard.id}
-                  grafanaEndpoint={
-                    process.env.NEXT_PUBLIC_GRAFANA_URL ||
-                    "http://192.0.2.202"
-                  }
+                  grafanaEndpoint={GRAFANA_URL}
                   dashboardID={dashboard.dashboard_id || ""}
                   panelID={dashboard.panel_id || ""}
                   orgID={dashboard.org_id}
@@ -405,7 +403,9 @@ export default function InferenceEndpointDetailsPage({
                 </PopoverContent>
               </Popover>
               <div className="flex flex-row items-center space-x-2">
-                <Label htmlFor="jaeger-limit" className="mb-1">Limit</Label>
+                <Label htmlFor="jaeger-limit" className="mb-1">
+                  Limit
+                </Label>
                 <Input
                   id="jaeger-limit"
                   type="number"
@@ -419,10 +419,7 @@ export default function InferenceEndpointDetailsPage({
             </div>
             {serviceName && (
               <JaegerEmbed
-                jaegerEndpoint={
-                  process.env.NEXT_PUBLIC_JAEGER_URL ||
-                  "http://192.0.2.208:16686"
-                }
+                jaegerEndpoint={JAEGER_URL}
                 serviceName={serviceName}
                 start={Date.now() - selectedTimeRange.value}
                 end={Date.now()}

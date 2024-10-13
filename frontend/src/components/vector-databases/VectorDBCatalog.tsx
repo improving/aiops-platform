@@ -6,32 +6,45 @@ import { Button } from "@/components/ui/button";
 import { VectorDBSchema } from "@/types/vectordb";
 import CreateVectorDBInstanceDialog from "./CreateVectorDBInstanceDialog";
 import { RocketIcon } from "@radix-ui/react-icons";
+import { vectorDBService } from "@/services/vectorDBService";
+import { useToast } from "@/components/hooks/use-toast";
 
 export default function VectorDBCatalog() {
   const [vectorDBs, setVectorDBs] = useState<VectorDBSchema[]>([]);
   const [selectedVectorDB, setSelectedVectorDB] =
     useState<VectorDBSchema | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
+    const fetchVectorDBs = async () => {
+      try {
+        setIsLoading(true);
+        const data = await vectorDBService.getVectorDBs();
+        setVectorDBs(data);
+      } catch (error) {
+        console.error("Error fetching vector databases:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch vector databases",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
     fetchVectorDBs();
-  }, []);
-
-  const fetchVectorDBs = async () => {
-    try {
-      const response = await fetch("/api/v1alpha1/vectordb");
-      if (!response.ok) throw new Error("Failed to fetch vector databases");
-      const data = await response.json();
-      setVectorDBs(data);
-    } catch (error) {
-      console.error("Error fetching vector databases:", error);
-    }
-  };
+  }, [toast]);
 
   const handleLaunch = (vectorDB: VectorDBSchema) => {
     setSelectedVectorDB(vectorDB);
     setIsDialogOpen(true);
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

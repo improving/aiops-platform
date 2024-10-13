@@ -13,31 +13,41 @@ import {
 import { Button } from "@/components/ui/button";
 import { OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Notebook } from "@/types/notebook";
+import { notebookService } from "@/services/notebookService";
+import { useToast } from "@/components/hooks/use-toast";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    fetchNotebooks();
-  }, []);
-
-  const fetchNotebooks = async () => {
-    try {
-      const response = await fetch("/api/v1alpha1/notebooks");
-      if (!response.ok) {
-        throw new Error("Failed to fetch notebooks");
+    const fetchNotebooks = async () => {
+      try {
+        const data = await notebookService.getNotebooks();
+        setNotebooks(data);
+      } catch (error) {
+        console.error("Error fetching notebooks:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch notebooks",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
-      const data = await response.json();
-      setNotebooks(data);
-    } catch (error) {
-      console.error("Error fetching notebooks:", error);
-    }
-  };
+    };
+    fetchNotebooks();
+  }, [toast]);
 
   const filteredNotebooks = notebooks.filter((notebook) =>
     notebook.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <>

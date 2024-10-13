@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 
 interface GrafanaEmbedProps {
   grafanaEndpoint: string;
@@ -17,27 +17,25 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
   panelID,
   orgID,
   queryParams = {},
-  height = '300px'
+  height = "300px",
 }) => {
-  const [iframeUrl, setIframeUrl] = useState<string>('');
+  const [iframeUrl, setIframeUrl] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       const url = new URL(`${grafanaEndpoint}/d-solo/${dashboardID}`);
-      url.searchParams.append('orgId', orgID);
-      url.searchParams.append('panelId', panelID);
-      url.searchParams.append('theme', 'light');
-      
+      url.searchParams.append("orgId", orgID);
+      url.searchParams.append("panelId", panelID);
+      url.searchParams.append("theme", "light");
+
       Object.entries(queryParams).forEach(([key, value]) => {
         url.searchParams.append(key, value);
       });
 
       setIframeUrl(url.toString());
     } catch (err) {
-      console.log("grafanaEndpoint", grafanaEndpoint, "dashboardID", dashboardID, "panelID", panelID, "orgID", orgID, "queryParams", queryParams);
-      console.error('Error constructing dashboard URL:', err);
-      setError('Failed to construct dashboard URL' );
+      setError("Failed to construct dashboard URL");
     }
   }, [grafanaEndpoint, dashboardID, panelID, orgID, queryParams]);
 
@@ -52,7 +50,7 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
         width="100%"
         height={height}
         title="Grafana Dashboard"
-        onError={() => setError('Failed to load dashboard')}
+        onError={() => setError("Failed to load dashboard")}
       />
     </div>
   );

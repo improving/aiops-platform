@@ -2,11 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Notebook } from "@/types/notebook";
-import { OpenInNewWindowIcon, TrashIcon } from "@radix-ui/react-icons";
+import { OpenInNewWindowIcon } from "@radix-ui/react-icons";
 import { Label } from "@/components/ui/label";
+import { notebookService } from "@/services/notebookService";
+import { useToast } from "@/components/hooks/use-toast";
+import { DeleteButton } from "@/components/DeleteButton";
 
 interface NotebookDetailsProps {
   notebookId: string;
@@ -14,40 +23,39 @@ interface NotebookDetailsProps {
 
 export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   const [notebook, setNotebook] = useState<Notebook | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchNotebookDetails = async () => {
       try {
-        const response = await fetch(`/api/v1alpha1/notebooks/${notebookId}`);
-        if (!response.ok) {
-          throw new Error("Failed to fetch notebook details");
-        }
-        const data = await response.json();
+        const data = await notebookService.getNotebookById(notebookId);
         setNotebook(data);
       } catch (error) {
         console.error("Error fetching notebook details:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch notebook details",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchNotebookDetails();
-  }, [notebookId]);
+  }, [notebookId, toast]);
 
   const handleDelete = async () => {
-    try {
-      const response = await fetch(`/api/v1alpha1/notebooks/${notebookId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to delete notebook");
-      }
-      router.push("/notebooks");
-    } catch (error) {
-      console.error("Error deleting notebook:", error);
-    }
+    await notebookService.deleteNotebook(notebookId);
   };
 
-  if (!notebook) {
+  if (isLoading) {
     return <div>Loading...</div>;
+  }
+
+  if (!notebook) {
+    return <div>Notebook not found</div>;
   }
 
   return (
@@ -102,6 +110,8 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             <span>{notebook.created_at || "N/A"}</span>
           </div>
         </div>
+      </CardContent>
+      <CardFooter>
         <div className="mt-6 flex space-x-4">
           <Button
             onClick={() => window.open(notebook.endpoint, "_blank")}
@@ -110,12 +120,12 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
             Connect
           </Button>
-          <Button variant="destructive" onClick={handleDelete}>
-            <TrashIcon className="mr-2 w-4 h-4" />
-            Delete
-          </Button>
+          <DeleteButton
+            onDelete={handleDelete}
+            onSuccess={() => router.push("/notebooks")}
+          />
         </div>
-      </CardContent>
+      </CardFooter>
     </Card>
   );
 }

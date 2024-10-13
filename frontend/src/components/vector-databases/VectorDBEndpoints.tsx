@@ -1,43 +1,55 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
 import { RocketIcon, TrashIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
+import { vectorDBService } from "@/services/vectorDBService";
+import { useToast } from "@/components/hooks/use-toast";
+import { AxiosError } from "axios";
+import { DeleteButton } from "@/components/DeleteButton";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
-
-  useEffect(() => {
-    fetchInstances();
-  }, []);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   const fetchInstances = async () => {
     try {
-      const response = await fetch("/api/v1alpha1/vectordb_instances");
-      if (!response.ok)
-        throw new Error("Failed to fetch vector database instances");
-      const data = await response.json();
+      setIsLoading(true);
+      const data = await vectorDBService.getVectorDBInstances();
       setInstances(data);
     } catch (error) {
       console.error("Error fetching vector database instances:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch vector database instances",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchInstances();
+  }, [fetchInstances, toast]);
+
   const handleDelete = async (id: string) => {
-    try {
-      const response = await fetch(`/api/v1alpha1/vectordb_instances/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok)
-        throw new Error("Failed to delete vector database instance");
-      fetchInstances();
-    } catch (error) {
-      console.error("Error deleting vector database instance:", error);
-    }
+    await vectorDBService.deleteVectorDBInstance(id);
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <>
@@ -60,14 +72,13 @@ export default function VectorDBEndpoints() {
               </CardHeader>
               <CardContent>
                 <p className="mb-2">Endpoint: {instance.endpoint}</p>
-                <Button
-                  variant="destructive"
-                  onClick={() => handleDelete(instance.id)}
-                >
-                  <TrashIcon className="mr-2 w-4 h-4" />
-                  Delete
-                </Button>
               </CardContent>
+              <CardFooter>
+                <DeleteButton
+                  onDelete={() => handleDelete(instance.id)}
+                  onSuccess={() => fetchInstances()}
+                />
+              </CardFooter>
             </Card>
           ))}
         </div>
