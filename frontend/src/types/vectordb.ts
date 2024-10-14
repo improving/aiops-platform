@@ -11,6 +11,8 @@ interface VectorDBInstanceSchema {
   vectorDB: VectorDBSchema;
   configParams: Record<string, any>;
   endpoint: string;
+  ready: boolean;
+  status: string;
 }
 
 export type { VectorDBSchema, VectorDBInstanceSchema };

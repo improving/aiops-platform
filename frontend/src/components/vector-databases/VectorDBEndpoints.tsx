@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
-import { RocketIcon } from "@radix-ui/react-icons";
+import { ClipboardCopyIcon, CopyIcon, OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
@@ -58,7 +58,46 @@ export default function VectorDBEndpoints() {
               key={instance.id}
               icon={GetVectorDBIcon(instance.vectorDB.chart_name)}
               title={instance.vectorDB.name}
-              content={<p className="mb-2">Endpoint: {instance.endpoint}</p>}
+              description={`ID: ${instance.id}`}
+              content={
+                <>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                      {instance.vectorDB.chart_name}
+                    </span>
+                    {instance.ready ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                        Ready
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
+                        {instance.status || "In Progress"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>Endpoint: </strong>
+                    <span
+                      className={
+                        instance.ready ? "text-green-500" : "text-red-500"
+                      }
+                    >
+                      <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
+                      <a href={`${instance.endpoint}/docs`} target="_blank">
+                        {instance.endpoint || "N/A"}
+                      </a>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          navigator.clipboard.writeText(instance.endpoint || "")
+                        }
+                        className="ml-2"
+                        icon={<ClipboardCopyIcon className="w-4 h-4" />}
+                      ></Button>
+                    </span>
+                  </p>
+                </>
+              }
               footer={
                 <DeleteButton
                   onDelete={() => handleDelete(instance.id)}

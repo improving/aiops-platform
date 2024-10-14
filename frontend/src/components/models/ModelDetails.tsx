@@ -25,7 +25,6 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-  CardFooter,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -257,13 +256,11 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           }
           footer={
             <div className="flex justify-between space-x-8">
-              <Button onClick={handleLaunchModel}>
-                <RocketIcon className="mr-2 h-4 w-4" />
+              <Button onClick={handleLaunchModel} icon={<RocketIcon className="mr-2 w-4 h-4" />}>
                 Launch Model
               </Button>
               <Link href={`/models/${model.id}/finetune`} passHref>
-                <Button variant="secondary">
-                  <HandIcon className="mr-2 w-4 h-4" />
+                <Button variant="secondary" icon={<HandIcon className="mr-2 w-4 h-4" />}>
                   Fine-tune
                 </Button>
               </Link>
@@ -369,8 +366,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
             <CardTitle>Fine-tune Jobs</CardTitle>
             <div className="flex justify-end">
               <Link href={`/models/${model.id}/finetune`} passHref>
-                <Button>
-                  <HandIcon className="mr-2 w-4 h-4" />
+                <Button icon={<HandIcon className="mr-2 w-4 h-4" />}>
                   Fine-tune
                 </Button>
               </Link>
@@ -401,8 +397,8 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                         size="sm"
                         className="mr-2"
                         onClick={() => handleViewParams(job.params)}
+                        icon={<EyeOpenIcon className="mr-2 h-4 w-4" />}
                       >
-                        <EyeOpenIcon className="mr-2 h-4 w-4" />
                       </Button>
                     </TableCell>
                     <TableCell>
@@ -411,8 +407,8 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                         size="sm"
                         className="mr-2"
                         onClick={() => handleViewLogs(job.id)}
+                        icon={<FileTextIcon className="mr-2 h-4 w-4" />}
                       >
-                        <FileTextIcon className="mr-2 h-4 w-4" />
                       </Button>
                     </TableCell>
                     <TableCell>

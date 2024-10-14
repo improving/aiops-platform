@@ -11,7 +11,6 @@ import {
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -155,6 +154,7 @@ export default function InferenceEndpointDetailsPage({
       <TabsContent value="details">
         <DisplayCard
           title={inferenceInstance.model.name}
+          description={`ID: ${inferenceInstance.id}`}
           icon={GetModelIcon(inferenceInstance.model.modelId)}
           content={
             <div className="grid gap-4">
@@ -256,9 +256,9 @@ export default function InferenceEndpointDetailsPage({
                     role="combobox"
                     aria-expanded={open}
                     className="w-[200px] justify-between"
+                    icon={<ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
                   >
                     {selectedTimeRange.label}
-                    <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[200px] p-0">

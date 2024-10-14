@@ -10,20 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HandIcon, RocketIcon, PlusIcon } from "@radix-ui/react-icons";
 import { Model } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import ImportModelDialog from "@/components/models/ImportModelDialog";
-import Image from "next/image";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
@@ -121,8 +112,7 @@ export default function ModelCatalog() {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => setIsImportDialogOpen(true)}>
-          <PlusIcon className="mr-2 w-4 h-4" />
+        <Button onClick={() => setIsImportDialogOpen(true)} icon={<PlusIcon className="w-4 h-4" />}>
           Import Model
         </Button>
       </div>
@@ -168,14 +158,12 @@ export default function ModelCatalog() {
             footer={
               <div className="flex space-x-4">
                 <Link href={`/models/launch/${model.id}`} passHref>
-                  <Button className="flex-1">
-                    <RocketIcon className="mr-2 w-4 h-4" />
+                  <Button className="flex-1" icon={<RocketIcon className="mr-2 w-4 h-4" />}>
                     Launch
                   </Button>
                 </Link>
                 <Link href={`/models/${model.id}/finetune`} passHref>
-                  <Button variant="secondary" className="flex-1">
-                    <HandIcon className="mr-2 w-4 h-4" />
+                  <Button variant="secondary" className="flex-1" icon={<HandIcon className="mr-2 w-4 h-4" />}>
                     Fine-tune
                   </Button>
                 </Link>

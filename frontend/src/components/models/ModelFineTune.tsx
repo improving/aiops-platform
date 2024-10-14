@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { FineTuneConfig, FineTuneParams, Dataset, Model } from "@/types/models";
 import yaml from "yaml";
-import { FileIcon, RocketIcon, UploadIcon } from "@radix-ui/react-icons";
+import { RocketIcon, UploadIcon } from "@radix-ui/react-icons";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 

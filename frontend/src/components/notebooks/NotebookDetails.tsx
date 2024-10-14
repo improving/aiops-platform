@@ -52,6 +52,7 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
     <DisplayCard
       icon={`/notebooks/${notebook.type}.png`}
       title={notebook.name}
+      description={`ID: ${notebook.id}`}
       content={
         <div className="grid gap-4">
           <div className="grid grid-cols-2 items-center gap-4">

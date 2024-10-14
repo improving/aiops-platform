@@ -2,14 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,8 +22,6 @@ import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { GetModelIcon } from "@/lib/utils";
-
-
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -198,9 +188,8 @@ export default function InferenceEndpoints() {
                           navigator.clipboard.writeText(endpoint.endpoint || "")
                         }
                         className="ml-2"
-                      >
-                        <ClipboardCopyIcon />
-                      </Button>
+                        icon={<ClipboardCopyIcon className="w-4 h-4" />}
+                      ></Button>
                     </p>
                   </>
                 }
