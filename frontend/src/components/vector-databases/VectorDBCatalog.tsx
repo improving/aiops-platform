@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { VectorDBSchema } from "@/types/vectordb";
 import CreateVectorDBInstanceDialog from "./CreateVectorDBInstanceDialog";
 import { RocketIcon } from "@radix-ui/react-icons";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
-import { parseApiError } from "@/lib/utils";
+import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
 export default function VectorDBCatalog() {
   const [vectorDBs, setVectorDBs] = useState<VectorDBSchema[]>([]);
@@ -45,18 +45,18 @@ export default function VectorDBCatalog() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {vectorDBs.map((vectorDB) => (
-        <Card key={vectorDB.id}>
-          <CardHeader>
-            <CardTitle>{vectorDB.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4">{vectorDB.description}</p>
+        <DisplayCard
+          key={vectorDB.id}
+          icon={GetVectorDBIcon(vectorDB.chart_name)}
+          title={vectorDB.name}
+          content={<p>{vectorDB.description}</p>}
+          footer={
             <Button onClick={() => handleLaunch(vectorDB)}>
               <RocketIcon className="mr-2 w-4 h-4" />
               Launch
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ))}
       {selectedVectorDB && (
         <CreateVectorDBInstanceDialog

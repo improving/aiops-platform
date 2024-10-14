@@ -26,6 +26,8 @@ import ImportModelDialog from "@/components/models/ImportModelDialog";
 import Image from "next/image";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
+import { GetModelIcon } from "@/lib/utils";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -34,19 +36,6 @@ function formatSize(bytes: number): string {
     return `${(bytes / GB).toFixed(2)} GB`;
   } else {
     return `${(bytes / MB).toFixed(2)} MB`;
-  }
-}
-
-function getModelIcon(modelId: string) {
-  switch (modelId.split("/")[0]) {
-    case "meta-llama":
-      return "/models/meta-llama.png";
-    case "microsoft":
-      return "/models/microsoft.png";
-    case "nvidia":
-      return "/models/nvidia.png";
-    default:
-      return "/models/pixtide.png";
   }
 }
 
@@ -139,56 +128,45 @@ export default function ModelCatalog() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredModels.map((model) => (
-          <Card key={model.id} className="flex flex-col">
-            <CardHeader className="flex-grow">
-              <div className="flex items-start space-x-4">
-                <div className="relative w-9 h-9">
-                  <Image
-                    src={getModelIcon(model.modelId)}
-                    alt={`${model.name} icon`}
-                    layout="fill"
-                    objectFit="contain"
-                    className="rounded-md"
-                  />
-                </div>
-                <div>
-                  <CardTitle>
-                    <Link
-                      href={`/models/${model.id}`}
-                      className="underline hover:text-blue-500"
-                    >
-                      {model.name}
-                    </Link>
-                  </CardTitle>
-                  <CardDescription>{model.modelId}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2 mb-3">
-                <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                  {model.category}
-                </span>
-                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                  {model.subcategory}
-                </span>
-                {model.countAdapters > 0 && (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 hover:text-blue-900 underline">
-                    <Link href={`/models/${model.id}?tab=adapters`}>
-                      {model.countAdapters} adapters
-                    </Link>
+          <DisplayCard
+            key={model.id}
+            icon={GetModelIcon(model.modelId)}
+            title={
+              <Link
+                href={`/models/${model.id}`}
+                className="underline hover:text-blue-500"
+              >
+                {model.name}
+              </Link>
+            }
+            description={model.modelId}
+            content={
+              <>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                    {model.category}
                   </span>
-                )}
-              </div>
-              <p className="text-gray-700 mb-4 line-clamp-2">
-                {model.description}
-              </p>
-              <p className="text-sm text-gray-600">
-                Size: {formatSize(model.size)}
-              </p>
-            </CardContent>
-            <CardFooter className="mt-auto">
-              <div className="flex justify-between space-x-4">
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                    {model.subcategory}
+                  </span>
+                  {model.countAdapters > 0 && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 hover:text-blue-900 underline">
+                      <Link href={`/models/${model.id}?tab=adapters`}>
+                        {model.countAdapters} adapters
+                      </Link>
+                    </span>
+                  )}
+                </div>
+                <p className="text-gray-700 mb-4 line-clamp-2">
+                  {model.description}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Size: {formatSize(model.size)}
+                </p>
+              </>
+            }
+            footer={
+              <div className="flex space-x-4">
                 <Link href={`/models/launch/${model.id}`} passHref>
                   <Button className="flex-1">
                     <RocketIcon className="mr-2 w-4 h-4" />
@@ -202,8 +180,8 @@ export default function ModelCatalog() {
                   </Button>
                 </Link>
               </div>
-            </CardFooter>
-          </Card>
+            }
+          />
         ))}
       </div>
       <ImportModelDialog

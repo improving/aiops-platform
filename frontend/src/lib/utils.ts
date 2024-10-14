@@ -46,3 +46,39 @@ export function parseApiError(error: unknown): Toast {
     };
   }
 }
+
+export function GetModelIcon(modelId: string) {
+  try {
+    switch (modelId.split("/")[0]) {
+      case "meta-llama":
+        return "/models/meta-llama.png";
+      case "microsoft":
+        return "/models/microsoft.png";
+      case "nvidia":
+        return "/models/nvidia.png";
+      case "mistralai":
+        return "/models/mistral.png";
+      default:
+        return "/models/pixtide.png";
+    }
+  } catch (error) {
+    return "/models/pixtide.png";
+  }
+}
+
+export function GetVectorDBIcon(vectorDBId: string) {
+  try {
+    switch (vectorDBId) {
+      case "chromadb":
+        return "/vectordbs/chroma.png";
+      case "milvus":
+        return "/vectordbs/milvus.png";
+      case "qdrant":
+        return "/vectordbs/qdrant.png";
+      default:
+        return "/models/pixtide.png";
+    }
+  } catch (error) {
+    return "/models/pixtide.png";
+  }
+}

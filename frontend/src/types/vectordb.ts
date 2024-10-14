@@ -2,6 +2,8 @@ interface VectorDBSchema {
   id: string;
   name: string;
   description: string;
+  chart_name: string;
+  chart_description: string;
 }
 
 interface VectorDBInstanceSchema {

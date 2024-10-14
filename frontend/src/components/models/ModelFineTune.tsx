@@ -31,6 +31,8 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
   const { toast } = useToast();
   const [model, setModel] = useState<Model>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
 
   useEffect(() => {
     async function fetchModel() {
@@ -89,6 +91,7 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
     try {
       await modelService.startFineTuning(params.id, {
@@ -103,6 +106,8 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
       router.push(`/models/${params.id}?tab=finetune`);
     } catch (error) {
       toast(parseApiError(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -137,6 +142,7 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
   };
 
   const handleImportYaml = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLoadingFile(true);
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -169,6 +175,7 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    setIsLoadingFile(false);
   };
 
   const triggerFileInput = () => {
@@ -189,8 +196,12 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
                   accept=".yaml,.yml"
                   className="hidden"
                 />
-                <Button type="button" onClick={triggerFileInput}>
-                  <UploadIcon className="w-4 h-4 mr-2" />
+                <Button
+                  type="button"
+                  onClick={triggerFileInput}
+                  icon={<UploadIcon className="w-4 h-4 mr-2" />}
+                  loading={isLoadingFile}
+                >
                   Import Config
                 </Button>
               </div>
@@ -484,9 +495,12 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
         </CardContent>
       </Card>
 
-      <Button type="submit">
-        <RocketIcon className="w-4 h-4 mr-2" />
-        Start
+      <Button
+        type="submit"
+        icon={<RocketIcon className="w-4 h-4 mr-2" />}
+        loading={isSubmitting}
+      >
+        {isSubmitting ? "Starting..." : "Start"}
       </Button>
     </form>
   );

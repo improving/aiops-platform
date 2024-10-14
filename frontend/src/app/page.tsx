@@ -2,103 +2,110 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
 import Dashboard from "@/components/Dashboard";
+import {
+  CodeIcon,
+  CubeIcon,
+  LayersIcon,
+  Pencil2Icon,
+} from "@radix-ui/react-icons";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
-function DisplayCard({
-  title,
-  description,
-  buttons,
-}: {
+const homecatalogs: {
+  icon: React.ReactNode;
   title: string;
   description: string;
+  content?: string;
   buttons: { link: string; text: string; variant: "default" | "secondary" }[];
-}) {
-  return (
-    <Card className="shadow-lg rounded-lg">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">{title}</CardTitle>
-        <CardDescription className="text-sm">{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center">
-        <div className="flex flex-row gap-2 mb-3 w-full">
-          {buttons.map((button, index) => (
-            <Link key={index} href={button.link} passHref>
-              <Button variant={button.variant} className="w-full py-2">
-                {button.text}
-              </Button>
-            </Link>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+}[] = [
+  {
+    icon: <CubeIcon className="mr-2 h-8 w-8" />,
+    title: "Models",
+    description: "Explore our AI models",
+    content: "Pretrained models for your use cases",
+    buttons: [
+      {
+        link: "/models/catalog",
+        text: "View Catalog",
+        variant: "default",
+      },
+      {
+        link: "/models/endpoints",
+        text: "View Endpoints",
+        variant: "secondary",
+      },
+    ],
+  },
+  {
+    icon: <LayersIcon className="mr-2 h-8 w-8" />,
+    title: "Vector Databases",
+    description: "Explore our vector databases",
+    content: "Implement RAG apps with your own data",
+    buttons: [
+      {
+        link: "/vector-databases/catalog",
+        text: "View Catalog",
+        variant: "default",
+      },
+      {
+        link: "/vector-databases/endpoints",
+        text: "View Endpoints",
+        variant: "secondary",
+      },
+    ],
+  },
+  {
+    icon: <Pencil2Icon className="mr-2 h-8 w-8" />,
+    title: "Notebooks",
+    description: "Explore our notebooks",
+    content: "Interactive enviroment for data science and machine learning",
+    buttons: [
+      {
+        link: "/notebooks/",
+        text: "View Notebooks",
+        variant: "default" as const,
+      },
+    ],
+  },
+  {
+    icon: <CodeIcon className="mr-2 h-8 w-8" />,
+    title: "Develop",
+    description: "Quickly prototype AI applications",
+    content: "Build AI apps with low-code graphical interface",
+    buttons: [
+      {
+        link: "/develop/",
+        text: "Develop AI App",
+        variant: "default",
+      },
+    ],
+  },
+];
 
 export default function Home() {
   return (
     <Dashboard title="Welcome to AI Hub">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <DisplayCard
-          title="Models"
-          description="Explore our AI models"
-          buttons={[
-            {
-              link: "/models/catalog",
-              text: "View Catalog",
-              variant: "default",
-            },
-            {
-              link: "/models/endpoints",
-              text: "View Endpoints",
-              variant: "secondary",
-            },
-          ]}
-        />
-        <DisplayCard
-          title="Vector Databases"
-          description="Explore our vector databases"
-          buttons={[
-            {
-              link: "/vector-databases/catalog",
-              text: "View Catalog",
-              variant: "default",
-            },
-            {
-              link: "/vector-databases/endpoints",
-              text: "View Endpoints",
-              variant: "secondary",
-            },
-          ]}
-        />
-        <DisplayCard
-          title="Notebooks"
-          description="Explore our notebooks"
-          buttons={[
-            {
-              link: "/notebooks/",
-              text: "View Notebooks",
-              variant: "default",
-            },
-          ]}
-        />
-        <DisplayCard
-          title="Develop"
-          description="Interactively develop AI applications"
-          buttons={[
-            {
-              link: "/develop/",
-              text: "Develop AI Applications",
-              variant: "default",
-            },
-          ]}
-        />
+        {homecatalogs.map((catalog, index) => (
+          <DisplayCard
+            key={index}
+            icon={catalog.icon}
+            title={catalog.title}
+            description={catalog.description}
+            content={catalog.content}
+            footer={
+              <div className="flex flex-row gap-2 mb-3 w-full">
+                {catalog.buttons.map((button, index) => (
+                  <Link key={index} href={button.link} passHref>
+                    <Button variant={button.variant} className="w-full py-2">
+                      {button.text}
+                    </Button>
+                  </Link>
+                ))}
+              </div>
+            }
+          />
+        ))}
       </div>
     </Dashboard>
   );

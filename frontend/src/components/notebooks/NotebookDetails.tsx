@@ -2,13 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Notebook } from "@/types/notebook";
 import { OpenInNewWindowIcon } from "@radix-ui/react-icons";
@@ -17,6 +10,7 @@ import { notebookService } from "@/services/notebookService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import { parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
 interface NotebookDetailsProps {
   notebookId: string;
@@ -55,11 +49,10 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{notebook.name}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <DisplayCard
+      icon={`/notebooks/${notebook.type}.png`}
+      title={notebook.name}
+      content={
         <div className="grid gap-4">
           <div className="grid grid-cols-2 items-center gap-4">
             <Label>Type:</Label>
@@ -106,14 +99,14 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             <span>{notebook.created_at || "N/A"}</span>
           </div>
         </div>
-      </CardContent>
-      <CardFooter>
+      }
+      footer={
         <div className="mt-6 flex space-x-4">
           <Button
             onClick={() => window.open(notebook.endpoint, "_blank")}
             disabled={!notebook.ready}
+            icon={<OpenInNewWindowIcon className="mr-2 w-4 h-4" />}
           >
-            <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
             Connect
           </Button>
           <DeleteButton
@@ -121,7 +114,7 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             onSuccess={() => router.push("/notebooks")}
           />
         </div>
-      </CardFooter>
-    </Card>
+      }
+    />
   );
 }

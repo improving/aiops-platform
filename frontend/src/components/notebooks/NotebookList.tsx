@@ -3,19 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Notebook } from "@/types/notebook";
 import { notebookService } from "@/services/notebookService";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -51,8 +45,7 @@ export default function NotebookList() {
         <div className="text-center">
           <p className="mb-4">No notebooks available.</p>
           <Link href="/notebooks/new">
-            <Button>
-              <RocketIcon className="mr-2 w-4 h-4" />
+            <Button icon={<RocketIcon className="mr-2 w-4 h-4" />}>
               New Notebook
             </Button>
           </Link>
@@ -68,26 +61,25 @@ export default function NotebookList() {
               className="max-w-sm"
             />
             <Link href="/notebooks/new" passHref>
-              <Button>
-                <RocketIcon className="mr-2 w-4 h-4" />
+              <Button icon={<RocketIcon className="mr-2 w-4 h-4" />}>
                 New Notebook
               </Button>
             </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredNotebooks.map((notebook) => (
-              <Card key={notebook.id}>
-                <CardHeader>
-                  <CardTitle>
-                    <Link
-                      href={`/notebooks/${notebook.id}`}
-                      className="hover:text-blue-500 underline"
-                    >
-                      {notebook.name}
-                    </Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+              <DisplayCard
+                key={notebook.id}
+                icon={`/notebooks/${notebook.type}.png`}
+                title={
+                  <Link
+                    href={`/notebooks/${notebook.id}`}
+                    className="hover:text-blue-500 underline"
+                  >
+                    {notebook.name}
+                  </Link>
+                }
+                content={
                   <div className="flex flex-wrap gap-2 mb-3">
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                       {notebook.type}
@@ -113,17 +105,17 @@ export default function NotebookList() {
                       </span>
                     )}
                   </div>
-                </CardContent>
-                <CardFooter className="flex justify-between">
+                }
+                footer={
                   <Button
                     disabled={!notebook.ready}
                     onClick={() => window.open(notebook.endpoint, "_blank")}
+                    icon={<OpenInNewWindowIcon className="mr-2 w-4 h-4" />}
                   >
-                    <OpenInNewWindowIcon className="mr-2 w-4 h-4" />
                     Connect
                   </Button>
-                </CardFooter>
-              </Card>
+                }
+              />
             ))}
           </div>
         </>

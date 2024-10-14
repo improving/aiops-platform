@@ -4,13 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -333,14 +327,12 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="accelerators">
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Accelerator</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <DisplayCard
+            title="Select Accelerator"
+            content={
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {hosts.map((host) => (
-                  <Card
+                  <DisplayCard
                     key={host.hostname}
                     className={`cursor-pointer transition duration-300 ease-in-out ${
                       formData.hostId === host.hostname
@@ -353,214 +345,221 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                         hostId: host.hostname,
                       }))
                     }
-                  >
-                    <CardHeader>
-                      <CardTitle>
-                        {host.gpu_model && host.gpu_model !== "N/A"
-                          ? host.gpu_model
-                          : host.cpu_vendor}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                          Host: {host.hostname || "N/A"}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {host.cpu_cores > 0 && (
-                          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                            {host.cpu_cores} CPU Cores
+                    title={
+                      host.gpu_model && host.gpu_model !== "N/A"
+                        ? host.gpu_model
+                        : host.cpu_vendor
+                    }
+                    content={
+                      <>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                            Host: {host.hostname || "N/A"}
                           </span>
-                        )}
-                        {host.cpu_cores > 0 && (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                            CPU: {host.cpu_vendor} -{" "}
-                            {(host.cpu_memory / 1024).toFixed(1)} GB Memory
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {host.gpu_count > 0 && (
-                          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                            {host.gpu_count} GPU
-                          </span>
-                        )}
-                        {host.gpu_memory > 0 && (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                            {(host.gpu_memory / 1024).toFixed(1)} GB GPU Memory
-                          </span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {host.cpu_cores > 0 && (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                              {host.cpu_cores} CPU Cores
+                            </span>
+                          )}
+                          {host.cpu_cores > 0 && (
+                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                              CPU: {host.cpu_vendor} -{" "}
+                              {(host.cpu_memory / 1024).toFixed(1)} GB Memory
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {host.gpu_count > 0 && (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                              {host.gpu_count} GPU
+                            </span>
+                          )}
+                          {host.gpu_memory > 0 && (
+                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                              {(host.gpu_memory / 1024).toFixed(1)} GB GPU
+                              Memory
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    }
+                  />
                 ))}
               </div>
-            </CardContent>
-            <CardFooter>
+            }
+            footer={
               <Button type="button" onClick={handleNext}>
                 <ThickArrowRightIcon className="mr-2 w-4 h-4" />
                 Next
               </Button>
-            </CardFooter>
-          </Card>
+            }
+          />
         </TabsContent>
         <TabsContent value="deployConfig">
-          <Card>
-            <CardHeader>
-              <CardTitle>Deploy Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select
-                name="engineId"
-                value={formData.engineId}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({ ...prev, engineId: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Engine" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredEngines.map((engine) => (
-                    <SelectItem key={engine.id} value={engine.id}>
-                      {engine.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <DisplayCard
+            title="Deploy Configuration"
+            content={
+              <>
+                <Select
+                  name="engineId"
+                  value={formData.engineId}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, engineId: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Engine" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredEngines.map((engine) => (
+                      <SelectItem key={engine.id} value={engine.id}>
+                        {engine.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {formData.engineId && (
-                <div className="mt-6">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Switch
-                      id="enable-tracing"
-                      checked={enableTracing}
-                      onCheckedChange={setEnableTracing}
-                    />
-                    <Label htmlFor="enable-tracing">Enable Tracing</Label>
+                {formData.engineId && (
+                  <div className="mt-6">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <Switch
+                        id="enable-tracing"
+                        checked={enableTracing}
+                        onCheckedChange={setEnableTracing}
+                      />
+                      <Label htmlFor="enable-tracing">Enable Tracing</Label>
+                    </div>
+
+                    {adapters.length > 0 && (
+                      <>
+                        <h3 className="text-lg font-semibold mb-2">
+                          Select Adapters
+                        </h3>
+                        <div className="space-y-2">
+                          {adapters.map((adapter) => (
+                            <div
+                              key={adapter.id}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={adapter.id}
+                                checked={selectedAdapters.some(
+                                  (a) => a.id === adapter.id
+                                )}
+                                onCheckedChange={(checked) =>
+                                  handleAdapterChange(
+                                    adapter,
+                                    checked as boolean
+                                  )
+                                }
+                              />
+                              <Label htmlFor={adapter.id}>{adapter.name}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
-
-                  {adapters.length > 0 && (
-                    <>
-                      <h3 className="text-lg font-semibold mb-2">
-                        Select Adapters
-                      </h3>
-                      <div className="space-y-2">
-                        {adapters.map((adapter) => (
-                          <div
-                            key={adapter.id}
-                            className="flex items-center space-x-2"
-                          >
-                            <Checkbox
-                              id={adapter.id}
-                              checked={selectedAdapters.some(
-                                (a) => a.id === adapter.id
-                              )}
-                              onCheckedChange={(checked) =>
-                                handleAdapterChange(adapter, checked as boolean)
-                              }
-                            />
-                            <Label htmlFor={adapter.id}>{adapter.name}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
+                )}
+              </>
+            }
+            footer={
               <Button type="button" onClick={handleNext}>
                 <ThickArrowRightIcon className="mr-2 w-4 h-4" />
                 Next
               </Button>
-            </CardFooter>
-          </Card>
+            }
+          />
         </TabsContent>
         <TabsContent value="envVars">
-          <Card>
-            <CardHeader>
-              <CardTitle>CLI Args and Environment Variables</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <h2 className="text-xl font-bold mb-4">CLI Arguments</h2>
-              {args.map((arg, index) => (
-                <div key={index} className="mb-4 flex space-x-2">
-                  <Input
-                    value={arg.name}
-                    readOnly={!arg.editable || !arg.new}
-                    onChange={(e) =>
-                      handleArgChange(index, "name", e.target.value)
-                    }
-                    placeholder="Argument Name"
-                    required
-                  />
-                  <Input
-                    value={arg.value}
-                    onChange={(e) =>
-                      handleArgChange(index, "value", e.target.value)
-                    }
-                    placeholder="Value"
-                    readOnly={!arg.editable}
-                  />
-                  {arg.new && (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => deleteArg(index)}
-                    >
-                      Delete
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button type="button" variant="outline" onClick={addNewArgField}>
-                Add Argument
-              </Button>
+          <DisplayCard
+            title="CLI Args and Environment Variables"
+            content={
+              <>
+                <h2 className="text-xl font-bold mb-4">CLI Arguments</h2>
+                {args.map((arg, index) => (
+                  <div key={index} className="mb-4 flex space-x-2">
+                    <Input
+                      value={arg.name}
+                      readOnly={!arg.editable || !arg.new}
+                      onChange={(e) =>
+                        handleArgChange(index, "name", e.target.value)
+                      }
+                      placeholder="Argument Name"
+                      required
+                    />
+                    <Input
+                      value={arg.value}
+                      onChange={(e) =>
+                        handleArgChange(index, "value", e.target.value)
+                      }
+                      placeholder="Value"
+                      readOnly={!arg.editable}
+                    />
+                    {arg.new && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => deleteArg(index)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addNewArgField}
+                >
+                  Add Argument
+                </Button>
 
-              <h2 className="text-xl font-bold mb-4 mt-6">
-                Environment Variables
-              </h2>
-              {envVars.map((env, index) => (
-                <div key={index} className="mb-4 flex space-x-2">
-                  <Input
-                    value={env.name}
-                    readOnly={!env.editable || !env.new}
-                    onChange={(e) =>
-                      handleEnvVarChange(index, "name", e.target.value)
-                    }
-                    placeholder="Variable Name"
-                    required
-                  />
-                  <Input
-                    value={env.value}
-                    onChange={(e) =>
-                      handleEnvVarChange(index, "value", e.target.value)
-                    }
-                    placeholder="Value"
-                    readOnly={!env.editable}
-                  />
-                  {env.new && (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => deleteEnvVar(index)}
-                    >
-                      Delete
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={addNewEnvVarField}
-              >
-                Add Environment Variable
-              </Button>
-            </CardContent>
-            <CardFooter>
+                <h2 className="text-xl font-bold mb-4 mt-6">
+                  Environment Variables
+                </h2>
+                {envVars.map((env, index) => (
+                  <div key={index} className="mb-4 flex space-x-2">
+                    <Input
+                      value={env.name}
+                      readOnly={!env.editable || !env.new}
+                      onChange={(e) =>
+                        handleEnvVarChange(index, "name", e.target.value)
+                      }
+                      placeholder="Variable Name"
+                      required
+                    />
+                    <Input
+                      value={env.value}
+                      onChange={(e) =>
+                        handleEnvVarChange(index, "value", e.target.value)
+                      }
+                      placeholder="Value"
+                      readOnly={!env.editable}
+                    />
+                    {env.new && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => deleteEnvVar(index)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addNewEnvVarField}
+                >
+                  Add Environment Variable
+                </Button>
+              </>
+            }
+            footer={
               <Button
                 type="submit"
                 icon={<RocketIcon className="mr-2 w-4 h-4" />}
@@ -568,8 +567,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
               >
                 {isSubmitting ? "Creating..." : "Create Inference Endpoint"}
               </Button>
-            </CardFooter>
-          </Card>
+            }
+          />
         </TabsContent>
       </Tabs>
     </form>

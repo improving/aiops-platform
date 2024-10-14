@@ -1,13 +1,7 @@
 interface InferenceInstance {
   id: string;
-  model: {
-    id: string;
-    name: string;
-  };
-  engine: {
-    id: string;
-    name: string;
-  };
+  model: Model;
+  engine: Engine;
   host: string;
   endpoint: string;
   healthEndpoint: string;

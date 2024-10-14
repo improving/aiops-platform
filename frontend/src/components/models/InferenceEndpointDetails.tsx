@@ -44,7 +44,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { parseApiError } from "@/lib/utils";
+import { GetModelIcon, parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -152,11 +153,10 @@ export default function InferenceEndpointDetailsPage({
         <TabsTrigger value="tracing">Tracing</TabsTrigger>
       </TabsList>
       <TabsContent value="details">
-        <Card>
-          <CardHeader>
-            <CardTitle>{inferenceInstance.model.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <DisplayCard
+          title={inferenceInstance.model.name}
+          icon={GetModelIcon(inferenceInstance.model.modelId)}
+          content={
             <div className="grid gap-4">
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Model</Label>
@@ -233,14 +233,14 @@ export default function InferenceEndpointDetailsPage({
                 </span>
               </div>
             </div>
-          </CardContent>
-          <CardFooter>
+          }
+          footer={
             <DeleteButton
               onDelete={handleDelete}
               onSuccess={() => router.push("/models/endpoints")}
             />
-          </CardFooter>
-        </Card>
+          }
+        />
       </TabsContent>
       <TabsContent value="dashboards">
         <Card>

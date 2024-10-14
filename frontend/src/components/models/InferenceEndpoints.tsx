@@ -28,6 +28,10 @@ import { useToast } from "@/components/hooks/use-toast";
 import { InferenceInstance } from "@/types/models";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
+import { GetModelIcon } from "@/lib/utils";
+
+
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -81,8 +85,7 @@ export default function InferenceEndpoints() {
         <div className="text-center">
           <p className="mb-4">No inference endpoints available.</p>
           <Link href="/models/catalog">
-            <Button>
-              <RocketIcon className="mr-2 h-4 w-4" />
+            <Button icon={<RocketIcon className="mr-2 h-4 w-4" />}>
               Launch
             </Button>
           </Link>
@@ -141,66 +144,67 @@ export default function InferenceEndpoints() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredEndpoints.map((endpoint) => (
-              <Card key={endpoint.id}>
-                <CardHeader>
-                  <CardTitle>
-                    <Link
-                      href={`/models/endpoints/${endpoint.id}`}
-                      className="hover:text-blue-500 underline"
-                    >
-                      {endpoint.model.name}
-                    </Link>
-                  </CardTitle>
-                  <CardDescription>ID: {endpoint.id}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                      {endpoint.engine.name}
-                    </span>
-                    <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                      {endpoint.host}
-                    </span>
-                    {endpoint.ready ? (
+              <DisplayCard
+                key={endpoint.id}
+                icon={GetModelIcon(endpoint.model.modelId)}
+                title={
+                  <Link
+                    href={`/models/endpoints/${endpoint.id}`}
+                    className="hover:text-blue-500 underline"
+                  >
+                    {endpoint.model.name}
+                  </Link>
+                }
+                description={`ID: ${endpoint.id}`}
+                content={
+                  <>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                        {endpoint.engine.name}
+                      </span>
                       <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                        Ready
+                        {endpoint.host}
                       </span>
-                    ) : (
-                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
-                        {endpoint.status || "In Progress"}
+                      {endpoint.ready ? (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                          Ready
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
+                          {endpoint.status || "In Progress"}
+                        </span>
+                      )}
+                      {endpoint.config.lora_adapters.length > 0 && (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                          {endpoint.config.lora_adapters.length} Adapters
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">
+                      <strong>Endpoint: </strong>
+                      <span
+                        className={
+                          endpoint.ready ? "text-green-500" : "text-red-500"
+                        }
+                      >
+                        <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
+                        <a href={`${endpoint.endpoint}/docs`} target="_blank">
+                          {endpoint.endpoint || "N/A"}
+                        </a>
                       </span>
-                    )}
-                    {endpoint.config.lora_adapters.length > 0 && (
-                      <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
-                        {endpoint.config.lora_adapters.length} Adapters
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2">
-                    <strong>Endpoint: </strong>
-                    <span
-                      className={
-                        endpoint.ready ? "text-green-500" : "text-red-500"
-                      }
-                    >
-                      <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
-                      <a href={`${endpoint.endpoint}/docs`} target="_blank">
-                        {endpoint.endpoint || "N/A"}
-                      </a>
-                    </span>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        navigator.clipboard.writeText(endpoint.endpoint || "")
-                      }
-                      className="ml-2"
-                    >
-                      <ClipboardCopyIcon />
-                    </Button>
-                  </p>
-                </CardContent>
-                <CardFooter></CardFooter>
-              </Card>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          navigator.clipboard.writeText(endpoint.endpoint || "")
+                        }
+                        className="ml-2"
+                      >
+                        <ClipboardCopyIcon />
+                      </Button>
+                    </p>
+                  </>
+                }
+              />
             ))}
           </div>
         </>

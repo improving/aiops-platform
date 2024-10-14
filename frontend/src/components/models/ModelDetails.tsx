@@ -44,7 +44,8 @@ import yaml from "yaml";
 import { modelService } from "@/services/modelService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
-import { parseApiError } from "@/lib/utils";
+import { GetModelIcon, parseApiError } from "@/lib/utils";
+import { DisplayCard } from "@/components/ui/DisplayCard";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -223,11 +224,10 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
         <TabsTrigger value="finetune">Fine-tune Jobs</TabsTrigger>
       </TabsList>
       <TabsContent value="details">
-        <Card>
-          <CardHeader>
-            <CardTitle>{model.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <DisplayCard
+          title={model.name}
+          icon={GetModelIcon(model.modelId)}
+          content={
             <div className="grid gap-4">
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Name</Label>
@@ -254,8 +254,8 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 <span>{formatSize(model.size)}</span>
               </div>
             </div>
-          </CardContent>
-          <CardFooter>
+          }
+          footer={
             <div className="flex justify-between space-x-8">
               <Button onClick={handleLaunchModel}>
                 <RocketIcon className="mr-2 h-4 w-4" />
@@ -268,8 +268,8 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 </Button>
               </Link>
             </div>
-          </CardFooter>
-        </Card>
+          }
+        />
       </TabsContent>
       <TabsContent value="adapters">
         <Card>

@@ -13,10 +13,28 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "next-themes";
 import { ThemeDropdown } from "./ThemeDropdown";
 import { cn } from "@/lib/utils";
+import {
+  CodeIcon,
+  CubeIcon,
+  LayersIcon,
+  MagicWandIcon,
+  Pencil2Icon,
+} from "@radix-ui/react-icons";
 
 const menuItems = [
   {
+    label: <p className="font-bold text-2xl tracking-tight">AI Hub</p>,
+    icon: <MagicWandIcon className="mr-2 h-4 w-4" />,
+    href: "/",
+  },
+  {
+    label: "Notebooks",
+    icon: <Pencil2Icon className="mr-2 h-4 w-4" />,
+    href: "/notebooks",
+  },
+  {
     label: "Models",
+    icon: <CubeIcon className="mr-2 h-4 w-4" />,
     items: [
       {
         label: "Catalog",
@@ -32,6 +50,7 @@ const menuItems = [
   },
   {
     label: "Vector Databases",
+    icon: <LayersIcon className="mr-2 h-4 w-4" />,
     items: [
       {
         label: "Catalog",
@@ -44,6 +63,11 @@ const menuItems = [
         description: "Manage your vector database deployments",
       },
     ],
+  },
+  {
+    label: "Develop",
+    icon: <CodeIcon className="mr-2 h-4 w-4" />,
+    href: "/develop",
   },
 ];
 
@@ -58,81 +82,60 @@ export default function Header() {
       <div className="container mx-auto px-4 flex justify-between items-center py-2">
         <NavigationMenu>
           <NavigationMenuList>
-            <NavigationMenuItem>
-              <Link href="/" legacyBehavior passHref>
-                <NavigationMenuLink
-                  className={cn(
-                    navigationMenuTriggerStyle(),
-                    isActive("/") && "font-bold text-primary"
-                  )}
-                >
-                  <p className="font-bold text-2xl text-primary tracking-tight">
-                    AI Hub
-                  </p>
-                </NavigationMenuLink>
-              </Link>
-            </NavigationMenuItem>
-            <NavigationMenuItem>
-              <Link href="/notebooks" legacyBehavior passHref>
-                <NavigationMenuLink
-                  className={cn(
-                    navigationMenuTriggerStyle(),
-                    isActive("/notebooks") && "font-bold text-primary"
-                  )}
-                >
-                  Notebooks
-                </NavigationMenuLink>
-              </Link>
-            </NavigationMenuItem>
             {menuItems.map((item) => (
-              <NavigationMenuItem key={item.label}>
-                <NavigationMenuTrigger
-                  className={cn(
-                    item.items.some((subItem) => isActive(subItem.href)) &&
-                      "font-bold text-primary"
-                  )}
-                >
-                  {item.label}
-                </NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
-                    {item.items.map((subItem) => (
-                      <li key={subItem.href}>
-                        <NavigationMenuLink asChild>
-                          <Link
-                            href={subItem.href}
-                            className={cn(
-                              "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                              isActive(subItem.href) &&
-                                "bg-accent text-accent-foreground"
-                            )}
-                          >
-                            <div className="text-sm font-medium leading-none">
-                              {subItem.label}
-                            </div>
-                            <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                              {subItem.description}
-                            </p>
-                          </Link>
-                        </NavigationMenuLink>
-                      </li>
-                    ))}
-                  </ul>
-                </NavigationMenuContent>
+              <NavigationMenuItem key={item.label as string}>
+                {item.items ? (
+                  <NavigationMenuTrigger
+                    className={cn(
+                      item.items.some((subItem) => isActive(subItem.href)) &&
+                        "font-bold text-primary"
+                    )}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </NavigationMenuTrigger>
+                ) : (
+                  <Link href={item.href} legacyBehavior passHref>
+                    <NavigationMenuLink
+                      className={cn(
+                        navigationMenuTriggerStyle(),
+                        isActive(item.href) && "font-bold text-primary"
+                      )}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </NavigationMenuLink>
+                  </Link>
+                )}
+                {item.items && (
+                  <NavigationMenuContent>
+                    <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
+                      {item.items.map((subItem) => (
+                        <li key={subItem.href}>
+                          <NavigationMenuLink asChild>
+                            <Link
+                              href={subItem.href}
+                              className={cn(
+                                "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                                isActive(subItem.href) &&
+                                  "bg-accent text-accent-foreground"
+                              )}
+                            >
+                              <div className="text-sm font-medium leading-none">
+                                {subItem.label}
+                              </div>
+                              <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                                {subItem.description}
+                              </p>
+                            </Link>
+                          </NavigationMenuLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </NavigationMenuContent>
+                )}
               </NavigationMenuItem>
             ))}
-            <NavigationMenuItem>
-              <Link href="/develop" legacyBehavior passHref>
-                <NavigationMenuLink
-                  className={cn(
-                    navigationMenuTriggerStyle(),
-                    isActive("/develop") && "font-bold text-primary"
-                  )}
-                >
-                  Develop
-                </NavigationMenuLink>
-              </Link>
-            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
         <div className="flex items-center space-x-4">
