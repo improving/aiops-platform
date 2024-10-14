@@ -64,7 +64,6 @@ def delete_job(namespace, job_name):
         logger.info(f"Job {job_name} deleted successfully")
     except client.exceptions.ApiException as e:
         logger.exception(f"Error deleting job: {e}")
-        raise
 
 
 def create_config_map(namespace, config_map):
@@ -141,7 +140,6 @@ async def get_job_status(job_name, namespace):
         return job_status
     except client.ApiException as e:
         logger.error(f"Error getting job status: {e}")
-        raise
 
 
 def interpret_job_status(job_status):
