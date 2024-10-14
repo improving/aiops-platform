@@ -5,7 +5,7 @@ PROJECT_NAME=$(cat /job/config/conf.yaml | grep project_name | awk '{print $2}')
 echo "PROJECT_NAME: $PROJECT_NAME"
 autotrain --config /job/config/conf.yaml
 mv $PROJECT_NAME /app/.cache/hub/fine-tunes/
-curl -X POST http://127.0.0.1:8000/v1alpha1/model/{{ model_id }}/adapters -H "Content-Type: application/json" -d '{
-    "name": "$PROJECT_NAME",
-    "path": "/app/.cache/hub/fine-tunes/$PROJECT_NAME",
+curl -X POST http://aiops-backend.aiops.svc.cluster.local:8000/v1alpha1/model/{{ model_id }}/adapters -H "Content-Type: application/json" -d '{
+    "name": "'$PROJECT_NAME'",
+    "path": "/app/.cache/hub/fine-tunes/'$PROJECT_NAME'"
 }'
