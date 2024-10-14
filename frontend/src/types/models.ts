@@ -14,6 +14,9 @@ interface InferenceInstance {
 interface InferenceInstanceConfig {
   id: string;
   lora_adapters: Adapter[];
+  env_vars: Record<string, string>;
+  args: Record<string, string>;
+  enable_tracing: boolean;
 }
 
 interface InferenceInstanceDashboard {

@@ -140,11 +140,18 @@ export default function InferenceEndpointDetailsPage({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="details">Details</TabsTrigger>
-        <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
-        <TabsTrigger value="tracing">Tracing</TabsTrigger>
-      </TabsList>
+      {inferenceInstance.config.enable_tracing ? (
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
+          <TabsTrigger value="tracing">Tracing</TabsTrigger>
+        </TabsList>
+      ) : (
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
+        </TabsList>
+      )}
       <TabsContent value="details">
         <DisplayCard
           title={inferenceInstance.model.name}
@@ -211,21 +218,33 @@ export default function InferenceEndpointDetailsPage({
                 <Label>Metrics Endpoint</Label>
                 <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
               </div>
+
               <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Adapters</Label>
+                <Label>Tracing</Label>
                 <span>
-                  {inferenceInstance.config.lora_adapters.map((adapter) => (
-                    <Button
-                      key={adapter.id}
-                      variant="outline"
-                      className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm mr-2 mb-2"
-                      onClick={() => setSelectedAdapter(adapter)}
-                    >
-                      {adapter.name}
-                    </Button>
-                  ))}
+                  {inferenceInstance.config.enable_tracing
+                    ? "Enabled"
+                    : "Disabled"}
                 </span>
               </div>
+
+              {inferenceInstance.config.lora_adapters.length > 0 && (
+                <div className="grid grid-cols-2 items-center gap-4">
+                  <Label>Adapters</Label>
+                  <span>
+                    {inferenceInstance.config.lora_adapters.map((adapter) => (
+                      <Button
+                        key={adapter.id}
+                        variant="outline"
+                        className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm mr-2 mb-2"
+                        onClick={() => setSelectedAdapter(adapter)}
+                      >
+                        {adapter.name}
+                      </Button>
+                    ))}
+                  </span>
+                </div>
+              )}
             </div>
           }
           footer={
