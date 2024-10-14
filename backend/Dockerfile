@@ -24,6 +24,7 @@ COPY repositories/ ./repositories/
 COPY schemas/ ./schemas/
 COPY templates/ ./templates/
 COPY utils/ ./utils/
+COPY core.py .
 COPY app.py .
 COPY logger.py .
 COPY requirements.txt .
