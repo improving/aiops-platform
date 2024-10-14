@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Notebook } from "@/types/notebook";
 import { OpenInNewWindowIcon } from "@radix-ui/react-icons";
 import { Label } from "@/components/ui/label";
 import { notebookService } from "@/services/notebookService";
-import { useToast } from "@/components/hooks/use-toast";
+import { toast, useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
@@ -22,19 +22,20 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchNotebookDetails = async () => {
-      try {
-        const data = await notebookService.getNotebookById(notebookId);
-        setNotebook(data);
-      } catch (error) {
-        toast(parseApiError(error));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchNotebookDetails();
+  const fetchNotebookDetails = useCallback(async () => {
+    try {
+      const data = await notebookService.getNotebookById(notebookId);
+      setNotebook(data);
+    } catch (error) {
+      toast(parseApiError(error));
+    } finally {
+      setIsLoading(false);
+    }
   }, [notebookId, toast]);
+
+  useEffect(() => {
+    fetchNotebookDetails();
+  }, [fetchNotebookDetails]);
 
   const handleDelete = async () => {
     await notebookService.deleteNotebook(notebookId);
@@ -53,6 +54,7 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
       icon={`/notebooks/${notebook.type}.png`}
       title={notebook.name}
       description={`ID: ${notebook.id}`}
+      onRefresh={fetchNotebookDetails}
       content={
         <div className="grid gap-4">
           <div className="grid grid-cols-2 items-center gap-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,12 +8,7 @@ import {
   ClipboardCopyIcon,
   OpenInNewWindowIcon,
 } from "@radix-ui/react-icons";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { RefreshButton } from "../RefreshButton";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -83,32 +79,30 @@ export default function InferenceEndpointDetailsPage({
   const [jaegerLimit, setJaegerLimit] = useState(20);
   const { toast } = useToast();
 
+  const fetchInferenceInstance = useCallback(async () => {
+    try {
+      const data = await modelService.getInferenceInstance(params.id);
+      setInferenceInstance(data);
+    } catch (error) {
+      toast(parseApiError(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id, toast]);
+
+  const fetchDashboards = useCallback(async () => {
+    try {
+      const data = await modelService.getInferenceInstanceDashboards(params.id);
+      setDashboards(data);
+    } catch (error) {
+      toast(parseApiError(error));
+    }
+  }, [params.id, toast]);
+
   useEffect(() => {
-    const fetchInferenceInstance = async () => {
-      try {
-        const data = await modelService.getInferenceInstance(params.id);
-        setInferenceInstance(data);
-      } catch (error) {
-        toast(parseApiError(error));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchDashboards = async () => {
-      try {
-        const data = await modelService.getInferenceInstanceDashboards(
-          params.id
-        );
-        setDashboards(data);
-      } catch (error) {
-        toast(parseApiError(error));
-      }
-    };
-
     fetchInferenceInstance();
     fetchDashboards();
-  }, [params.id, toast]);
+  }, [fetchInferenceInstance, fetchDashboards]);
 
   useEffect(() => {
     if (dashboards.length > 0) {
@@ -156,6 +150,7 @@ export default function InferenceEndpointDetailsPage({
           title={inferenceInstance.model.name}
           description={`ID: ${inferenceInstance.id}`}
           icon={GetModelIcon(inferenceInstance.model.modelId)}
+          onRefresh={fetchInferenceInstance}
           content={
             <div className="grid gap-4">
               <div className="grid grid-cols-2 items-center gap-4">
@@ -205,8 +200,7 @@ export default function InferenceEndpointDetailsPage({
                     }
                     className="ml-2"
                     icon={<ClipboardCopyIcon className="w-4 h-4" />}
-                  >
-                  </Button>
+                  ></Button>
                 </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
@@ -256,9 +250,9 @@ export default function InferenceEndpointDetailsPage({
                     role="combobox"
                     aria-expanded={open}
                     className="w-[200px] justify-between"
-                    icon={<ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
                   >
                     {selectedTimeRange.label}
+                    <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[200px] p-0">

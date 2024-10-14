@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { notebookService } from "@/services/notebookService";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { RefreshButton } from "../RefreshButton";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -17,19 +18,20 @@ export default function NotebookList() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchNotebooks = async () => {
-      try {
-        const data = await notebookService.getNotebooks();
-        setNotebooks(data);
-      } catch (error) {
-        toast(parseApiError(error));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchNotebooks();
+  const fetchNotebooks = useCallback(async () => {
+    try {
+      const data = await notebookService.getNotebooks();
+      setNotebooks(data);
+    } catch (error) {
+      toast(parseApiError(error));
+    } finally {
+      setIsLoading(false);
+    }
   }, [toast]);
+
+  useEffect(() => {
+    fetchNotebooks();
+  }, [fetchNotebooks]);
 
   const filteredNotebooks = notebooks.filter((notebook) =>
     notebook.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -60,11 +62,14 @@ export default function NotebookList() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
             />
-            <Link href="/notebooks/new" passHref>
-              <Button icon={<RocketIcon className="mr-2 w-4 h-4" />}>
-                New Notebook
-              </Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/notebooks/new" passHref>
+                <Button icon={<RocketIcon className="mr-2 w-4 h-4" />}>
+                  New Notebook
+                </Button>
+              </Link>
+              <RefreshButton onRefresh={fetchNotebooks} />
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredNotebooks.map((notebook) => (

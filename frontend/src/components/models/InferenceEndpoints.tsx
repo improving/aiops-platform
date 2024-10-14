@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { GetModelIcon } from "@/lib/utils";
+import { RefreshButton } from "../RefreshButton";
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -31,19 +32,20 @@ export default function InferenceEndpoints() {
   const [filterValue, setFilterValue] = useState("");
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchEndpoints = async () => {
-      try {
-        const data = await modelService.getInferenceInstances();
-        setEndpoints(data);
-      } catch (error) {
-        toast(parseApiError(error));
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEndpoints();
+  const fetchEndpoints = useCallback(async () => {
+    try {
+      const data = await modelService.getInferenceInstances();
+      setEndpoints(data);
+    } catch (error) {
+      toast(parseApiError(error));
+    } finally {
+      setLoading(false);
+    }
   }, [toast]);
+
+  useEffect(() => {
+    fetchEndpoints();
+  }, [fetchEndpoints]);
 
   const filteredEndpoints = endpoints.filter((endpoint) => {
     const searchLower = searchTerm.toLowerCase();
@@ -82,55 +84,58 @@ export default function InferenceEndpoints() {
         </div>
       ) : (
         <>
-          <div className="flex gap-4 mb-6">
-            <Input
-              placeholder="Search by ID or model name"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-            <Select onValueChange={(value) => setFilterCategory(value)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="hostname">Hostname</SelectItem>
-                <SelectItem value="engineName">Engine Name</SelectItem>
-              </SelectContent>
-            </Select>
-            {filterCategory === "hostname" && (
-              <Select onValueChange={(value) => setFilterValue(value)}>
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex flex-wrap gap-4 flex-grow">
+              <Input
+                placeholder="Search by ID or model name"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-sm"
+              />
+              <Select onValueChange={(value) => setFilterCategory(value)}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select Hostname" />
+                  <SelectValue placeholder="Filter by" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from(new Set(endpoints.map((e) => e.host))).map(
-                    (host) => (
-                      <SelectItem key={host} value={host}>
-                        {host}
-                      </SelectItem>
-                    )
-                  )}
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="hostname">Hostname</SelectItem>
+                  <SelectItem value="engineName">Engine Name</SelectItem>
                 </SelectContent>
               </Select>
-            )}
-            {filterCategory === "engineName" && (
-              <Select onValueChange={(value) => setFilterValue(value)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select Engine" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from(new Set(endpoints.map((e) => e.engine.name))).map(
-                    (engine) => (
-                      <SelectItem key={engine} value={engine}>
-                        {engine}
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-            )}
+              {filterCategory === "hostname" && (
+                <Select onValueChange={(value) => setFilterValue(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select Hostname" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(new Set(endpoints.map((e) => e.host))).map(
+                      (host) => (
+                        <SelectItem key={host} value={host}>
+                          {host}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              {filterCategory === "engineName" && (
+                <Select onValueChange={(value) => setFilterValue(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select Engine" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(new Set(endpoints.map((e) => e.engine.name))).map(
+                      (engine) => (
+                        <SelectItem key={engine} value={engine}>
+                          {engine}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <RefreshButton onRefresh={fetchEndpoints} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredEndpoints.map((endpoint) => (

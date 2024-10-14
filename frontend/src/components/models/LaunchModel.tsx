@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
+import { DesktopIcon, RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
 import { Adapter, Engine, Host, Model } from "@/types/models";
 import { Label } from "@/components/ui/label";
@@ -334,6 +334,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                 {hosts.map((host) => (
                   <DisplayCard
                     key={host.hostname}
+                    icon={<DesktopIcon className="mr-2 h-4 w-4" />}
                     className={`cursor-pointer transition duration-300 ease-in-out ${
                       formData.hostId === host.hostname
                         ? "ring-2 ring-blue-500"

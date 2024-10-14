@@ -39,6 +39,7 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   loading?: boolean;
+  loadingIcon?: React.ReactNode;
   icon?: React.ReactNode;
 }
 
@@ -50,6 +51,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       size,
       asChild = false,
       loading = false,
+      loadingIcon,
       icon,
       disabled = false,
       ...props
@@ -66,11 +68,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={isDisabled}
       >
         {loading ? (
-          <span className="mr-2 animate-spin">
-            <ShadowInnerIcon />
+          <span className={cn("animate-spin", props.children ? "mr-2" : "")}>
+            {loadingIcon ? loadingIcon : <ShadowInnerIcon />}
           </span>
         ) : icon ? (
-          <span className="mr-2">{icon}</span>
+          <span className={cn(props.children ? "mr-2" : "")}>{icon}</span>
         ) : null}
         {props.children}
       </Comp>

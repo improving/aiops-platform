@@ -2,18 +2,28 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
-import { ClipboardCopyIcon, CopyIcon, OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
+import {
+  ClipboardCopyIcon,
+  OpenInNewWindowIcon,
+  RocketIcon,
+} from "@radix-ui/react-icons";
 import Link from "next/link";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { RefreshButton } from "@/components/RefreshButton";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
+  const [filteredInstances, setFilteredInstances] = useState<
+    VectorDBInstanceSchema[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
   const fetchInstances = useCallback(async () => {
@@ -21,6 +31,7 @@ export default function VectorDBEndpoints() {
       setIsLoading(true);
       const data = await vectorDBService.getVectorDBInstances();
       setInstances(data);
+      setFilteredInstances(data);
     } catch (error) {
       toast(parseApiError(error));
     } finally {
@@ -32,6 +43,13 @@ export default function VectorDBEndpoints() {
     fetchInstances();
   }, [fetchInstances]);
 
+  useEffect(() => {
+    const filtered = instances.filter((instance) =>
+      instance.vectorDB.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredInstances(filtered);
+  }, [searchTerm, instances]);
+
   const handleDelete = async (id: string) => {
     await vectorDBService.deleteVectorDBInstance(id);
   };
@@ -42,7 +60,18 @@ export default function VectorDBEndpoints() {
 
   return (
     <>
-      {instances.length === 0 ? (
+      <div className="flex justify-between items-center mb-4">
+        <Input
+          type="text"
+          placeholder="Search by name..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-xs"
+        />
+        <RefreshButton onRefresh={fetchInstances} />
+      </div>
+
+      {filteredInstances.length === 0 ? (
         <div className="text-center">
           <p className="mb-4">No vector databases available.</p>
           <Link href="/vector-databases/catalog">
@@ -53,7 +82,7 @@ export default function VectorDBEndpoints() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {instances.map((instance) => (
+          {filteredInstances.map((instance) => (
             <DisplayCard
               key={instance.id}
               icon={GetVectorDBIcon(instance.vectorDB.chart_name)}
