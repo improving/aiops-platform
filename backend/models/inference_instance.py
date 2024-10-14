@@ -1,11 +1,10 @@
-import uuid
-
 from sqlalchemy import (JSON, Boolean, Column, ForeignKey, Integer, String,
                         Table)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+from utils import genid
 
 # Define the association table
 DBInferenceInstanceModelAdapters = Table(
@@ -22,7 +21,7 @@ class DBInferenceInstanceConfigParams(Base):
 
     id = Column(UUID(as_uuid=True),
                 primary_key=True,
-                default=uuid.uuid4,
+                default=genid.uuid4,
                 index=True)
     maxInputLength = Column(Integer)
     maxTokens = Column(Integer)
@@ -44,7 +43,9 @@ class DBInferenceInstanceConfigParams(Base):
 class DBInferenceInstance(Base):
     __tablename__ = "inference_instances"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True),
+                primary_key=True,
+                default=genid.uuid4_gen())
     model_id = Column(UUID(as_uuid=True), ForeignKey('models.id'))
     engine_id = Column(UUID(as_uuid=True), ForeignKey('engines.id'))
     host = Column(String)

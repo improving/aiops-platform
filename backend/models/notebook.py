@@ -1,16 +1,18 @@
-import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from db.database import Base
+from utils import genid
 
 
 class Notebook(Base):
     __tablename__ = 'notebooks'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True),
+                primary_key=True,
+                default=genid.uuid4_gen())
     name = Column(String, nullable=False)
     namespace = Column(String, nullable=False)
     type = Column(String, nullable=False)

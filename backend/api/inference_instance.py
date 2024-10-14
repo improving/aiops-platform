@@ -4,14 +4,13 @@ import pprint
 import uuid
 from typing import List
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes import client
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from controller import get_controller
-from db.database import SessionLocal, get_db
+from db.database import get_db
 from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
@@ -24,6 +23,7 @@ from models.models import DBModel
 from schemas.inference_instance import InferenceInstanceSchema
 from schemas.inference_instance_dashboards import \
     InferenceInstanceDashboardsSchema
+from utils import genid
 from utils.kubernetes_utils import (get_pod_status_and_readiness,
                                     get_service_endpoint)
 
@@ -471,7 +471,7 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
                 "var-service": service_name,
             }
             inference_instance_dashboard = DBInferenceInstanceDashboards(
-                id=uuid.uuid4(),
+                id=genid.uuid4(),
                 inference_instance_id=instance.id,
                 engine_chart_dashboard_id=chart_dashboard.id,
                 org_id=org_id,
@@ -485,12 +485,11 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
                             detail=f"Error creating instance dashboards: {e}")
 
 
-def update_all_instance_endpoints():
+def update_all_inference_instance_endpoints(db: Session):
     """
     Update all inference instance endpoints.
     """
     logger.debug("Updating all inference instance endpoints")
-    db = SessionLocal()
     try:
         # Query for instances without populated endpoints
         instances = db.query(DBInferenceInstance).filter(
@@ -584,13 +583,3 @@ def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
     pod_labels = controller.get_pod_labels(instance, engine_chart)
 
     return get_pod_status_and_readiness(controller.namespace, pod_labels)
-
-
-# Initialize the scheduler
-scheduler = AsyncIOScheduler()
-
-# Schedule the update_all_instance_endpoints function to run every 5 seconds
-scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
-
-# Start the scheduler
-scheduler.start()

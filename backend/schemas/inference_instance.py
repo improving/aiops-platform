@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from utils import genid
+
 from .engine import EngineSchema
 from .model import ModelSchema
 
@@ -19,7 +21,7 @@ class ModelAdapterReferenceSchema(BaseModel):
 
 
 class InferenceInstanceConfigParamsSchema(BaseModel):
-    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
+    id: Optional[uuid.UUID] = Field(default_factory=genid.uuid4_gen())
     maxInputLength: Optional[int] = None
     maxTokens: Optional[int] = None
     maxBatchPrefillTokens: Optional[int] = None
@@ -35,7 +37,7 @@ class InferenceInstanceConfigParamsSchema(BaseModel):
 
 
 class InferenceInstanceSchema(BaseModel):
-    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
+    id: Optional[uuid.UUID] = Field(default_factory=genid.uuid4_gen())
     model: ModelSchema
     engine: EngineSchema
     host: str

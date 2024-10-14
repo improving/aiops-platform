@@ -1,17 +1,17 @@
-import uuid
 from unittest import mock
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from app import app
 from controller import NotebooksController, VectorDBController, get_controller
+from core import create_app
 from schemas import (EngineChartsSchema, EngineSchema,
                      InferenceInstanceConfigParamsSchema,
                      InferenceInstanceSchema, ModelSchema,
                      NotebookInstanceSchema, VectorDBInstanceSchema,
                      VectorDBSchema)
+from utils import genid
 
 
 def test_controller():
@@ -22,9 +22,12 @@ def test_controller():
 
 @pytest.mark.asyncio
 async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
+    app = create_app()
     client = TestClient(app)
     engines = client.get("/v1alpha1/engines").json()
     models = client.get("/v1alpha1/models").json()
+    assert len(models) > 0
+    assert len(engines) > 0
 
     # load list of models in modelschema
     model_schemas = [ModelSchema(**model) for model in models]
@@ -66,12 +69,12 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
         controller = get_controller(engine_name, core_v1_api=mock.Mock())
         assert controller is not None
         instance = InferenceInstanceSchema(
-            id=uuid.uuid4(),
+            id=genid.uuid4(),
             model=model_schema,
             engine=engine_schema,
             host="gpu-node-3",
             config=InferenceInstanceConfigParamsSchema(
-                id=uuid.uuid4(),
+                id=genid.uuid4(),
                 maxInputLength=100,
                 maxTokens=100,
                 maxBatchPrefillTokens=100,
@@ -83,7 +86,7 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
         )
         engine_chart_map = engineChartMaps[engine_name]
         engine_chart = EngineChartsSchema(
-            id=uuid.uuid4(),
+            id=genid.uuid4(),
             engine=engine_name,
             chart_type=engine_chart_map["chart_type"],
             chart_repo=engine_chart_map["chart_repo"],
@@ -136,6 +139,7 @@ async def test_notebook_controller_helm_values(snapshot):
 
 @pytest.mark.asyncio
 async def test_vectordb_controller_helm_values(snapshot):
+    app = create_app()
     client = TestClient(app)
     vectordbs = client.get("/v1alpha1/vectordb").json()
     vector_db_schemas = [VectorDBSchema(**vectordb) for vectordb in vectordbs]

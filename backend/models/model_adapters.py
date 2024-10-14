@@ -1,11 +1,10 @@
-import uuid
-
 from sqlalchemy import (CheckConstraint, Column, ForeignKey, String,
                         UniqueConstraint)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from db.database import Base
+from utils import genid
 
 from .inference_instance import DBInferenceInstanceModelAdapters
 
@@ -13,7 +12,9 @@ from .inference_instance import DBInferenceInstanceModelAdapters
 class DBModelAdapters(Base):
     __tablename__ = "model_adapters"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True),
+                primary_key=True,
+                default=genid.uuid4_gen())
     name = Column(String, nullable=False)
     model_id = Column(UUID(as_uuid=True),
                       ForeignKey('models.id'),

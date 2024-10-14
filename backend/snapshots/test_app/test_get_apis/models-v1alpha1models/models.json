@@ -1,6 +1,6 @@
 [
   {
-    "id": "6aa59c63-e42f-4a06-a8af-9e8c05818314",
+    "id": "00000000-0000-4000-8134-d6e500000002",
     "name": "Llama 3.1 8B Instruct",
     "modelId": "meta-llama/Meta-Llama-3.1-8B-Instruct",
     "description": "Llama 3.1 is a large language model",
@@ -10,7 +10,7 @@
     "countAdapters": 0
   },
   {
-    "id": "a189d57d-09e2-4b1b-b803-38bd0e8a2a47",
+    "id": "00000000-0000-4000-8134-d6e500000003",
     "name": "BGE large",
     "modelId": "BAAI/bge-large-en-v1.5",
     "description": "BAAI/bge-large-en-v1.5 is a large language model",
@@ -20,7 +20,7 @@
     "countAdapters": 0
   },
   {
-    "id": "d775cbb7-3bee-4ccd-a17f-b3e2ae241a1e",
+    "id": "00000000-0000-4000-8134-d6e500000004",
     "name": "BGE Reranker",
     "modelId": "BAAI/bge-reranker-large",
     "description": "BAAI/bge-reranker-large is a large language model",
@@ -30,7 +30,7 @@
     "countAdapters": 0
   },
   {
-    "id": "3784f15a-a70d-401b-aa62-1c3088c23165",
+    "id": "00000000-0000-4000-8134-d6e500000005",
     "name": "Llama 3.1 8B",
     "modelId": "meta-llama/Meta-Llama-3.1-8B",
     "description": "meta-llama/Meta-Llama-3.1-8B is a large language model",
@@ -40,7 +40,7 @@
     "countAdapters": 0
   },
   {
-    "id": "2139c5b0-4214-401c-a7aa-7fa202646bd4",
+    "id": "00000000-0000-4000-8134-d6e500000006",
     "name": "Llama 3 8B",
     "modelId": "meta-llama/Meta-Llama-3-8B",
     "description": "meta-llama/Meta-Llama-3-8B is a large language model",
@@ -50,7 +50,7 @@
     "countAdapters": 0
   },
   {
-    "id": "c36311fc-affc-46fc-873d-9dec7e8eb496",
+    "id": "00000000-0000-4000-8134-d6e500000007",
     "name": "Llama 3 8B Instruct",
     "modelId": "meta-llama/Meta-Llama-3-8B-Instruct",
     "description": "meta-llama/Meta-Llama-3-8B-Instruct is a large language model",
@@ -60,7 +60,7 @@
     "countAdapters": 0
   },
   {
-    "id": "6acb00a7-e079-4f8f-82fa-63338d4bbc74",
+    "id": "00000000-0000-4000-8134-d6e500000008",
     "name": "Llama 3.2 1B Instruct",
     "modelId": "meta-llama/Llama-3.2-1B-Instruct",
     "description": "meta-llama/Llama-3.2-1B-Instruct is a large language model",
@@ -70,7 +70,7 @@
     "countAdapters": 0
   },
   {
-    "id": "df5cf0ce-ebfc-4090-8c89-973ccf974fe6",
+    "id": "00000000-0000-4000-8134-d6e500000009",
     "name": "Llama 3.2 3B Instruct",
     "modelId": "meta-llama/Llama-3.2-3B-Instruct",
     "description": "meta-llama/Llama-3.2-3B-Instruct is a large language model",
@@ -80,7 +80,7 @@
     "countAdapters": 0
   },
   {
-    "id": "e605753e-41ab-4594-98e5-e438b2bda8d4",
+    "id": "00000000-0000-4000-8134-d6e50000000a",
     "name": "Phi 1.5",
     "modelId": "microsoft/phi-1_5",
     "description": "microsoft/phi-1_5 is a large language model",
@@ -90,7 +90,7 @@
     "countAdapters": 0
   },
   {
-    "id": "a29ede31-9470-454f-81d5-e83a51ab7103",
+    "id": "00000000-0000-4000-8134-d6e50000000b",
     "name": "Phi 3 mini 4k",
     "modelId": "microsoft/Phi-3-mini-4k-instruct",
     "description": "microsoft/Phi-3-mini-4k-instruct is a small language model",
@@ -100,7 +100,7 @@
     "countAdapters": 0
   },
   {
-    "id": "d9f2281b-0350-436f-b060-bc451b45e6a2",
+    "id": "00000000-0000-4000-8134-d6e50000000c",
     "name": "Qwen2 7B Instruct",
     "modelId": "Qwen/Qwen2-7B-Instruct",
     "description": "Qwen/Qwen2-7B-Instruct is a large language model",
@@ -110,7 +110,7 @@
     "countAdapters": 0
   },
   {
-    "id": "11c14799-de7d-4f01-b363-cec33641f3b2",
+    "id": "00000000-0000-4000-8134-d6e50000000d",
     "name": "NV Rerank QA Mistral 4B V3",
     "modelId": "nvidia/nv-rerankqa-mistral-4b-v3",
     "description": "The NVIDIA Retrieval QA Mistral 4B Reranking Model",
@@ -120,7 +120,7 @@
     "countAdapters": 0
   },
   {
-    "id": "21929412-bb85-44c7-8624-e122ff77472f",
+    "id": "00000000-0000-4000-8134-d6e50000000e",
     "name": "NV Embed QA Mistral 7B V2",
     "modelId": "nvidia/nv-embedqa-mistral-7b-v2",
     "description": "The NVIDIA Retrieval QA Mistral 7B Embedding model",
@@ -130,7 +130,7 @@
     "countAdapters": 0
   },
   {
-    "id": "a83dfe69-25e3-4493-81b3-094f3a3988de",
+    "id": "00000000-0000-4000-8134-d6e50000000f",
     "name": "Llama Guard 3 8B",
     "modelId": "meta-llama/Llama-Guard-3-8B",
     "description": "It is an 8B parameter Llama 3-based LLM safeguard model",
@@ -140,7 +140,7 @@
     "countAdapters": 0
   },
   {
-    "id": "8b22dcac-a29a-4fa9-8945-fc5770182560",
+    "id": "00000000-0000-4000-8134-d6e500000010",
     "name": "Meta Llama Guard 2 8B",
     "modelId": "meta-llama/Meta-Llama-Guard-2-8B",
     "description": "It is an 8B parameter Llama 2-based LLM safeguard model",
@@ -150,7 +150,7 @@
     "countAdapters": 0
   },
   {
-    "id": "857fb8a9-6200-4dc8-8b2c-0096bccf3a35",
+    "id": "00000000-0000-4000-8134-d6e500000011",
     "name": "Mistral 7B v0.1",
     "modelId": "mistralai/Mistral-7B-v0.1",
     "description": "Mistral 7B v0.1 is a large language model",

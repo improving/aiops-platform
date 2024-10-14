@@ -1,15 +1,16 @@
-import uuid
-
 from sqlalchemy import Column, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from db.database import Base
+from utils import genid
 
 
 class DBEngineChartDashboards(Base):
     __tablename__ = "engine_chart_dashboards"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUID(as_uuid=True),
+                primary_key=True,
+                default=genid.uuid4_gen())
     dashboard_id = Column(String)
     dashboard_name = Column(String)
     engine_id = Column(UUID(as_uuid=True), ForeignKey('engines.id'))

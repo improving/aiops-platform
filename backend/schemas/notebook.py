@@ -4,9 +4,11 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from utils import genid
+
 
 class NotebookInstanceSchema(BaseModel):
-    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4)
+    id: Optional[uuid.UUID] = Field(default_factory=genid.uuid4_gen())
     name: str
     namespace: Optional[str] = "ai-stack"
     type: str

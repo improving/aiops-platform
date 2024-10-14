@@ -2,20 +2,22 @@ import csv
 import uuid
 
 from sqlalchemy import MetaData, Table, and_, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
-from db.database import Base, SessionLocal, engine
+from db.database import Base
 from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine, DBEngineDefaultArgs, DBEngineDefaultConfig
 from models.models import DBModel
 from models.vectordb import DBVectorDB
+from utils import genid
 
 logger = setup_logger(__name__)
 
 
-def update_table_definitions():
-    db = SessionLocal()
+def update_table_definitions(db: Session, engine: Engine):
     connection = engine.connect()
     try:
         metadata = MetaData()
@@ -30,7 +32,7 @@ def update_table_definitions():
                 model_columns = set(table.columns.keys())
 
                 # Add new columns
-                add_update_columns(connection, table, existing_table,
+                add_update_columns(engine, connection, table, existing_table,
                                    existing_columns)
 
                 # Drop removed columns
@@ -64,7 +66,8 @@ def update_table_definitions():
         db.close()
 
 
-def add_update_columns(connection, table, existing_table, existing_columns):
+def add_update_columns(engine: Engine, connection, table, existing_table,
+                       existing_columns):
     for column in table.columns:
         if column.name not in existing_columns:
             logger.info(f"Adding column {column.name} to table {table.name}")
@@ -92,16 +95,15 @@ def add_update_columns(connection, table, existing_table, existing_columns):
                     )
 
 
-def init_db():
+def init_db(db: Session, engine: Engine):
     logger.info("Initializing database")
     Base.metadata.create_all(bind=engine)
-    update_table_definitions()
-    load_initial_data()
+    update_table_definitions(db, engine)
+    load_initial_data(db)
     logger.info("Database initialized successfully")
 
 
-def load_initial_data():
-    db = SessionLocal()
+def load_initial_data(db: Session):
     try:
         # Load models
         load_models(db)
@@ -124,7 +126,8 @@ def load_initial_data():
         # Load vector dbs
         load_vector_dbs(db)
     except Exception as e:
-        logger.error(f"An error occurred while loading initial data: {e}")
+        logger.error(f"An error occurred while loading initial data: {e}",
+                     exc_info=True)
         db.rollback()
     finally:
         db.close()
@@ -135,11 +138,11 @@ def load_vector_dbs(db):
     with open("raw_data/vectordb.csv", "r", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            _vectordb = db.query(DBVectorDB).filter(
-                DBVectorDB.name == row["name"]).first()
+            _vectordb = (db.query(DBVectorDB).filter(
+                DBVectorDB.name == row["name"]).first())
             if not _vectordb:
                 _vectordb = DBVectorDB(
-                    id=uuid.uuid4(),
+                    id=genid.uuid4(),
                     name=row["name"],
                     description=row["description"],
                     chart_repo=row["chart_repo"],
@@ -162,15 +165,16 @@ def load_engine_chart_dashboards(db):
               encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            _engine_chart_dashboard = db.query(DBEngineChartDashboards).filter(
-                and_(
-                    DBEngineChartDashboards.engine_chart_id == uuid.UUID(
-                        row["engine_chart_id"]),
-                    DBEngineChartDashboards.panel_id ==
-                    row["panel_id"])).first()
+            _engine_chart_dashboard = (
+                db.query(DBEngineChartDashboards).filter(
+                    and_(
+                        DBEngineChartDashboards.engine_chart_id == uuid.UUID(
+                            row["engine_chart_id"]),
+                        DBEngineChartDashboards.panel_id == row["panel_id"],
+                    )).first())
             if not _engine_chart_dashboard:
                 _engine_chart_dashboard = DBEngineChartDashboards(
-                    id=uuid.uuid4(),
+                    id=genid.uuid4(),
                     dashboard_id=row["dashboard_id"],
                     dashboard_name=row["dashboard_name"],
                     engine_id=uuid.UUID(row["engine_id"]),
@@ -201,8 +205,8 @@ def load_engine_charts(db):
     with open("raw_data/engine_charts.csv", "r", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            _engine_chart = db.query(DBEngineCharts).filter(
-                DBEngineCharts.id == uuid.UUID(row["id"])).first()
+            _engine_chart = (db.query(DBEngineCharts).filter(
+                DBEngineCharts.id == uuid.UUID(row["id"])).first())
             if not _engine_chart:
                 _engine_chart = DBEngineCharts(
                     id=uuid.UUID(row["id"]),
@@ -224,7 +228,7 @@ def load_engine_charts(db):
     db.commit()
 
 
-def load_engines(db):
+def load_engines(db: Session):
     logger.info("Loading engines")
     with open("raw_data/engines.csv", "r", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
@@ -261,12 +265,13 @@ def load_engine_default_configs(db):
               encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            _engine_default_config = db.query(DBEngineDefaultConfig).filter(
+            _engine_default_config = (db.query(DBEngineDefaultConfig).filter(
                 DBEngineDefaultConfig.engine_id == uuid.UUID(row["engine_id"]),
-                DBEngineDefaultConfig.name == row["name"]).first()
+                DBEngineDefaultConfig.name == row["name"],
+            ).first())
             if not _engine_default_config:
                 _engine_default_config = DBEngineDefaultConfig(
-                    id=uuid.uuid4(),
+                    id=genid.uuid4(),
                     engine_id=uuid.UUID(row["engine_id"]),
                     chart_type=row["chart_type"],
                     name=row["name"],
@@ -294,12 +299,13 @@ def load_engine_default_args(db):
     with open("raw_data/engine_default_args.csv", "r", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            _engine_default_arg = db.query(DBEngineDefaultArgs).filter(
+            _engine_default_arg = (db.query(DBEngineDefaultArgs).filter(
                 DBEngineDefaultArgs.engine_id == uuid.UUID(row["engine_id"]),
-                DBEngineDefaultArgs.name == row["name"]).first()
+                DBEngineDefaultArgs.name == row["name"],
+            ).first())
             if not _engine_default_arg:
                 _engine_default_arg = DBEngineDefaultArgs(
-                    id=uuid.uuid4(),
+                    id=genid.uuid4(),
                     engine_id=uuid.UUID(row["engine_id"]),
                     chart_type=row["chart_type"],
                     name=row["name"],
@@ -329,7 +335,7 @@ def load_models(db):
                 DBModel.modelId == row["modelId"]).first()
             if not model:
                 model = DBModel(
-                    id=uuid.uuid4(),
+                    id=genid.uuid4(),
                     name=row["name"],
                     modelId=row["modelId"],
                     description=row["description"],
@@ -350,12 +356,10 @@ def load_models(db):
     db.commit()
 
 
-def reload_data():
-    db = SessionLocal()
-
+def reload_data(db: Session):
     try:
         # Reload data
-        load_initial_data()
+        load_initial_data(db)
 
         logger.info("Data reloaded successfully")
     except Exception as e:
@@ -366,14 +370,13 @@ def reload_data():
         db.close()
 
 
-def refresh_db():
-    db = SessionLocal()
+def refresh_db(db: Session, engine: Engine):
     try:
         # Delete all tables
         Base.metadata.drop_all(bind=engine)
 
         # Reload tables and data
-        init_db()
+        init_db(db, engine)
 
         logger.info("Data refreshed successfully")
     except Exception as e:

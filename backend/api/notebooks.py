@@ -1,7 +1,6 @@
 import uuid
 from typing import List
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes import client
 from sqlalchemy import or_
@@ -9,7 +8,7 @@ from sqlalchemy.orm import Session
 from urllib3.exceptions import MaxRetryError
 
 from controller.notebooks_controller import NotebooksController
-from db.database import SessionLocal, get_db
+from db.database import get_db
 from logger import setup_logger
 from models.notebook import Notebook
 from schemas.notebook import NotebookInstanceSchema
@@ -176,12 +175,11 @@ def check_pod_status_and_readiness(instance: Notebook):
     return get_pod_status_and_readiness(instance.namespace, pod_labels)
 
 
-def update_all_instance_endpoints():
+def update_all_notebook_instance_endpoints(db: Session):
     """
     Update endpoints for all notebook instances that don't have populated endpoints.
     """
     logger.debug("Updating all instance endpoints")
-    db = SessionLocal()
     try:
         # Query for instances without populated endpoints
         instances = db.query(Notebook).filter(
@@ -227,13 +225,3 @@ def update_instance_endpoints(instance: Notebook, db: Session):
     except client.exceptions.ApiException as e:
         logger.exception(f"Error getting service information: {e}")
     # Don't raise an exception here, as we still want to return the instance information
-
-
-# Initialize the scheduler
-scheduler = AsyncIOScheduler()
-
-# Schedule the update_all_instance_endpoints function to run every 5 seconds
-scheduler.add_job(update_all_instance_endpoints, 'interval', seconds=5)
-
-# Start the scheduler
-scheduler.start()

@@ -3,6 +3,12 @@ echo "Received arguments: $@"
 
 export TEST_MODE=true
 
+# create tmp dir
+mkdir -p tmp
+
+# Cleanup old db files
+rm -r tmp/*.db
+
 # Run tests
 if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "Usage: ./hack/runtest.sh [--update-snapshots | -u] [--cleanup | -c]"
