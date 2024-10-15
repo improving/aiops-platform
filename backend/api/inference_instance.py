@@ -7,7 +7,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes import client
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from controller import get_controller
 from db.database import get_db
@@ -501,20 +501,24 @@ def update_all_inference_instance_endpoints(db: Session):
         )
 
         for instance in instances:
-            update_instance_endpoints(instance, db)
+            update_instance_endpoints(instance.id, db)
     finally:
         db.close()
 
 
-def update_instance_endpoints(instance: DBInferenceInstance, db: Session):
+def update_instance_endpoints(instanceId: uuid.UUID, db: Session):
     """
     Update the endpoints for an inference instance.
 
     Args:
-        instance (DBInferenceInstance): The inference instance to update.
+        instanceId (uuid.UUID): The ID of the inference instance to update.
         db (Session): The database session.
     """
-    logger.info(f"Updating endpoints for instance {instance.id}")
+    logger.info(f"Updating endpoints for instance {instanceId}")
+    instance = db.query(DBInferenceInstance).options(
+        joinedload(DBInferenceInstance.model),
+        joinedload(DBInferenceInstance.engine)).filter(
+            DBInferenceInstance.id == instanceId).first()
     engine = db.query(DBEngine).filter(
         DBEngine.id == instance.engine_id).first()
     if not engine:
