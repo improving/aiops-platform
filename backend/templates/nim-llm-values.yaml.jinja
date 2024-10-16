@@ -29,5 +29,8 @@ resources:
   requests:
     nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
 
+{% if nodeSelector.hostname is defined %}
 nodeSelector:
-  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
+

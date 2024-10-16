@@ -40,7 +40,7 @@ class InferenceInstanceSchema(BaseModel):
     id: Optional[uuid.UUID] = Field(default_factory=genid.uuid4_gen())
     model: ModelSchema
     engine: EngineSchema
-    host: str
+    host: Optional[str] = None
     config: Optional[InferenceInstanceConfigParamsSchema] = None
     endpoint: Optional[str] = None
     healthEndpoint: Optional[str] = None

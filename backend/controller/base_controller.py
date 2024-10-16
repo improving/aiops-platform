@@ -61,10 +61,8 @@ class Controller(ABC):
         return values
 
     def _get_base_context(self, instance: InferenceInstanceSchema):
-        return {
-            "nodeSelector": {
-                "hostname": instance.host
-            },
+        base_context = {
+            "nodeSelector": {},
             "service": {
                 "type": "LoadBalancer",
                 "port": 80
@@ -88,6 +86,11 @@ class Controller(ABC):
                 }
             },
         }
+
+        if instance.host:
+            base_context["nodeSelector"] = {"hostname": instance.host}
+
+        return base_context
 
     @abstractmethod
     def _get_engine_specific_context(self, instance: InferenceInstanceSchema,

@@ -1,5 +1,7 @@
+{% if nodeSelector.hostname is defined %}
 nodeSelector:
-  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-3") }}
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
 
 config:
   modelID: {{ config.modelID | default("Qwen/Qwen2-7B-Instruct") }}

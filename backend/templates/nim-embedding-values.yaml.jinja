@@ -27,8 +27,10 @@ service:
   nodePort: {{ service.nodePort | default(null) }}
   annotations: {{ service.annotations | default({}) }}
 
+{% if nodeSelector.hostname is defined %}
 nodeSelector:
-  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
 
 resources:
   limits:

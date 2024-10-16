@@ -1,5 +1,7 @@
+{% if nodeSelector.hostname is defined %}
 nodeSelector:
-  kubernetes.io/hostname: {{ nodeSelector.hostname | default("gpu-node-1") }}
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
 
 config:
   modelID: {{ config.modelID | default("BAAI/bge-large-en-v1.5") }}

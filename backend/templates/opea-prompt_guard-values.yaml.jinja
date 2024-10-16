@@ -12,15 +12,19 @@ SAFETY_GUARD_MODEL_ID: {{ safety_guard_model_id | default('meta-llama/Meta-Llama
 service:
   type: {{ service_type | default('LoadBalancer') }}
 
+{% if nodeSelector.hostname is defined %}
 nodeSelector:
-  kubernetes.io/hostname: {{ node_selector | default('gpu-node-1') }}
+  kubernetes.io/hostname: {{ node_selector.hostname }}
+{% endif %}
 
 tgi:
   LLM_MODEL_ID: {{ tgi.llm_model_id | default('meta-llama/Meta-Llama-Guard-2-8B') }}
   service:
     type: {{ tgi_service_type | default('LoadBalancer') }}
+{% if nodeSelector.hostname is defined %}
   nodeSelector:
-    kubernetes.io/hostname: {{ node_selector | default('gpu-node-1') }}
+    kubernetes.io/hostname: {{ node_selector.hostname }}
+{% endif %}
 
 volumeMounts:
   - name: hf-cache
