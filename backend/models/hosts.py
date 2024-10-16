@@ -14,3 +14,4 @@ class Host(BaseModel):
     gpu_model: str
     gpu_replicas: int
     gpu_sharing_strategy: str
+    gpu_usage: float
