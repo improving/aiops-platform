@@ -49,7 +49,7 @@ export function parseApiError(error: unknown): Toast {
 
 export function GetModelIcon(modelId: string) {
   try {
-    switch (modelId.split("/")[0]) {
+    switch (modelId.split("/")[0].toLowerCase()) {
       case "meta-llama":
         return "/models/meta-llama.png";
       case "microsoft":
@@ -58,6 +58,8 @@ export function GetModelIcon(modelId: string) {
         return "/models/nvidia.png";
       case "mistralai":
         return "/models/mistral.png";
+      case "qwen":
+        return "/models/qwen.webp";
       default:
         return "/models/pixtide.png";
     }

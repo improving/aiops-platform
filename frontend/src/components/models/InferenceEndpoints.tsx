@@ -124,13 +124,13 @@ export default function InferenceEndpoints() {
                     <SelectValue placeholder="Select Engine" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.from(new Set(endpoints.map((e) => e.engine.name))).map(
-                      (engine) => (
-                        <SelectItem key={engine} value={engine}>
-                          {engine}
-                        </SelectItem>
-                      )
-                    )}
+                    {Array.from(
+                      new Set(endpoints.map((e) => e.engine.name))
+                    ).map((engine) => (
+                      <SelectItem key={engine} value={engine}>
+                        {engine}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
@@ -157,9 +157,11 @@ export default function InferenceEndpoints() {
                       <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                         {endpoint.engine.name}
                       </span>
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                        {endpoint.host}
-                      </span>
+                      {endpoint.host && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                          {endpoint.host}
+                        </span>
+                      )}
                       {endpoint.ready ? (
                         <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
                           Ready

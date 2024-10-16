@@ -13,7 +13,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DesktopIcon, RocketIcon, ThickArrowRightIcon } from "@radix-ui/react-icons";
+import {
+  DesktopIcon,
+  RocketIcon,
+  ThickArrowRightIcon,
+  ValueNoneIcon,
+} from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
 import { Adapter, Engine, Host, Model } from "@/types/models";
 import { Label } from "@/components/ui/label";
@@ -281,12 +286,18 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     setActiveTab(value);
   };
 
+  const handleSkip = () => {
+    // set host undefined and set active tab to deployConfig
+    setFormData((prev) => ({ ...prev, hostId: "" }));
+    setActiveTab("deployConfig");
+  };
+
   const handleNext = () => {
     if (activeTab === "accelerators") {
       if (!formData.hostId) {
         toast({
           title: "Host Selection Required",
-          description: "Please select a host before proceeding.",
+          description: "Please select a host or click Skip to auto-select.",
           variant: "destructive",
         });
         return;
@@ -373,8 +384,13 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                         </div>
                         <div className="flex flex-wrap gap-2 mb-3">
                           {host.gpu_count > 0 && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                            <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
                               {host.gpu_count} GPU
+                            </span>
+                          )}
+                          {host.gpu_replicas > 1 && (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                              {`${host.gpu_replicas - host.gpu_usage} / ${host.gpu_replicas} slice-free`}
                             </span>
                           )}
                           {host.gpu_memory > 0 && (
@@ -391,10 +407,23 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
               </div>
             }
             footer={
-              <Button type="button" onClick={handleNext}>
-                <ThickArrowRightIcon className="mr-2 w-4 h-4" />
-                Next
-              </Button>
+              <div className="flex justify-between space-x-4">
+                <Button
+                  type="button"
+                  onClick={handleSkip}
+                  variant="outline"
+                  icon={<ValueNoneIcon className="w-4 h-4" />}
+                >
+                  Skip
+                </Button>
+                <Button
+                  type="button"
+                  icon={<ThickArrowRightIcon className="w-4 h-4" />}
+                  onClick={handleNext}
+                >
+                  Next
+                </Button>
+              </div>
             }
           />
         </TabsContent>

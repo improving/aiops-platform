@@ -168,10 +168,12 @@ export default function InferenceEndpointDetailsPage({
                 <Label>Engine</Label>
                 <span>{inferenceInstance.engine.name || "N/A"}</span>
               </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Host</Label>
-                <span>{inferenceInstance.host || "N/A"}</span>
-              </div>
+              {inferenceInstance.host && (
+                <div className="grid grid-cols-2 items-center gap-4">
+                  <Label>Host</Label>
+                  <span>{inferenceInstance.host || "N/A"}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Ready</Label>
                 <span>{inferenceInstance.ready ? "Yes" : "No"}</span>

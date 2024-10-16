@@ -69,6 +69,7 @@ interface Host {
   gpu_model: string;
   gpu_replicas: number;
   gpu_sharing_strategy: string;
+  gpu_usage: number;
 }
 
 interface Model {

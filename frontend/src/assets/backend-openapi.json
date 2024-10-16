@@ -1892,6 +1892,10 @@
           "gpu_sharing_strategy": {
             "type": "string",
             "title": "Gpu Sharing Strategy"
+          },
+          "gpu_usage": {
+            "type": "number",
+            "title": "Gpu Usage"
           }
         },
         "type": "object",
@@ -1906,7 +1910,8 @@
           "gpu_memory",
           "gpu_model",
           "gpu_replicas",
-          "gpu_sharing_strategy"
+          "gpu_sharing_strategy",
+          "gpu_usage"
         ],
         "title": "Host"
       },
