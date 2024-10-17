@@ -38,9 +38,7 @@ class HuggingFaceController(Controller):
                 "httpGet": {},
             },
             "volumeMounts": {
-                "hf_cache": {
-                    "mountPath": "/root/.cache/huggingface/hub"
-                }
+                "hf_cache": {}
             },
         }
 
