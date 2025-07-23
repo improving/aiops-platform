@@ -5,4 +5,4 @@ export const LANGFLOW_URL =
 export const GRAFANA_URL =
   process.env.NEXT_PUBLIC_GRAFANA_URL || "http://192.0.2.185";
 export const JAEGER_URL =
-  process.env.NEXT_PUBLIC_JAEGER_URL || "http://192.0.2.188";
+  process.env.NEXT_PUBLIC_JAEGER_URL || "http://192.0.2.187";
