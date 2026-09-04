@@ -1,0 +1,25 @@
+# Copy this file to config.yaml, fill in the values, and keep config.yaml out of git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hf-api-token
+type: Opaque
+stringData:
+  HF_API_TOKEN: <REPLACE_ME>
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ngc-api-key
+type: Opaque
+stringData:
+  NGC_API_KEY: <REPLACE_ME>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiops-backend-config
+data:
+  DATABASE_URL: postgresql://aiops-postgres-postgresql:5432
+  DATABASE_NAME: postgres
+  DATABASE_USER: postgres

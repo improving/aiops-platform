@@ -2,7 +2,7 @@ autodependency:
   enabled: true
 
 global:
-  HUGGINGFACEHUB_API_TOKEN: <HF_API_TOKEN>
+  HUGGINGFACEHUB_API_TOKEN: REPLACE_ME
   modelUsePVC: hf-cache
 
 # Guard Model Id

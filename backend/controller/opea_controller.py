@@ -10,7 +10,6 @@ class OPEAController(Controller):
 
     def _get_engine_specific_context(self, instance: InferenceInstanceSchema,
                                      engineChart: EngineChartsSchema):
-        print(f"HF_API_TOKEN: {os.getenv('HF_API_TOKEN')}")
         context = {
             "safety_guard_model_id": instance.model.modelId,
             "tgi": {
