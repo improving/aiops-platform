@@ -29,7 +29,7 @@ import { useState } from "react";
 import { notebookService } from "@/services/notebookService";
 import { parseApiError } from "@/lib/utils";
 
-const NAME_MAX_LENGTH = 24;
+const NAME_MAX_LENGTH = 32;
 // DNS-1123 label: lowercase alphanumeric, hyphens allowed in the middle,
 // must start and end with an alphanumeric character.
 const DNS_1123_LABEL_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
