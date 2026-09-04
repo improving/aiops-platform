@@ -112,47 +112,15 @@ import -- the pod will still pull the image directly from the registry via
 containerd inside the node, which works, just without the local-load
 shortcut.)
 
-### Notebook instances stay Pending forever ("Insufficient nvidia.com/gpu")
+### Notebook instances stay Pending with "Insufficient nvidia.com/gpu"
 
-`hack/e2e-smoke.sh` defaults to `--skip-notebook`-free runs, but on a kind
-cluster without a GPU device plugin the notebook step currently cannot pass.
-
-Root cause (confirmed by running it end to end): the `kf-notebooks` chart's
-own `values.yaml` default sets
-`notebooks.jupyter.resources.limits."nvidia.com/gpu": "1"` unconditionally.
-`backend/templates/kf-notebooks-values.yaml.jinja` only *adds* that key when
-`nvidia_gpu` is true (`{% if nvidia_gpu %}`);
-it never emits an explicit override to remove/null it when `nvidia_gpu` is
-false.
-Helm merges supplied values on top of chart defaults without deleting keys
-the caller omitted, so a `POST /v1alpha1/notebooks` with
-`"nvidia_gpu": false` still produces a Notebook CR whose pod requests
-`nvidia.com/gpu: "1"`, e.g.:
-
-```
-$ kubectl -n ai-stack get notebook <name> -o yaml
-  ...
-  resources:
-    limits:
-      cpu: "0.5"
-      memory: 1Gi
-      nvidia.com/gpu: "1"      # <- present despite nvidia_gpu: false
-    requests:
-      cpu: "0.5"
-      memory: 1Gi
-
-$ kubectl -n ai-stack describe pod <name>-0
-Events:
-  Warning  FailedScheduling  0/1 nodes are available: 1 Insufficient nvidia.com/gpu.
-```
-
-This is a `backend/` + chart-template gap, not something this worktree can
-fix (`backend/` is owned by another worktree/agent).
-Until it's fixed, notebook creation only succeeds on a cluster with a GPU
-(or a fake GPU device plugin).
-Run the smoke test with `make e2e-smoke ARGS="--skip-notebook"`
-or `BACKEND_URL=... ./hack/e2e-smoke.sh --skip-notebook` on a GPU-less
-cluster like this one.
+The `kf-notebooks` chart defaults `notebooks.jupyter.resources.limits."nvidia.com/gpu"` to `"1"`.
+`backend/templates/kf-notebooks-values.yaml.jinja` sets that key to `null` when `nvidia_gpu` is false,
+which removes it on the Helm merge, so a GPU-less notebook schedules on kind.
+If you see this event again, check the rendered values with
+`helm -n ai-stack get values <release>`:
+the `nvidia.com/gpu` key must be absent or null.
+`--skip-notebook` skips the notebook part of the smoke test when you only want the vector DB path.
 
 ### Notebook CRD missing
 
