@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import NotConfigured from "@/components/NotConfigured";
 
 interface JaegerEmbedProps {
   jaegerEndpoint: string;
@@ -39,6 +40,10 @@ const JaegerEmbed: React.FC<JaegerEmbedProps> = ({
       setError("Failed to construct Jaeger URL");
     }
   }, [jaegerEndpoint, serviceName, start, end, limit, lookback]);
+
+  if (!jaegerEndpoint) {
+    return <NotConfigured name="Jaeger" envVar="NEXT_PUBLIC_JAEGER_URL" />;
+  }
 
   if (error) {
     return <div className="error">{error}</div>;
