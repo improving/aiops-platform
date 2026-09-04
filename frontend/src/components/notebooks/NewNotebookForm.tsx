@@ -52,7 +52,12 @@ const notebookSchema = z
     resources_cpu: z.coerce.number().min(0.5).max(4),
     resources_memory: z.coerce.number().min(1).max(32),
     nvidia_gpu: z.boolean(),
-    resources_gpu: z.coerce.number().min(1).max(4).optional(),
+    // The GPU count input is unmounted while the GPU switch is off and can
+    // leave an empty string behind; treat that as "not set".
+    resources_gpu: z.preprocess(
+      (value) => (value === "" || value === null ? undefined : value),
+      z.coerce.number().min(1).max(4).optional()
+    ),
     storage_size: z.coerce.number().min(5).max(20),
   })
   .refine(
