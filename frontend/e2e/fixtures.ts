@@ -66,6 +66,14 @@ export type FineTuneJobRecord = {
   status: string | null;
 };
 
+export type EngineRecord = {
+  id: string;
+  name: string;
+  llm_support: boolean;
+  default_args: { name: string; defaultValue: string }[];
+  default_config: { name: string; defaultValue: string }[];
+};
+
 export class BackendApi {
   constructor(
     readonly request: APIRequestContext,
@@ -82,7 +90,15 @@ export class BackendApi {
     return res.json();
   }
 
-  async vectorDBs(): Promise<{ id: string; name: string; chart_name: string }[]> {
+  async engines(): Promise<EngineRecord[]> {
+    const res = await this.request.get(this.url("/engines"));
+    expect(res.ok(), `GET /engines -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async vectorDBs(): Promise<
+    { id: string; name: string; chart_name: string }[]
+  > {
     const res = await this.request.get(this.url("/vectordb"));
     expect(res.ok(), `GET /vectordb -> ${res.status()}`).toBeTruthy();
     return res.json();
@@ -108,10 +124,7 @@ export class BackendApi {
 
   async vectorDBInstances(): Promise<VectorDBInstanceRecord[]> {
     const res = await this.request.get(this.url("/vectordb_instances"));
-    expect(
-      res.ok(),
-      `GET /vectordb_instances -> ${res.status()}`
-    ).toBeTruthy();
+    expect(res.ok(), `GET /vectordb_instances -> ${res.status()}`).toBeTruthy();
     return res.json();
   }
 
@@ -203,6 +216,23 @@ export function helmReleases(namespace = HELM_NAMESPACE): string[] {
   return releases.map((r) => r.name);
 }
 
+/** Names of the Kubernetes Jobs in the platform namespace. */
+export function kubernetesJobs(namespace = HELM_NAMESPACE): string[] {
+  const out = execFileSync(
+    "kubectl",
+    [
+      "-n",
+      namespace,
+      "get",
+      "jobs",
+      "-o",
+      "jsonpath={.items[*].metadata.name}",
+    ],
+    { encoding: "utf8" }
+  );
+  return out.split(/\s+/).filter(Boolean);
+}
+
 /** Poll until no release name contains `fragment`. Uninstall is async. */
 export async function waitForHelmReleaseGone(
   fragment: string,
@@ -260,15 +290,22 @@ export const test = base.extend<E2EOptions & Fixtures>({
     async ({ page, allowedConsoleErrors }, provide) => {
       const errors = attachConsoleGuard(page, allowedConsoleErrors);
       await provide(errors);
-      expect
-        .soft(errors, "unexpected browser console errors")
-        .toEqual([]);
+      expect.soft(errors, "unexpected browser console errors").toEqual([]);
     },
     { auto: true },
   ],
 });
 
 export { expect };
+
+/**
+ * Mark a test as pending on a known product bug. It is skipped and reported
+ * as "fixme" until E2E_RUN_FIXME=1 is set, which runs it so you can see
+ * whether the fix has landed.
+ */
+export function fixme(reason: string) {
+  test.fixme(process.env.E2E_RUN_FIXME !== "1", reason);
+}
 
 /** Short random suffix for resource names created by the tests. */
 export function shortId(): string {

@@ -18,8 +18,9 @@ export class AppShell {
     this.brand = this.header.getByRole("link", { name: "AI Hub" });
     this.heading = page.getByRole("heading", { level: 1 });
     this.footer = page.locator("footer");
-    // Radix toast roots carry role="status".
-    this.toasts = page.getByRole("status");
+    // Radix renders each toast as an <li role="status"> plus a hidden
+    // announcement <div role="status">; keep only the visible list item.
+    this.toasts = page.locator('li[role="status"]');
     this.themeToggle = this.header.getByRole("button", {
       name: "Toggle theme",
     });
@@ -71,11 +72,14 @@ export class AppShell {
     return this.page.getByRole("dialog");
   }
 
-  /** Confirm the shared DeleteButton dialog. */
-  async confirmDelete() {
+  /**
+   * Confirm the shared DeleteButton dialog. `timeout` bounds how long the
+   * delete call may take (Helm uninstalls are slow).
+   */
+  async confirmDelete(timeout?: number) {
     const dialog = this.dialog().filter({ hasText: "Confirm Deletion" });
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(dialog).toBeHidden();
+    await expect(dialog).toBeHidden({ timeout });
   }
 }

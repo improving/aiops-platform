@@ -1,4 +1,4 @@
-import { test, expect } from "../fixtures";
+import { test, expect, fixme } from "../fixtures";
 import { AppShell } from "../pages/app-shell";
 
 const pages = [
@@ -7,7 +7,10 @@ const pages = [
   { path: "/models/catalog", heading: "Model Catalog" },
   { path: "/models/endpoints", heading: "Inference Endpoints" },
   { path: "/vector-databases/catalog", heading: "Vector Database Catalog" },
-  { path: "/vector-databases/endpoints", heading: "Vector Databases Endpoints" },
+  {
+    path: "/vector-databases/endpoints",
+    heading: "Vector Databases Endpoints",
+  },
   { path: "/develop", heading: "Interactively Develop AI Applications" },
   { path: "/notebooks/new", heading: "Create New Notebook" },
 ];
@@ -73,12 +76,10 @@ test.describe("header navigation", () => {
   });
 
   test("the footer shows the current year", async ({ page }) => {
-    test.fixme(true, "footer is hard-coded to 2024; the shell fix is pending");
+    fixme("footer is hard-coded to 2024; the shell fix is pending");
     const shell = new AppShell(page);
     await shell.goto("/");
-    await expect(shell.footer).toContainText(
-      String(new Date().getFullYear())
-    );
+    await expect(shell.footer).toContainText(String(new Date().getFullYear()));
   });
 });
 
