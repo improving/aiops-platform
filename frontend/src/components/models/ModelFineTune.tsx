@@ -34,22 +34,6 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
 
-  useEffect(() => {
-    async function fetchModel() {
-      try {
-        const data = await modelService.getModelById(params.id);
-        setModel(data);
-        setFineTuneConfig((prev) => ({
-          ...prev,
-          base_model: data.modelId,
-        }));
-      } catch (error) {
-        toast(parseApiError(error));
-      }
-    }
-    fetchModel();
-  }, [params.id, toast]);
-
   const [fineTuneConfig, setFineTuneConfig] = useState<FineTuneConfig>({
     task: "",
     base_model: "",
@@ -89,6 +73,23 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     },
   });
 
+  useEffect(() => {
+    async function fetchModel() {
+      try {
+        const data = await modelService.getModelById(params.id);
+        setModel(data);
+        setFineTuneConfig((prev) => ({
+          ...prev,
+          base_model: data.modelId,
+        }));
+      } catch (error) {
+        toast(parseApiError(error));
+      }
+    }
+    fetchModel();
+  }, [params.id, toast]);
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -111,7 +112,10 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     }
   };
 
-  const handleParamChange = (key: keyof FineTuneParams, value: any) => {
+  const handleParamChange = (
+    key: keyof FineTuneParams,
+    value: string | number | null
+  ) => {
     if (value == "none") {
       value = null;
     }
@@ -121,7 +125,7 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     }));
   };
 
-  const handleDatasetChange = (key: keyof Dataset, value: any) => {
+  const handleDatasetChange = (key: keyof Dataset, value: string | null) => {
     setFineTuneConfig((prev) => ({
       ...prev,
       data: { ...prev.data, [key]: value },

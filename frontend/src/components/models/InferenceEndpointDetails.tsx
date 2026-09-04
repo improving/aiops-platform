@@ -12,7 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { InferenceInstance, InferenceInstanceDashboard } from "@/types/models";
+import {
+  Adapter,
+  InferenceInstance,
+  InferenceInstanceDashboard,
+} from "@/types/models";
 import JaegerEmbed from "@/components/JaegerEmbed";
 import { Input } from "@/components/ui/input";
 import { GRAFANA_URL, JAEGER_URL } from "@/constants";
@@ -74,7 +78,7 @@ export default function InferenceEndpointDetailsPage({
   const [activeTab, setActiveTab] = useState(
     searchParams.get("tab") || "details"
   );
-  const [selectedAdapter, setSelectedAdapter] = useState<any | null>(null);
+  const [selectedAdapter, setSelectedAdapter] = useState<Adapter | null>(null);
   const [serviceName, setServiceName] = useState<string | null>(null);
   const [jaegerLimit, setJaegerLimit] = useState(20);
   const { toast } = useToast();

@@ -9,7 +9,7 @@ interface VectorDBSchema {
 interface VectorDBInstanceSchema {
   id: string;
   vectorDB: VectorDBSchema;
-  configParams: Record<string, any>;
+  configParams: Record<string, unknown>;
   endpoint: string;
   ready: boolean;
   status: string;

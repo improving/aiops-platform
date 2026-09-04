@@ -138,7 +138,7 @@ interface FineTuneConfig {
 
 interface FineTuneJob {
   name: string;
-  params: Record<string, any>;
+  params: Record<string, unknown>;
   id: string;
   base_model: Model;
   status: string;
