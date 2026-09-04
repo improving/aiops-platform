@@ -253,16 +253,27 @@ step_notebook_curl() {
     fail "curl notebook base path" "could not find notebook service in namespace $NAMESPACE"
     return
   fi
-  info "port-forwarding svc/$svc_name 18888:80"
-  kubectl -n "$NAMESPACE" port-forward "svc/$svc_name" 18888:80 >/tmp/e2e-pf-notebook.log 2>&1 &
-  PF_PID=$!
-  local ok=false
-  for _ in $(seq 1 20); do
-    if curl -sS -o /dev/null "http://localhost:18888/" 2>/dev/null; then
-      ok=true
-      break
-    fi
-    sleep 1
+  # The Notebook reports Running before Jupyter listens on 8888, and
+  # kubectl port-forward exits on the first refused connection, so retry
+  # with a fresh port-forward until Jupyter answers any HTTP status.
+  local ok=false attempt
+  for attempt in $(seq 1 12); do
+    info "port-forwarding svc/$svc_name 18888:80 (attempt $attempt)"
+    kubectl -n "$NAMESPACE" port-forward "svc/$svc_name" 18888:80 >/tmp/e2e-pf-notebook.log 2>&1 &
+    PF_PID=$!
+    sleep 2
+    for _ in $(seq 1 5); do
+      if curl -sS -o /dev/null "http://localhost:18888/" 2>/dev/null; then
+        ok=true
+        break
+      fi
+      sleep 1
+    done
+    $ok && break
+    kill "$PF_PID" 2>/dev/null || true
+    wait "$PF_PID" 2>/dev/null || true
+    PF_PID=""
+    sleep 5
   done
   if $ok; then
     local code
