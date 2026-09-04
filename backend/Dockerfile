@@ -1,20 +1,35 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim
+FROM python:3.13-slim
 
-# Set the working directory in the container
-WORKDIR /app
+ARG TARGETARCH
+ARG HELM_VERSION=4.2.4
 
-# Install necessary dependencies and Helm
+# uv binary from the official image
+COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /uvx /bin/
+
+# Helm binary with checksum verification
 RUN apt-get update && \
-    apt-get install -y curl apt-transport-https gnupg2 && \
-    curl https://baltocdn.com/helm/signing.asc | apt-key add - && \
-    echo "deb https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list && \
-    apt-get update && \
-    apt-get install -y helm && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz" && \
+    curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz.sha256sum" && \
+    sha256sum -c "helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz.sha256sum" && \
+    tar -xzf "helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz" && \
+    install -m 0755 "linux-${TARGETARCH}/helm" /usr/local/bin/helm && \
+    rm -rf "linux-${TARGETARCH}" helm-v* && \
+    apt-get purge -y curl && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy the required files
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+# Dependencies first so the layer is cached across source changes
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+# Application source
 COPY api/ ./api/
 COPY controller/ ./controller/
 COPY db/ ./db/
@@ -24,16 +39,14 @@ COPY repositories/ ./repositories/
 COPY schemas/ ./schemas/
 COPY templates/ ./templates/
 COPY utils/ ./utils/
-COPY core.py .
-COPY app.py .
-COPY logger.py .
-COPY requirements.txt .
+COPY app.py core.py logger.py paths.py ./
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Non-root user; helm keeps its cache and config under HOME
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app && \
+    chown -R app:app /app
+USER app
+ENV HOME=/app
 
-# Make port 8000 available to the world outside this container
 EXPOSE 8000
 
-# Run app.py when the container launches
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

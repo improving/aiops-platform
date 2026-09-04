@@ -48,5 +48,3 @@ spec:
             cpu: 1
             memory: 1Gi
       serviceAccountName: aiops-backend-sa
-      nodeSelector:
-        kubernetes.io/hostname: gpu-node-4
