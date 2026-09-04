@@ -25,7 +25,7 @@ The Develop page embeds Langflow.
 and `make frontend` passes `NEXT_PUBLIC_LANGFLOW_URL` so the page embeds it.
 Without it the page shows a "Langflow is not configured" card, which is expected.
 The container runs with `LANGFLOW_AUTO_LOGIN=true`, which is fine locally but not for a shared deployment.
-`make langflow-down` removes it; `make db-down` removes both Postgres and Langflow.
+`make langflow-down` removes the container and keeps its data volume; `make db-down` only touches Postgres.
 
 ## Bring the stack up
 

@@ -81,14 +81,14 @@ kind-down: ## Delete the kind cluster
 db-up: ## Start local Postgres (docker compose)
 	docker compose -f $(COMPOSE_FILE) up -d --wait
 
-db-down: ## Stop and remove local Postgres (and Langflow if running)
-	docker compose -f $(COMPOSE_FILE) --profile langflow down
+db-down: ## Stop and remove local Postgres (data volume is kept; Langflow is untouched)
+	docker compose -f $(COMPOSE_FILE) down
 
 langflow-up: ## Start Langflow for the Develop page (docker compose profile)
 	docker compose -f $(COMPOSE_FILE) --profile langflow up -d --wait langflow
 	@echo "Langflow: $(LANGFLOW_URL) (the frontend embeds it when NEXT_PUBLIC_LANGFLOW_URL is set; 'make frontend' sets it)"
 
-langflow-down: ## Stop and remove Langflow
+langflow-down: ## Stop and remove the Langflow container (its data volume is kept)
 	docker compose -f $(COMPOSE_FILE) --profile langflow rm -sf langflow
 
 # --- LoadBalancer support (optional, needs sudo -- not run by this Makefile) -
