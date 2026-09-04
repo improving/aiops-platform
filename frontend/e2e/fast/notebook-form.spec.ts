@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures";
 import { NotebookFormPage } from "../pages/notebook-form";
+import { FAILED_RESOURCE } from "../fixtures";
 
 test.describe("new notebook form", () => {
   test("has the Jupyter defaults", async ({ page }) => {
@@ -12,8 +13,8 @@ test.describe("new notebook form", () => {
     await expect(form.storage).toHaveValue("5");
     await expect(form.gpuSwitch).not.toBeChecked();
     await expect(form.gpuCount).toHaveCount(0);
-    // Nothing changed yet, so there is nothing to launch.
-    await expect(form.launchButton).toBeDisabled();
+    // Launch is enabled until a field reports an error.
+    await expect(form.launchButton).toBeEnabled();
   });
 
   test("switching to VS Code hides framework and GPU", async ({ page }) => {
@@ -77,6 +78,62 @@ test.describe("new notebook form", () => {
     ).toBe(false);
     await expect(form.launchButton).toBeDisabled();
     await expect(page).toHaveURL(/\/notebooks\/new$/);
+  });
+
+  test.describe("backend responses", () => {
+    // The browser logs a failed resource for the stubbed 4xx responses.
+    test.use({ allowedConsoleErrors: [FAILED_RESOURCE] });
+
+    test("a duplicate name surfaces the backend 409 message", async ({
+      page,
+    }) => {
+      await page.route("**/api/v1alpha1/notebooks", (route) =>
+        route.request().method() === "POST"
+          ? route.fulfill({
+              status: 409,
+              contentType: "application/json",
+              body: JSON.stringify({
+                detail: "Notebook 'e2e-dup' already exists",
+              }),
+            })
+          : route.continue()
+      );
+      const form = new NotebookFormPage(page);
+      await form.open();
+      await form.name.fill("e2e-dup");
+      await expect(form.launchButton).toBeEnabled();
+      await form.launchButton.click();
+      await expect(form.toast(/already exists/)).toBeVisible();
+      await expect(page).toHaveURL(/\/notebooks\/new$/);
+    });
+
+    test("a backend validation error is shown in the toast", async ({
+      page,
+    }) => {
+      await page.route("**/api/v1alpha1/notebooks", (route) =>
+        route.request().method() === "POST"
+          ? route.fulfill({
+              status: 422,
+              contentType: "application/json",
+              body: JSON.stringify({
+                detail: [
+                  {
+                    loc: ["body", "name"],
+                    msg: "Value error, must be lowercase letters, digits and '-'",
+                    type: "value_error",
+                  },
+                ],
+              }),
+            })
+          : route.continue()
+      );
+      const form = new NotebookFormPage(page);
+      await form.open();
+      await form.name.fill("e2e-valid-name");
+      await expect(form.launchButton).toBeEnabled();
+      await form.launchButton.click();
+      await expect(form.toast(/lowercase letters/)).toBeVisible();
+    });
   });
 
   test("the storage field explains its range", async ({ page }) => {

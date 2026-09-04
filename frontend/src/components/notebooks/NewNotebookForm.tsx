@@ -321,7 +321,11 @@ export default function NewNotebookForm() {
         <Button
           type="submit"
           icon={<RocketIcon className="w-4 h-4" />}
-          disabled={!form.formState.isDirty || !form.formState.isValid}
+          // Gate on reported errors rather than isValid: with coerced number
+          // fields react-hook-form does not reliably flip isValid to true.
+          disabled={
+            isSubmitting || Object.keys(form.formState.errors).length > 0
+          }
           loading={isSubmitting}
         >
           {isSubmitting ? "Launching..." : "Launch"}
