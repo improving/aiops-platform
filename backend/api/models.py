@@ -1,5 +1,4 @@
 import uuid
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -13,7 +12,7 @@ router = APIRouter()
 
 
 # API to get model information
-@router.get("/v1alpha1/models", response_model=List[ModelSchema])
+@router.get("/v1alpha1/models", response_model=list[ModelSchema])
 def get_models(db: Session = Depends(get_db)):
     """
     Retrieve all models from the database.
@@ -73,9 +72,9 @@ def create_model(model: ModelSchema, db: Session = Depends(get_db)):
 
 
 @router.put("/v1alpha1/models/{id}", response_model=ModelSchema)
-def update_model(id: uuid.UUID,
-                 model: ModelSchema,
-                 db: Session = Depends(get_db)):
+def update_model(
+    id: uuid.UUID, model: ModelSchema, db: Session = Depends(get_db)
+):
     """
     Update an existing model in the database.
 
@@ -115,11 +114,15 @@ def delete_model(id: uuid.UUID, db: Session = Depends(get_db)):
     if not db_model:
         raise HTTPException(status_code=404, detail="Model not found")
     ## Check if any instances are using this model
-    instances = (db.query(DBInferenceInstance).filter(
-        DBInferenceInstance.model_id == id).count())
+    instances = (
+        db.query(DBInferenceInstance)
+        .filter(DBInferenceInstance.model_id == id)
+        .count()
+    )
     if instances > 0:
-        raise HTTPException(status_code=400,
-                            detail="Model is still in use by instances")
+        raise HTTPException(
+            status_code=400, detail="Model is still in use by instances"
+        )
     db.delete(db_model)
     db.commit()
     return {"message": "Model deleted successfully"}

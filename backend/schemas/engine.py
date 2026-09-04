@@ -1,36 +1,35 @@
 import uuid
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
 class EngineDefaultConfigEnvVars(BaseModel):
-    name: Optional[str] = None
-    chart_type: Optional[str] = None
-    defaultValue: Optional[str] = None
-    editable: Optional[bool] = False
+    name: str | None = None
+    chart_type: str | None = None
+    defaultValue: str | None = None
+    editable: bool | None = False
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class EngineDefaultConfigArgs(BaseModel):
-    name: Optional[str] = None
-    chart_type: Optional[str] = None
-    defaultValue: Optional[str] = None
-    editable: Optional[bool] = False
+    name: str | None = None
+    chart_type: str | None = None
+    defaultValue: str | None = None
+    editable: bool | None = False
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class EngineSchema(BaseModel):
     id: uuid.UUID
-    name: Optional[str] = None
-    llm_support: Optional[bool] = False
-    embedding_support: Optional[bool] = False
-    reranking_support: Optional[bool] = False
-    prompt_guard_support: Optional[bool] = False
-    vector_db_support: Optional[bool] = False
-    default_config: Optional[list[EngineDefaultConfigEnvVars]] = None
-    default_args: Optional[list[EngineDefaultConfigArgs]] = None
+    name: str | None = None
+    llm_support: bool | None = False
+    embedding_support: bool | None = False
+    reranking_support: bool | None = False
+    prompt_guard_support: bool | None = False
+    vector_db_support: bool | None = False
+    default_config: list[EngineDefaultConfigEnvVars] | None = None
+    default_args: list[EngineDefaultConfigArgs] | None = None
 
     model_config = ConfigDict(from_attributes=True)

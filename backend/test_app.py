@@ -3,7 +3,33 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from api.inference_instance import missing_endpoint_clause
 from core import create_app
+
+
+def test_missing_endpoint_clause_compiles_to_is_null():
+    sql = str(missing_endpoint_clause().compile())
+    assert "IS NULL" in sql
+    assert "endpoint = " in sql
+
+
+def test_lifespan_skips_scheduler_in_test_mode():
+    app = create_app(setup_db=False)
+    with TestClient(app) as client:
+        assert getattr(app.state, "scheduler", None) is None
+        assert client.get("/health").status_code == 200
+
+
+def test_lifespan_runs_scheduler(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "false")
+    app = create_app(setup_db=False)
+    with TestClient(app) as client:
+        scheduler = app.state.scheduler
+        assert scheduler.running
+        assert len(scheduler.get_jobs()) == 3
+        assert client.get("/health").status_code == 200
+    assert not scheduler.running
+    assert app.state.scheduler is None
 
 
 def test_health_endpoint():
@@ -31,8 +57,9 @@ def test_get_apis(snapshot, name, endpoint):
     client = TestClient(app)
     response = client.get(endpoint)
     assert response.status_code == 200
-    snapshot.assert_match(json.dumps(response.json(), indent=2),
-                          f"{name}.json")
+    snapshot.assert_match(
+        json.dumps(response.json(), indent=2), f"{name}.json"
+    )
 
 
 def test_model_create_delete(snapshot):
@@ -64,5 +91,6 @@ def test_model_create_delete(snapshot):
     # Delete model
     response = client.delete(f"/v1alpha1/models/{model_id}")
     assert response.status_code == 200
-    snapshot.assert_match(json.dumps(response.json(), indent=2),
-                          "model-delete.json")
+    snapshot.assert_match(
+        json.dumps(response.json(), indent=2), "model-delete.json"
+    )

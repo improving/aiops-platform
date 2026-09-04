@@ -2,7 +2,6 @@ import json
 import os
 import pprint
 import uuid
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes import client
@@ -15,17 +14,22 @@ from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine
-from models.inference_instance import (DBInferenceInstance,
-                                       DBInferenceInstanceConfigParams)
+from models.inference_instance import (
+    DBInferenceInstance,
+    DBInferenceInstanceConfigParams,
+)
 from models.inference_instance_dashboards import DBInferenceInstanceDashboards
 from models.model_adapters import DBModelAdapters
 from models.models import DBModel
 from schemas.inference_instance import InferenceInstanceSchema
-from schemas.inference_instance_dashboards import \
-    InferenceInstanceDashboardsSchema
+from schemas.inference_instance_dashboards import (
+    InferenceInstanceDashboardsSchema,
+)
 from utils import genid
-from utils.kubernetes_utils import (get_pod_status_and_readiness,
-                                    get_service_endpoint)
+from utils.kubernetes_utils import (
+    get_pod_status_and_readiness,
+    get_service_endpoint,
+)
 
 router = APIRouter()
 
@@ -36,8 +40,9 @@ logger = setup_logger(__name__)
 org_id = "1"
 
 
-@router.get("/v1alpha1/inferenceInstance",
-            response_model=List[InferenceInstanceSchema])
+@router.get(
+    "/v1alpha1/inferenceInstance", response_model=list[InferenceInstanceSchema]
+)
 async def list_inference_instances(db: Session = Depends(get_db)):
     """
     List all inference instances.
@@ -55,7 +60,8 @@ async def list_inference_instances(db: Session = Depends(get_db)):
         instances = db.query(DBInferenceInstance).all()
         for instance in instances:
             instance_ready, instance_status = check_pod_status_and_readiness(
-                instance, db)
+                instance, db
+            )
             instance.ready = instance_ready
             instance.status = instance_status
         return instances
@@ -64,8 +70,9 @@ async def list_inference_instances(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/v1alpha1/inferenceInstance/{id}",
-            response_model=InferenceInstanceSchema)
+@router.get(
+    "/v1alpha1/inferenceInstance/{id}", response_model=InferenceInstanceSchema
+)
 async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Retrieve a specific inference instance by ID.
@@ -80,15 +87,20 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
         HTTPException: If the inference instance is not found or there's an internal error.
     """
     try:
-        instance = db.query(DBInferenceInstance).filter(
-            DBInferenceInstance.id == id).first()
+        instance = (
+            db.query(DBInferenceInstance)
+            .filter(DBInferenceInstance.id == id)
+            .first()
+        )
         if not instance:
             logger.error(f"Inference instance not found: {id}")
-            raise HTTPException(status_code=404,
-                                detail="Inference instance not found")
+            raise HTTPException(
+                status_code=404, detail="Inference instance not found"
+            )
 
         instance.ready, instance.status = check_pod_status_and_readiness(
-            instance, db)
+            instance, db
+        )
 
         return instance
     except HTTPException:
@@ -99,10 +111,13 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/v1alpha1/inferenceInstance/{id}/dashboards",
-            response_model=List[InferenceInstanceDashboardsSchema])
-async def get_inference_instance_dashboards(id: uuid.UUID,
-                                            db: Session = Depends(get_db)):
+@router.get(
+    "/v1alpha1/inferenceInstance/{id}/dashboards",
+    response_model=list[InferenceInstanceDashboardsSchema],
+)
+async def get_inference_instance_dashboards(
+    id: uuid.UUID, db: Session = Depends(get_db)
+):
     """
     Retrieve dashboards for a specific inference instance.
 
@@ -116,10 +131,11 @@ async def get_inference_instance_dashboards(id: uuid.UUID,
         HTTPException: If there's an error retrieving the dashboards.
     """
     try:
-        db_instance_dashboards = db.query(
-            DBInferenceInstanceDashboards).filter(
-                DBInferenceInstanceDashboards.inference_instance_id ==
-                id).all()
+        db_instance_dashboards = (
+            db.query(DBInferenceInstanceDashboards)
+            .filter(DBInferenceInstanceDashboards.inference_instance_id == id)
+            .all()
+        )
 
         if not db_instance_dashboards:
             return []
@@ -129,13 +145,21 @@ async def get_inference_instance_dashboards(id: uuid.UUID,
             instance_dashboard = InferenceInstanceDashboardsSchema(
                 id=db_instance_dashboard.id,
                 org_id=db_instance_dashboard.org_id,
-                query_params=json.loads(db_instance_dashboard.query_params))
-            chart_dashboard = db.query(DBEngineChartDashboards).filter(
-                DBEngineChartDashboards.id ==
-                db_instance_dashboard.engine_chart_dashboard_id).first()
+                query_params=json.loads(db_instance_dashboard.query_params),
+            )
+            chart_dashboard = (
+                db.query(DBEngineChartDashboards)
+                .filter(
+                    DBEngineChartDashboards.id
+                    == db_instance_dashboard.engine_chart_dashboard_id
+                )
+                .first()
+            )
             if chart_dashboard:
                 instance_dashboard.dashboard_id = chart_dashboard.dashboard_id
-                instance_dashboard.dashboard_name = chart_dashboard.dashboard_name
+                instance_dashboard.dashboard_name = (
+                    chart_dashboard.dashboard_name
+                )
                 instance_dashboard.panel_id = chart_dashboard.panel_id
                 instance_dashboard.panel_name = chart_dashboard.panel_name
             instance_dashboard_list.append(instance_dashboard)
@@ -143,15 +167,19 @@ async def get_inference_instance_dashboards(id: uuid.UUID,
         return instance_dashboard_list
     except Exception as e:
         logger.exception(
-            f"Error in get_inference_instance_dashboards: {str(e)}")
+            f"Error in get_inference_instance_dashboards: {str(e)}"
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/v1alpha1/inferenceInstance",
-             response_model=InferenceInstanceSchema,
-             status_code=201)
-async def create_inference_instance(instance: InferenceInstanceSchema,
-                                    db: Session = Depends(get_db)):
+@router.post(
+    "/v1alpha1/inferenceInstance",
+    response_model=InferenceInstanceSchema,
+    status_code=201,
+)
+async def create_inference_instance(
+    instance: InferenceInstanceSchema, db: Session = Depends(get_db)
+):
     """
     Create a new inference instance.
 
@@ -165,21 +193,33 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
         HTTPException: If there's an error creating the inference instance.
     """
     try:
-        model = db.query(DBModel).filter(
-            DBModel.id == instance.model.id).first()
-        engine = db.query(DBEngine).filter(
-            DBEngine.id == instance.engine.id).first()
+        model = (
+            db.query(DBModel).filter(DBModel.id == instance.model.id).first()
+        )
+        engine = (
+            db.query(DBEngine)
+            .filter(DBEngine.id == instance.engine.id)
+            .first()
+        )
 
         if not model or not engine:
             logger.error(
                 f"Model or Engine not found: model_id={instance.model.id}, engine_id={instance.engine.id}"
             )
-            raise HTTPException(status_code=404,
-                                detail="Model or Engine not found")
+            raise HTTPException(
+                status_code=404, detail="Model or Engine not found"
+            )
 
-        engine_chart = db.query(DBEngineCharts).filter(
-            and_(DBEngineCharts.engine == engine.name,
-                 DBEngineCharts.chart_type == model.category)).first()
+        engine_chart = (
+            db.query(DBEngineCharts)
+            .filter(
+                and_(
+                    DBEngineCharts.engine == engine.name,
+                    DBEngineCharts.chart_type == model.category,
+                )
+            )
+            .first()
+        )
         if not engine_chart:
             logger.error(
                 f"Model Engine combination is invalid: model: {model.name}, engine: {engine.name}"
@@ -188,19 +228,21 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
         HF_API_TOKEN = os.environ.get("HF_API_TOKEN")
         NGC_API_KEY = os.environ.get("NGC_API_KEY")
 
-        if engine.name == 'nim' and not NGC_API_KEY:
+        if engine.name == "nim" and not NGC_API_KEY:
             logger.error("NGC API key not set")
             raise HTTPException(status_code=400, detail="NGC API key not set")
         if not HF_API_TOKEN:
             logger.error("HuggingFace API token not set")
-            raise HTTPException(status_code=400,
-                                detail="HuggingFace API token not set.")
+            raise HTTPException(
+                status_code=400, detail="HuggingFace API token not set."
+            )
 
         config_data = instance.config.model_dump() if instance.config else {}
 
         # Handle lora_adapters separately
         lora_adapters = update_config_with_lora_adapters(
-            db, config_data.pop('lora_adapters', []))
+            db, config_data.pop("lora_adapters", [])
+        )
         db_config = DBInferenceInstanceConfigParams(**config_data)
         db_config.lora_adapters = lora_adapters
 
@@ -211,7 +253,8 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
             endpoint=instance.endpoint or "",
             healthEndpoint=instance.healthEndpoint or "",
             metricsEndpoint=instance.metricsEndpoint or "",
-            config=db_config)
+            config=db_config,
+        )
 
         db.add(db_config)
         db.add(db_instance)
@@ -235,7 +278,8 @@ async def create_inference_instance(instance: InferenceInstanceSchema,
             logger.exception(f"Failed to install Helm chart: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to install Helm chart: {str(e)}")
+                detail=f"Failed to install Helm chart: {str(e)}",
+            )
 
         await create_instance_dashboards(full_instance, engine_chart, db)
 
@@ -264,22 +308,29 @@ def update_config_with_lora_adapters(db, lora_adapters):
     """
     lora_adapters_list = []
     for adapter in lora_adapters:
-        existing_adapter = db.query(DBModelAdapters).filter(
-            DBModelAdapters.id == adapter['id']).first()
+        existing_adapter = (
+            db.query(DBModelAdapters)
+            .filter(DBModelAdapters.id == adapter["id"])
+            .first()
+        )
         if existing_adapter:
             lora_adapters_list.append(existing_adapter)
         else:
             logger.error(f"Model adapter with id {adapter['id']} not found")
-            raise HTTPException(status_code=404,
-                                detail="Model adapter not found")
+            raise HTTPException(
+                status_code=404, detail="Model adapter not found"
+            )
     return lora_adapters_list
 
 
-@router.put("/v1alpha1/inferenceInstance/{id}",
-            response_model=InferenceInstanceSchema)
-async def update_inference_instance(id: uuid.UUID,
-                                    updated_instance: InferenceInstanceSchema,
-                                    db: Session = Depends(get_db)):
+@router.put(
+    "/v1alpha1/inferenceInstance/{id}", response_model=InferenceInstanceSchema
+)
+async def update_inference_instance(
+    id: uuid.UUID,
+    updated_instance: InferenceInstanceSchema,
+    db: Session = Depends(get_db),
+):
     """
     Update an existing inference instance.
 
@@ -294,27 +345,45 @@ async def update_inference_instance(id: uuid.UUID,
         HTTPException: If the inference instance is not found or there's an error during the update.
     """
     try:
-        db_instance = db.query(DBInferenceInstance).filter(
-            DBInferenceInstance.id == id).first()
+        db_instance = (
+            db.query(DBInferenceInstance)
+            .filter(DBInferenceInstance.id == id)
+            .first()
+        )
         if not db_instance:
             logger.error(f"Inference instance not found: {id}")
-            raise HTTPException(status_code=404,
-                                detail="Inference instance not found")
+            raise HTTPException(
+                status_code=404, detail="Inference instance not found"
+            )
 
         for key, value in updated_instance.model_dump(
-                exclude_unset=True).items():
-            if key == 'config':
+            exclude_unset=True
+        ).items():
+            if key == "config":
                 update_config_params(db, db_instance, value)
             else:
                 setattr(db_instance, key, value)
 
-        model = db.query(DBModel).filter(
-            DBModel.id == db_instance.model_id).first()
-        engine = db.query(DBEngine).filter(
-            DBEngine.id == db_instance.engine_id).first()
-        engine_chart = db.query(DBEngineCharts).filter(
-            and_(DBEngineCharts.engine == engine.name,
-                 DBEngineCharts.chart_type == model.category)).first()
+        model = (
+            db.query(DBModel)
+            .filter(DBModel.id == db_instance.model_id)
+            .first()
+        )
+        engine = (
+            db.query(DBEngine)
+            .filter(DBEngine.id == db_instance.engine_id)
+            .first()
+        )
+        engine_chart = (
+            db.query(DBEngineCharts)
+            .filter(
+                and_(
+                    DBEngineCharts.engine == engine.name,
+                    DBEngineCharts.chart_type == model.category,
+                )
+            )
+            .first()
+        )
 
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
 
@@ -326,7 +395,8 @@ async def update_inference_instance(id: uuid.UUID,
             logger.exception(f"Failed to upgrade Helm chart: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to upgrade Helm chart: {str(e)}")
+                detail=f"Failed to upgrade Helm chart: {str(e)}",
+            )
 
         db.commit()
         db.refresh(db_instance)
@@ -348,16 +418,17 @@ def update_config_params(db, db_instance, value):
         value (dict): The new configuration values.
     """
     for config_key, config_value in value.items():
-        if config_key == 'lora_adapters':
+        if config_key == "lora_adapters":
             update_lora_adapters_in_inference_instance_config(
-                db, db_instance, config_key, config_value)
+                db, db_instance, config_key, config_value
+            )
         else:
             setattr(db_instance.config, config_key, config_value)
 
 
-def update_lora_adapters_in_inference_instance_config(db, db_instance,
-                                                      config_key,
-                                                      config_value):
+def update_lora_adapters_in_inference_instance_config(
+    db, db_instance, config_key, config_value
+):
     """
     Update the LoRA adapters in the inference instance configuration.
 
@@ -370,19 +441,24 @@ def update_lora_adapters_in_inference_instance_config(db, db_instance,
         HTTPException: If a model adapter is not found.
     """
     for adapter in config_value:
-        existing_adapter = db.query(DBModelAdapters).filter(
-            DBModelAdapters.id == adapter['id']).first()
+        existing_adapter = (
+            db.query(DBModelAdapters)
+            .filter(DBModelAdapters.id == adapter["id"])
+            .first()
+        )
         if existing_adapter:
             setattr(db_instance.config, config_key, config_value)
         else:
             logger.error(f"Model adapter with id {adapter['id']} not found")
-            raise HTTPException(status_code=404,
-                                detail="Model adapter not found")
+            raise HTTPException(
+                status_code=404, detail="Model adapter not found"
+            )
 
 
 @router.delete("/v1alpha1/inferenceInstance/{id}")
-async def delete_inference_instance(id: uuid.UUID,
-                                    db: Session = Depends(get_db)):
+async def delete_inference_instance(
+    id: uuid.UUID, db: Session = Depends(get_db)
+):
     """
     Delete an inference instance.
 
@@ -396,12 +472,16 @@ async def delete_inference_instance(id: uuid.UUID,
         HTTPException: If the inference instance is not found or there's an error during deletion.
     """
     try:
-        db_instance = db.query(DBInferenceInstance).filter(
-            DBInferenceInstance.id == id).first()
+        db_instance = (
+            db.query(DBInferenceInstance)
+            .filter(DBInferenceInstance.id == id)
+            .first()
+        )
         if not db_instance:
             logger.error(f"Inference instance not found: {id}")
-            raise HTTPException(status_code=404,
-                                detail="Inference instance not found")
+            raise HTTPException(
+                status_code=404, detail="Inference instance not found"
+            )
 
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
         controller = get_controller(full_instance.engine.name)
@@ -412,13 +492,17 @@ async def delete_inference_instance(id: uuid.UUID,
             logger.exception(f"Failed to remove Helm chart: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to remove Helm chart: {str(e)}")
+                detail=f"Failed to remove Helm chart: {str(e)}",
+            )
 
         try:
-            instance_dashboards = db.query(
-                DBInferenceInstanceDashboards).filter(
-                    DBInferenceInstanceDashboards.inference_instance_id ==
-                    id).all()
+            instance_dashboards = (
+                db.query(DBInferenceInstanceDashboards)
+                .filter(
+                    DBInferenceInstanceDashboards.inference_instance_id == id
+                )
+                .all()
+            )
             if instance_dashboards:
                 for dashboard in instance_dashboards:
                     db.delete(dashboard)
@@ -438,9 +522,11 @@ async def delete_inference_instance(id: uuid.UUID,
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def create_instance_dashboards(instance: InferenceInstanceSchema,
-                                     engine_chart: DBEngineCharts,
-                                     db: Session):
+async def create_instance_dashboards(
+    instance: InferenceInstanceSchema,
+    engine_chart: DBEngineCharts,
+    db: Session,
+):
     """
     Create dashboards for an inference instance.
 
@@ -453,13 +539,20 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
         HTTPException: If no dashboards are found for the engine chart.
     """
     try:
-        engine_chart_dashboards = db.query(DBEngineChartDashboards).filter(
-            and_(DBEngineChartDashboards.engine_id == instance.engine.id,
-                 DBEngineChartDashboards.engine_chart_id ==
-                 engine_chart.id)).all()
+        engine_chart_dashboards = (
+            db.query(DBEngineChartDashboards)
+            .filter(
+                and_(
+                    DBEngineChartDashboards.engine_id == instance.engine.id,
+                    DBEngineChartDashboards.engine_chart_id == engine_chart.id,
+                )
+            )
+            .all()
+        )
         if not engine_chart_dashboards:
             logger.error(
-                f"No dashboards found for engine chart: {engine_chart.id}")
+                f"No dashboards found for engine chart: {engine_chart.id}"
+            )
             return
 
         for chart_dashboard in engine_chart_dashboards:
@@ -475,14 +568,24 @@ async def create_instance_dashboards(instance: InferenceInstanceSchema,
                 inference_instance_id=instance.id,
                 engine_chart_dashboard_id=chart_dashboard.id,
                 org_id=org_id,
-                query_params=json.dumps(query_params))
+                query_params=json.dumps(query_params),
+            )
             db.add(inference_instance_dashboard)
 
         db.commit()
     except Exception as e:
         logger.exception(f"Error creating instance dashboards: {e}")
-        raise HTTPException(status_code=500,
-                            detail=f"Error creating instance dashboards: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error creating instance dashboards: {e}"
+        )
+
+
+def missing_endpoint_clause():
+    """Filter for instances whose endpoint is NULL or empty."""
+    return or_(
+        DBInferenceInstance.endpoint.is_(None),
+        DBInferenceInstance.endpoint == "",
+    )
 
 
 def update_all_inference_instance_endpoints(db: Session):
@@ -492,9 +595,11 @@ def update_all_inference_instance_endpoints(db: Session):
     logger.debug("Updating all inference instance endpoints")
     try:
         # Query for instances without populated endpoints
-        instances = db.query(DBInferenceInstance).filter(
-            or_(DBInferenceInstance.endpoint is None,
-                DBInferenceInstance.endpoint == '')).all()
+        instances = (
+            db.query(DBInferenceInstance)
+            .filter(missing_endpoint_clause())
+            .all()
+        )
 
         logger.debug(
             f"Found {len(instances)} inferenceinstances without populated endpoints"
@@ -515,22 +620,37 @@ def update_instance_endpoints(instanceId: uuid.UUID, db: Session):
         db (Session): The database session.
     """
     logger.info(f"Updating endpoints for instance {instanceId}")
-    instance = db.query(DBInferenceInstance).options(
-        joinedload(DBInferenceInstance.model),
-        joinedload(DBInferenceInstance.engine)).filter(
-            DBInferenceInstance.id == instanceId).first()
-    engine = db.query(DBEngine).filter(
-        DBEngine.id == instance.engine_id).first()
+    instance = (
+        db.query(DBInferenceInstance)
+        .options(
+            joinedload(DBInferenceInstance.model),
+            joinedload(DBInferenceInstance.engine),
+        )
+        .filter(DBInferenceInstance.id == instanceId)
+        .first()
+    )
+    engine = (
+        db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
+    )
     if not engine:
-        raise HTTPException(status_code=404,
-                            detail="Associated engine not found")
+        raise HTTPException(
+            status_code=404, detail="Associated engine not found"
+        )
 
-    engine_chart = db.query(DBEngineCharts).filter(
-        and_(DBEngineCharts.engine == engine.name,
-             DBEngineCharts.chart_type == instance.model.category)).first()
+    engine_chart = (
+        db.query(DBEngineCharts)
+        .filter(
+            and_(
+                DBEngineCharts.engine == engine.name,
+                DBEngineCharts.chart_type == instance.model.category,
+            )
+        )
+        .first()
+    )
     if not engine_chart:
-        raise HTTPException(status_code=404,
-                            detail="Associated engine chart not found")
+        raise HTTPException(
+            status_code=404, detail="Associated engine chart not found"
+        )
 
     controller = get_controller(engine.name)
     service_name = controller.get_service_name(instance, engine_chart)
@@ -570,18 +690,28 @@ def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
         HTTPException: If the associated engine or engine chart is not found.
     """
     # Get the associated engine
-    engine = db.query(DBEngine).filter(
-        DBEngine.id == instance.engine_id).first()
+    engine = (
+        db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
+    )
     if not engine:
-        raise HTTPException(status_code=404,
-                            detail="Associated engine not found")
+        raise HTTPException(
+            status_code=404, detail="Associated engine not found"
+        )
 
-    engine_chart = db.query(DBEngineCharts).filter(
-        and_(DBEngineCharts.engine == engine.name,
-             DBEngineCharts.chart_type == instance.model.category)).first()
+    engine_chart = (
+        db.query(DBEngineCharts)
+        .filter(
+            and_(
+                DBEngineCharts.engine == engine.name,
+                DBEngineCharts.chart_type == instance.model.category,
+            )
+        )
+        .first()
+    )
     if not engine_chart:
-        raise HTTPException(status_code=404,
-                            detail="Associated engine chart not found")
+        raise HTTPException(
+            status_code=404, detail="Associated engine chart not found"
+        )
 
     controller = get_controller(engine.name)
     pod_labels = controller.get_pod_labels(instance, engine_chart)

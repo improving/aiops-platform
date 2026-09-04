@@ -10,6 +10,7 @@ notebooks:
       limits:
         cpu: '1'
         memory: 4Gi
+        nvidia.com/gpu: null
       requests:
         cpu: '1'
         memory: 4Gi

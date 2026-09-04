@@ -1,5 +1,12 @@
-from sqlalchemy import (JSON, Boolean, Column, ForeignKey, Integer, String,
-                        Table)
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -8,21 +15,26 @@ from utils import genid
 
 # Define the association table
 DBInferenceInstanceModelAdapters = Table(
-    'inference_instance_model_adapters', Base.metadata,
-    Column('config_id', UUID(as_uuid=True),
-           ForeignKey('inference_instance_config_params.id')),
-    Column('model_adapter_id', UUID(as_uuid=True),
-           ForeignKey('model_adapters.id')))
+    "inference_instance_model_adapters",
+    Base.metadata,
+    Column(
+        "config_id",
+        UUID(as_uuid=True),
+        ForeignKey("inference_instance_config_params.id"),
+    ),
+    Column(
+        "model_adapter_id", UUID(as_uuid=True), ForeignKey("model_adapters.id")
+    ),
+)
 
 
 # SQLAlchemy models
 class DBInferenceInstanceConfigParams(Base):
     __tablename__ = "inference_instance_config_params"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4,
-                index=True)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4, index=True
+    )
     maxInputLength = Column(Integer)
     maxTokens = Column(Integer)
     maxBatchPrefillTokens = Column(Integer)
@@ -37,23 +49,25 @@ class DBInferenceInstanceConfigParams(Base):
     lora_adapters = relationship(
         "DBModelAdapters",
         secondary=DBInferenceInstanceModelAdapters,
-        back_populates="inference_instance_config_params")
+        back_populates="inference_instance_config_params",
+    )
 
 
 class DBInferenceInstance(Base):
     __tablename__ = "inference_instances"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
-    model_id = Column(UUID(as_uuid=True), ForeignKey('models.id'))
-    engine_id = Column(UUID(as_uuid=True), ForeignKey('engines.id'))
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
+    model_id = Column(UUID(as_uuid=True), ForeignKey("models.id"))
+    engine_id = Column(UUID(as_uuid=True), ForeignKey("engines.id"))
     host = Column(String)
     endpoint = Column(String)
     healthEndpoint = Column(String)
     metricsEndpoint = Column(String)
-    config_id = Column(UUID(as_uuid=True),
-                       ForeignKey('inference_instance_config_params.id'))
+    config_id = Column(
+        UUID(as_uuid=True), ForeignKey("inference_instance_config_params.id")
+    )
 
     model = relationship("DBModel")
     engine = relationship("DBEngine")

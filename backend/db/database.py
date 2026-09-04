@@ -4,6 +4,7 @@ from functools import lru_cache
 from sqlalchemy import URL, Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from paths import TMP_DIR
 from utils import genid
 
 
@@ -14,10 +15,14 @@ class Base(DeclarativeBase):
 def setup_engine():
     if os.environ.get("TEST_MODE", "false").lower() == "true":
         # Per test database in tmp folder
-        DATABASE_URL = f"sqlite:///./tmp/test_database_{genid.uuid4()}.db"
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        DATABASE_URL = (
+            f"sqlite:///{TMP_DIR / f'test_database_{genid.uuid4()}.db'}"
+        )
     else:
-        DATABASE_URL = os.environ.get("DATABASE_URL",
-                                      "sqlite:///./database.db")
+        DATABASE_URL = os.environ.get(
+            "DATABASE_URL", "sqlite:///./database.db"
+        )
 
     if DATABASE_URL.startswith("sqlite"):
         return create_engine(DATABASE_URL)
@@ -26,11 +31,14 @@ def setup_engine():
         DATABASE_NAME = os.environ.get("DATABASE_NAME", "postgres")
         DATABASE_USER = os.environ.get("DATABASE_USER", "postgres")
         DATABASE_PASSWORD = os.environ.get("DATABASE_PASSWORD", "postgres")
-        DATABASE_HOST, DATABASE_PORT = DATABASE_URL.split("://")[1].split(
-            ":")[0], 5432
+        DATABASE_HOST, DATABASE_PORT = (
+            DATABASE_URL.split("://")[1].split(":")[0],
+            5432,
+        )
         if ":" in DATABASE_URL.split("://")[1]:
-            DATABASE_PORT = DATABASE_URL.split("://")[1].split(":")[1].split(
-                "/")[0]
+            DATABASE_PORT = (
+                DATABASE_URL.split("://")[1].split(":")[1].split("/")[0]
+            )
         url = URL.create(
             "postgresql+psycopg2",
             username=DATABASE_USER,
@@ -44,12 +52,12 @@ def setup_engine():
     raise ValueError("DATABASE_URL must be a postgres or sqlite URL")
 
 
-@lru_cache()
+@lru_cache
 def get_engine() -> Engine:
     return setup_engine()
 
 
-@lru_cache()
+@lru_cache
 def get_sessionmaker() -> sessionmaker:
     return sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
 

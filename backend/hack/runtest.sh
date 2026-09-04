@@ -1,32 +1,31 @@
 #!/bin/bash
-echo "Received arguments: $@"
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
 export TEST_MODE=true
 
-# create tmp dir
+# Per-test SQLite databases live in tmp/
 mkdir -p tmp
+rm -f tmp/*.db
 
-# Cleanup old db files
-rm -r tmp/*.db
-
-# Run tests
-if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    echo "Usage: ./hack/runtest.sh [--update-snapshots | -u] [--cleanup | -c]"
+if [ "${1:-}" == "--help" ] || [ "${1:-}" == "-h" ]; then
+    echo "Usage: ./hack/runtest.sh [--update-snapshots | -u] [--cleanup | -c] [pytest args...]"
     echo -e "\nOptions:\n"
     echo "--update-snapshots: Update the snapshots when tests are run"
     echo -e "--cleanup: Cleanup all existing snapshots\n"
     exit 0
-fi 
+fi
 
-# If cleanup argument then cleanup all snapshots
-if [ "$1" == "--cleanup" ] || [ "$1" == "-c" ]; then
-    find . -type d -name "snapshots" -exec rm -r {} +
+# Remove every snapshot directory
+if [ "${1:-}" == "--cleanup" ] || [ "${1:-}" == "-c" ]; then
+    find . -path ./.venv -prune -o -type d -name "snapshots" -print -exec rm -r {} +
     exit 0
 fi
 
-# IF update snapshot argument is passed, then update the snapshots
-if [ "$1" == "--update-snapshots" ] || [ "$1" == "-u" ]; then
-    pytest --snapshot-update .
-else
-    pytest .
+# Regenerate snapshots
+if [ "${1:-}" == "--update-snapshots" ] || [ "${1:-}" == "-u" ]; then
+    shift
+    exec uv run pytest --snapshot-update "$@" .
 fi
+
+exec uv run pytest "$@" .

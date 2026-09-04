@@ -5,12 +5,18 @@ import yaml
 from fastapi.testclient import TestClient
 
 from controller import NotebooksController, VectorDBController, get_controller
+from controller.finetune_controller import FinetuneController
 from core import create_app
-from schemas import (EngineChartsSchema, EngineSchema,
-                     InferenceInstanceConfigParamsSchema,
-                     InferenceInstanceSchema, ModelSchema,
-                     NotebookInstanceSchema, VectorDBInstanceSchema,
-                     VectorDBSchema)
+from schemas import (
+    EngineChartsSchema,
+    EngineSchema,
+    InferenceInstanceConfigParamsSchema,
+    InferenceInstanceSchema,
+    ModelSchema,
+    NotebookInstanceSchema,
+    VectorDBInstanceSchema,
+    VectorDBSchema,
+)
 from utils import genid
 
 
@@ -18,6 +24,46 @@ def test_controller():
     for engine_name in ["huggingface", "nim", "vllm", "opea"]:
         controller = get_controller(engine_name, core_v1_api=mock.Mock())
         assert controller is not None
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected"),
+    [(None, "ai-stack"), ("custom-ns", "custom-ns")],
+)
+def test_controller_namespace_env_override(monkeypatch, env_value, expected):
+    if env_value is None:
+        monkeypatch.delenv("AIOPS_NAMESPACE", raising=False)
+    else:
+        monkeypatch.setenv("AIOPS_NAMESPACE", env_value)
+    assert (
+        get_controller("vllm", core_v1_api=mock.Mock()).namespace == expected
+    )
+    assert VectorDBController(core_v1_api=mock.Mock()).namespace == expected
+    assert FinetuneController().namespace == expected
+    # An explicit argument still wins.
+    explicit = VectorDBController(namespace="given", core_v1_api=mock.Mock())
+    assert explicit.namespace == "given"
+
+
+def test_vectordb_base_context_service_type():
+    controller = VectorDBController(core_v1_api=mock.Mock())
+    vectordb = VectorDBSchema(
+        id=genid.uuid4(), name="qdrant", chart_name="qdrant", chart_repo="r"
+    )
+    default = VectorDBInstanceSchema(vectorDB=vectordb)
+    assert controller._get_base_context(default) == {
+        "service_type": "LoadBalancer"
+    }
+    no_key = VectorDBInstanceSchema(vectorDB=vectordb, configParams={"x": 1})
+    assert controller._get_base_context(no_key) == {
+        "service_type": "LoadBalancer"
+    }
+    explicit = VectorDBInstanceSchema(
+        vectorDB=vectordb, configParams={"serviceType": "ClusterIP"}
+    )
+    assert controller._get_base_context(explicit) == {
+        "service_type": "ClusterIP"
+    }
 
 
 @pytest.mark.asyncio
@@ -34,14 +80,14 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
 
     # load list of engines in engine schema
     engine_schemas_map = {
-        engine["name"].lower(): EngineSchema(**engine)
-        for engine in engines
+        engine["name"].lower(): EngineSchema(**engine) for engine in engines
     }
 
     # get model schema for model id
     model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
     model_schema = next(
-        (model for model in model_schemas if model.modelId == model_id), None)
+        (model for model in model_schemas if model.modelId == model_id), None
+    )
     if model_schema is None:
         raise ValueError(f"Model with id {model_id} not found")
 
@@ -94,8 +140,9 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
         )
         values = await controller.prepare_helm_values(instance, engine_chart)
         values_yaml = yaml.dump(values)
-        snapshot.assert_match(values_yaml,
-                              engine_name.lower() + "-values.yaml")
+        snapshot.assert_match(
+            values_yaml, engine_name.lower() + "-values.yaml"
+        )
 
 
 @pytest.mark.asyncio
@@ -150,4 +197,5 @@ async def test_vectordb_controller_helm_values(snapshot):
         values = await controller.prepare_helm_values(instance)
         values_yaml = yaml.dump(values)
         snapshot.assert_match(
-            values_yaml, f"vectordb-values-{vector_db_schema.chart_name}.yaml")
+            values_yaml, f"vectordb-values-{vector_db_schema.chart_name}.yaml"
+        )

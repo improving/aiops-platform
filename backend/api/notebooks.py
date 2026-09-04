@@ -1,5 +1,4 @@
 import uuid
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from kubernetes import client
@@ -12,8 +11,10 @@ from db.database import get_db
 from logger import setup_logger
 from models.notebook import Notebook
 from schemas.notebook import NotebookInstanceSchema
-from utils.kubernetes_utils import (get_pod_status_and_readiness,
-                                    get_service_endpoint)
+from utils.kubernetes_utils import (
+    get_pod_status_and_readiness,
+    get_service_endpoint,
+)
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -21,16 +22,29 @@ logger = setup_logger(__name__)
 
 def filter_notebook_fields(data: dict) -> dict:
     allowed_fields = {
-        'id', 'name', 'namespace', 'type', 'framework', 'nvidia_gpu', 'image',
-        'resources_cpu', 'resources_memory', 'resources_gpu', 'storage_size',
-        'service_type', 'service_port', 'created_at', 'updated_at'
+        "id",
+        "name",
+        "namespace",
+        "type",
+        "framework",
+        "nvidia_gpu",
+        "image",
+        "resources_cpu",
+        "resources_memory",
+        "resources_gpu",
+        "storage_size",
+        "service_type",
+        "service_port",
+        "created_at",
+        "updated_at",
     }
     return {key: value for key, value in data.items() if key in allowed_fields}
 
 
 @router.post("/v1alpha1/notebooks", response_model=NotebookInstanceSchema)
-async def create_notebook(notebook: NotebookInstanceSchema,
-                          db: Session = Depends(get_db)):
+async def create_notebook(
+    notebook: NotebookInstanceSchema, db: Session = Depends(get_db)
+):
     """
     Create a new notebook instance.
 
@@ -57,7 +71,7 @@ async def create_notebook(notebook: NotebookInstanceSchema,
     return db_notebook
 
 
-@router.get("/v1alpha1/notebooks", response_model=List[NotebookInstanceSchema])
+@router.get("/v1alpha1/notebooks", response_model=list[NotebookInstanceSchema])
 async def list_notebooks(db: Session = Depends(get_db)):
     """
     List all notebook instances.
@@ -72,11 +86,13 @@ async def list_notebooks(db: Session = Depends(get_db)):
     try:
         for notebook in notebooks:
             notebook.ready, notebook.status = check_pod_status_and_readiness(
-                notebook)
+                notebook
+            )
     except MaxRetryError as e:
         logger.error(f"Error checking pod status and readiness: {e}")
-        raise HTTPException(status_code=500,
-                            detail="Error checking pod status and readiness")
+        raise HTTPException(
+            status_code=500, detail="Error checking pod status and readiness"
+        )
     return notebooks
 
 
@@ -99,18 +115,22 @@ async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Notebook not found")
     try:
         notebook.ready, notebook.status = check_pod_status_and_readiness(
-            notebook)
+            notebook
+        )
     except MaxRetryError as e:
         logger.error(f"Error checking pod status and readiness: {e}")
-        raise HTTPException(status_code=500,
-                            detail="Error checking pod status and readiness")
+        raise HTTPException(
+            status_code=500, detail="Error checking pod status and readiness"
+        )
     return notebook
 
 
 @router.put("/v1alpha1/notebooks/{id}", response_model=NotebookInstanceSchema)
-async def update_notebook(id: uuid.UUID,
-                          notebook: NotebookInstanceSchema,
-                          db: Session = Depends(get_db)):
+async def update_notebook(
+    id: uuid.UUID,
+    notebook: NotebookInstanceSchema,
+    db: Session = Depends(get_db),
+):
     """
     Update an existing notebook instance.
 
@@ -182,11 +202,15 @@ def update_all_notebook_instance_endpoints(db: Session):
     logger.debug("Updating all instance endpoints")
     try:
         # Query for instances without populated endpoints
-        instances = db.query(Notebook).filter(
-            or_(Notebook.endpoint.is_(None), Notebook.endpoint == '')).all()
+        instances = (
+            db.query(Notebook)
+            .filter(or_(Notebook.endpoint.is_(None), Notebook.endpoint == ""))
+            .all()
+        )
 
         logger.debug(
-            f"Found {len(instances)} instances without populated endpoints")
+            f"Found {len(instances)} instances without populated endpoints"
+        )
 
         for instance in instances:
             update_instance_endpoints(instance, db)

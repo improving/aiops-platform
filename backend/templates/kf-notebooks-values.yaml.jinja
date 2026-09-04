@@ -19,6 +19,9 @@ notebooks:
         memory: "{{ resources.limits.memory | default('1.2Gi') }}"
         {% if nvidia_gpu %}
         nvidia.com/gpu: "{{ resources.limits['nvidia.com/gpu'] | default('1') }}"
+        {% else %}
+        # The chart defaults to one GPU; null removes the key on merge.
+        nvidia.com/gpu: null
         {% endif %}
       requests:
         cpu: "{{ resources.requests.cpu | default('0.5') }}"

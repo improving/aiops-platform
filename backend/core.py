@@ -1,3 +1,7 @@
+import os
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI
 from sqlalchemy.engine import Engine
@@ -21,11 +25,79 @@ from logger import setup_logger
 
 logger = setup_logger(__name__)
 
+SCHEDULER_INTERVAL_SECONDS = 5
+SCHEDULED_JOBS = (
+    update_all_inference_instance_endpoints,
+    update_all_notebook_instance_endpoints,
+    update_all_vectordb_instance_endpoints,
+)
+
+
+def is_test_mode() -> bool:
+    return os.environ.get("TEST_MODE", "false").lower() == "true"
+
+
+def _run_with_own_session(
+    job: Callable[[Session], None],
+) -> Callable[[], None]:
+    """Give each scheduled run a fresh session.
+
+    The jobs run in the scheduler's thread pool, so sharing one Session
+    between them (and with the request handlers) is not safe and ends in
+    ``ResourceClosedError`` once a connection is closed under another job.
+    """
+
+    def run() -> None:
+        db = get_db_direct()
+        try:
+            job(db)
+        finally:
+            db.close()
+
+    run.__name__ = job.__name__
+    return run
+
+
+def build_scheduler() -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler()
+    for job in SCHEDULED_JOBS:
+        scheduler.add_job(
+            _run_with_own_session(job),
+            trigger="interval",
+            seconds=SCHEDULER_INTERVAL_SECONDS,
+            id=job.__name__,
+        )
+    return scheduler
+
 
 def create_app(setup_db: bool = True):
-    _app = FastAPI()
     engine = get_engine()
     db = get_db_direct()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # AsyncIOScheduler.start() needs a running event loop, so the
+        # scheduler lives in the lifespan and not in create_app().
+        if is_test_mode():
+            logger.info("TEST_MODE is set, the endpoint scheduler is off")
+            yield
+            return
+
+        scheduler = build_scheduler()
+        for job in scheduler.get_jobs():
+            logger.info("Job: %s", job)
+        logger.info(
+            "Starting scheduler with %d jobs", len(scheduler.get_jobs())
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        try:
+            yield
+        finally:
+            scheduler.shutdown(wait=False)
+            app.state.scheduler = None
+
+    _app = FastAPI(lifespan=lifespan)
 
     # Include the API routes
     _app.include_router(models_router, tags=["models"])
@@ -44,8 +116,9 @@ def create_app(setup_db: bool = True):
         return {"message": "Data reloaded successfully"}
 
     @_app.post("/refresh-db", tags=["utility"])
-    async def refresh_db_endpoint(db: Session = Depends(get_db),
-                                  engine: Engine = Depends(get_engine)):
+    async def refresh_db_endpoint(
+        db: Session = Depends(get_db), engine: Engine = Depends(get_engine)
+    ):
         refresh_db(db, engine)
         return {"message": "Data refreshed successfully"}
 
@@ -55,20 +128,5 @@ def create_app(setup_db: bool = True):
 
     if setup_db:
         init_db(db, engine)
-
-    scheduler = AsyncIOScheduler()
-    jobs = [
-        update_all_inference_instance_endpoints,
-        update_all_notebook_instance_endpoints,
-        update_all_vectordb_instance_endpoints,
-    ]
-
-    for job in jobs:
-        scheduler.add_job(job, trigger="interval", seconds=5, args=[db])
-
-    for job in scheduler.get_jobs():
-        logger.info("Job: %s", job)
-    logger.info("Starting scheduler with %d jobs", len(scheduler.get_jobs()))
-    scheduler.start()
 
     return _app
