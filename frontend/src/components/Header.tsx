@@ -95,17 +95,18 @@ export default function Header() {
                     {item.label}
                   </NavigationMenuTrigger>
                 ) : (
-                  <Link href={item.href} legacyBehavior passHref>
-                    <NavigationMenuLink
-                      className={cn(
-                        navigationMenuTriggerStyle(),
-                        isActive(item.href) && "font-bold text-primary"
-                      )}
-                    >
+                  <NavigationMenuLink
+                    asChild
+                    className={cn(
+                      navigationMenuTriggerStyle(),
+                      isActive(item.href) && "font-bold text-primary"
+                    )}
+                  >
+                    <Link href={item.href}>
                       {item.icon}
                       {item.label}
-                    </NavigationMenuLink>
-                  </Link>
+                    </Link>
+                  </NavigationMenuLink>
                 )}
                 {item.items && (
                   <NavigationMenuContent>
