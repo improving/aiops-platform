@@ -23,6 +23,7 @@ import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { GetModelIcon } from "@/lib/utils";
 import { RefreshButton } from "../RefreshButton";
+import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -32,20 +33,29 @@ export default function InferenceEndpoints() {
   const [filterValue, setFilterValue] = useState("");
   const { toast } = useToast();
 
-  const fetchEndpoints = useCallback(async () => {
-    try {
-      const data = await modelService.getInferenceInstances();
-      setEndpoints(data);
-    } catch (error) {
-      toast(parseApiError(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  const fetchEndpoints = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await modelService.getInferenceInstances();
+        setEndpoints(data);
+      } catch (error) {
+        if (!options?.silent) toast(parseApiError(error));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
     fetchEndpoints();
   }, [fetchEndpoints]);
+
+  const pollEndpoints = useCallback(
+    () => fetchEndpoints({ silent: true }),
+    [fetchEndpoints]
+  );
+  usePolling(pollEndpoints, endpoints.some(isNonTerminal));
 
   const filteredEndpoints = endpoints.filter((endpoint) => {
     const searchLower = searchTerm.toLowerCase();

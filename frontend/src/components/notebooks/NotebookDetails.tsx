@@ -11,6 +11,7 @@ import { toast, useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 
 interface NotebookDetailsProps {
   notebookId: string;
@@ -22,20 +23,29 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  const fetchNotebookDetails = useCallback(async () => {
-    try {
-      const data = await notebookService.getNotebookById(notebookId);
-      setNotebook(data);
-    } catch (error) {
-      toast(parseApiError(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [notebookId, toast]);
+  const fetchNotebookDetails = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await notebookService.getNotebookById(notebookId);
+        setNotebook(data);
+      } catch (error) {
+        if (!options?.silent) toast(parseApiError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [notebookId, toast]
+  );
 
   useEffect(() => {
     fetchNotebookDetails();
   }, [fetchNotebookDetails]);
+
+  const pollNotebookDetails = useCallback(
+    () => fetchNotebookDetails({ silent: true }),
+    [fetchNotebookDetails]
+  );
+  usePolling(pollNotebookDetails, notebook ? isNonTerminal(notebook) : false);
 
   const handleDelete = async () => {
     await notebookService.deleteNotebook(notebookId);

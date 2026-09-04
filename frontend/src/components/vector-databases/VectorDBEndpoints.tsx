@@ -16,6 +16,7 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "@/components/RefreshButton";
+import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
@@ -23,20 +24,29 @@ export default function VectorDBEndpoints() {
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
-  const fetchInstances = useCallback(async () => {
-    try {
-      const data = await vectorDBService.getVectorDBInstances();
-      setInstances(data);
-    } catch (error) {
-      toast(parseApiError(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
+  const fetchInstances = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await vectorDBService.getVectorDBInstances();
+        setInstances(data);
+      } catch (error) {
+        if (!options?.silent) toast(parseApiError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
     fetchInstances();
   }, [fetchInstances]);
+
+  const pollInstances = useCallback(
+    () => fetchInstances({ silent: true }),
+    [fetchInstances]
+  );
+  usePolling(pollInstances, instances.some(isNonTerminal));
 
   const filteredInstances = instances.filter((instance) =>
     instance.vectorDB.name.toLowerCase().includes(searchTerm.toLowerCase())
