@@ -16,39 +16,41 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "@/components/RefreshButton";
+import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
-  const [filteredInstances, setFilteredInstances] = useState<
-    VectorDBInstanceSchema[]
-  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
-  const fetchInstances = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await vectorDBService.getVectorDBInstances();
-      setInstances(data);
-      setFilteredInstances(data);
-    } catch (error) {
-      toast(parseApiError(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
+  const fetchInstances = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await vectorDBService.getVectorDBInstances();
+        setInstances(data);
+      } catch (error) {
+        if (!options?.silent) toast(parseApiError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
     fetchInstances();
   }, [fetchInstances]);
 
-  useEffect(() => {
-    const filtered = instances.filter((instance) =>
-      instance.vectorDB.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredInstances(filtered);
-  }, [searchTerm, instances]);
+  const pollInstances = useCallback(
+    () => fetchInstances({ silent: true }),
+    [fetchInstances]
+  );
+  usePolling(pollInstances, instances.some(isNonTerminal));
+
+  const filteredInstances = instances.filter((instance) =>
+    instance.vectorDB.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleDelete = async (id: string) => {
     await vectorDBService.deleteVectorDBInstance(id);

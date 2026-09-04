@@ -16,7 +16,7 @@ import { Model } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import ImportModelDialog from "@/components/models/ImportModelDialog";
 import { modelService } from "@/services/modelService";
-import { parseApiError } from "@/lib/utils";
+import { formatEnumLabel, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { GetModelIcon } from "@/lib/utils";
 
@@ -76,12 +76,13 @@ export default function ModelCatalog() {
 
   return (
     <>
-      <div className="mb-4 flex space-x-4">
+      <div className="mb-4 flex flex-wrap gap-4">
         <Input
           type="text"
           placeholder="Search by model name or ID"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full sm:w-auto sm:flex-1 sm:min-w-[200px]"
         />
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="w-[180px]">
@@ -91,7 +92,7 @@ export default function ModelCatalog() {
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category} value={category}>
-                {category}
+                {formatEnumLabel(category)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -107,12 +108,15 @@ export default function ModelCatalog() {
             <SelectItem value="all">All Subcategories</SelectItem>
             {subcategories.map((subcategory) => (
               <SelectItem key={subcategory} value={subcategory}>
-                {subcategory}
+                {formatEnumLabel(subcategory)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => setIsImportDialogOpen(true)} icon={<PlusIcon className="w-4 h-4" />}>
+        <Button
+          onClick={() => setIsImportDialogOpen(true)}
+          icon={<PlusIcon className="w-4 h-4" />}
+        >
           Import Model
         </Button>
       </div>
@@ -134,10 +138,10 @@ export default function ModelCatalog() {
               <>
                 <div className="flex flex-wrap gap-2 mb-3">
                   <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                    {model.category}
+                    {formatEnumLabel(model.category)}
                   </span>
                   <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                    {model.subcategory}
+                    {formatEnumLabel(model.subcategory)}
                   </span>
                   {model.countAdapters > 0 && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 hover:text-blue-900 underline">
@@ -158,12 +162,19 @@ export default function ModelCatalog() {
             footer={
               <div className="flex space-x-4">
                 <Link href={`/models/launch/${model.id}`} passHref>
-                  <Button className="flex-1" icon={<RocketIcon className="mr-2 w-4 h-4" />}>
+                  <Button
+                    className="flex-1"
+                    icon={<RocketIcon className="mr-2 w-4 h-4" />}
+                  >
                     Launch
                   </Button>
                 </Link>
                 <Link href={`/models/${model.id}/finetune`} passHref>
-                  <Button variant="secondary" className="flex-1" icon={<HandIcon className="mr-2 w-4 h-4" />}>
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
+                    icon={<HandIcon className="mr-2 w-4 h-4" />}
+                  >
                     Fine-tune
                   </Button>
                 </Link>

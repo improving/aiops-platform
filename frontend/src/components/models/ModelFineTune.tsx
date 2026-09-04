@@ -26,6 +26,15 @@ import { RocketIcon, UploadIcon } from "@radix-ui/react-icons";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 
+// Rounds a learning rate to 2 significant figures so values loaded from an
+// external source (e.g. a float32 round-tripped through JSON, which can
+// come back as 9.999999747378752e-6) render as a clean short decimal like
+// 0.00001 instead of a long float64 artifact.
+function formatLearningRate(lr: number): number {
+  if (!Number.isFinite(lr) || lr === 0) return lr;
+  return Number(lr.toPrecision(2));
+}
+
 export default function ModelFineTune({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -88,7 +97,6 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
     }
     fetchModel();
   }, [params.id, toast]);
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,11 +162,20 @@ export default function ModelFineTune({ params }: { params: { id: string } }) {
         try {
           const yamlContent = e.target?.result as string;
           const parsedYaml = yaml.parse(yamlContent) as FineTuneConfig;
-          setFineTuneConfig((prevConfig) => ({
-            ...prevConfig,
-            ...parsedYaml,
-            base_model: model?.modelId || parsedYaml.base_model,
-          }));
+          setFineTuneConfig((prevConfig) => {
+            const merged = {
+              ...prevConfig,
+              ...parsedYaml,
+              base_model: model?.modelId || parsedYaml.base_model,
+            };
+            return {
+              ...merged,
+              params: {
+                ...merged.params,
+                lr: formatLearningRate(merged.params.lr),
+              },
+            };
+          });
           toast({
             title: "Success",
             description: "YAML file imported successfully",

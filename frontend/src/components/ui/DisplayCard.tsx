@@ -42,9 +42,9 @@ export function DisplayCard({
                   <Image
                     src={icon}
                     alt="Icon"
-                    layout="fill"
-                    objectFit="contain"
-                    className="rounded-md"
+                    fill
+                    sizes="36px"
+                    className="rounded-md object-contain"
                   />
                 </div>
               ) : (

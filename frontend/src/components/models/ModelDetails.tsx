@@ -20,12 +20,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -76,7 +71,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   const [isViewParamsDialogOpen, setIsViewParamsDialogOpen] = useState(false);
   const [isViewLogsDialogOpen, setIsViewLogsDialogOpen] = useState(false);
   const [selectedJobParams, setSelectedJobParams] = useState<string>("");
-  const [selectedJobLogs, setSelectedJobLogs] = useState<string>("");
+  const [selectedJobLogs, setSelectedJobLogs] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchAdapters = useCallback(async () => {
@@ -190,11 +185,13 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   };
 
   const handleViewLogs = async (jobId: string) => {
+    setIsViewLogsDialogOpen(true);
+    setSelectedJobLogs(null);
     try {
       const logs = await modelService.getFineTuneJobLogs(params.id, jobId);
       setSelectedJobLogs(logs);
-      setIsViewLogsDialogOpen(true);
     } catch (error) {
+      setIsViewLogsDialogOpen(false);
       toast(parseApiError(error));
     }
   };
@@ -256,11 +253,17 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           }
           footer={
             <div className="flex justify-between space-x-8">
-              <Button onClick={handleLaunchModel} icon={<RocketIcon className="mr-2 w-4 h-4" />}>
+              <Button
+                onClick={handleLaunchModel}
+                icon={<RocketIcon className="mr-2 w-4 h-4" />}
+              >
                 Launch Model
               </Button>
               <Link href={`/models/${model.id}/finetune`} passHref>
-                <Button variant="secondary" icon={<HandIcon className="mr-2 w-4 h-4" />}>
+                <Button
+                  variant="secondary"
+                  icon={<HandIcon className="mr-2 w-4 h-4" />}
+                >
                   Fine-tune
                 </Button>
               </Link>
@@ -324,37 +327,48 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {adapters.map((adapter) => (
-                  <TableRow key={adapter.id}>
-                    <TableCell>{adapter.id}</TableCell>
-                    <TableCell>{adapter.name}</TableCell>
-                    <TableCell>
-                      <a
-                        href={`https://huggingface.co/${adapter.hf_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-600"
-                      >
-                        {adapter.hf_id}
-                      </a>
-                    </TableCell>
-                    <TableCell>{adapter.path}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2"
-                        onClick={() => handleEditAdapter(adapter)}
-                        icon={<Pencil2Icon className="h-4 w-4" />}
-                      ></Button>
-                      <DeleteButton
-                        buttonText=""
-                        onDelete={() => handleDeleteAdapter(adapter.id)}
-                        onSuccess={() => fetchAdapters()}
-                      />
+                {adapters.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-muted-foreground"
+                    >
+                      No adapters yet
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  adapters.map((adapter) => (
+                    <TableRow key={adapter.id}>
+                      <TableCell>{adapter.id}</TableCell>
+                      <TableCell>{adapter.name}</TableCell>
+                      <TableCell>
+                        <a
+                          href={`https://huggingface.co/${adapter.hf_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 hover:text-blue-600"
+                        >
+                          {adapter.hf_id}
+                        </a>
+                      </TableCell>
+                      <TableCell>{adapter.path}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mr-2"
+                          onClick={() => handleEditAdapter(adapter)}
+                          icon={<Pencil2Icon className="h-4 w-4" />}
+                        ></Button>
+                        <DeleteButton
+                          buttonText=""
+                          onDelete={() => handleDeleteAdapter(adapter.id)}
+                          onSuccess={() => fetchAdapters()}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -386,47 +400,56 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fineTuneJobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell>{job.id}</TableCell>
-                    <TableCell>{job.name}</TableCell>
-                    <TableCell>{job.status}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2"
-                        onClick={() => handleViewParams(job.params)}
-                        icon={<EyeOpenIcon className="mr-2 h-4 w-4" />}
-                      >
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2"
-                        onClick={() => handleViewLogs(job.id)}
-                        icon={<FileTextIcon className="mr-2 h-4 w-4" />}
-                      >
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(job.created_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <DeleteButton
-                        buttonText=""
-                        onDelete={() => handleDeleteFineTuneJob(job.id)}
-                        onSuccess={() =>
-                          setFineTuneJobs(
-                            fineTuneJobs.filter((jobs) => jobs.id !== job.id)
-                          )
-                        }
-                      />
+                {fineTuneJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="text-center text-muted-foreground"
+                    >
+                      No fine-tune jobs yet
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  fineTuneJobs.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell>{job.id}</TableCell>
+                      <TableCell>{job.name}</TableCell>
+                      <TableCell>{job.status}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mr-2"
+                          onClick={() => handleViewParams(job.params)}
+                          icon={<EyeOpenIcon className="mr-2 h-4 w-4" />}
+                        ></Button>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mr-2"
+                          onClick={() => handleViewLogs(job.id)}
+                          icon={<FileTextIcon className="mr-2 h-4 w-4" />}
+                        ></Button>
+                      </TableCell>
+                      <TableCell>
+                        {new Date(job.created_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <DeleteButton
+                          buttonText=""
+                          onDelete={() => handleDeleteFineTuneJob(job.id)}
+                          onSuccess={() =>
+                            setFineTuneJobs(
+                              fineTuneJobs.filter((jobs) => jobs.id !== job.id)
+                            )
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -515,8 +538,10 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           <DialogHeader>
             <DialogTitle>Fine-tune Job Logs</DialogTitle>
           </DialogHeader>
-          <pre className="max-h-96 overflow-auto bg-gray-100 p-4 rounded">
-            {selectedJobLogs}
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words bg-gray-100 p-4 rounded text-sm">
+            {selectedJobLogs === null
+              ? "Loading logs..."
+              : selectedJobLogs || "No logs yet."}
           </pre>
         </DialogContent>
       </Dialog>

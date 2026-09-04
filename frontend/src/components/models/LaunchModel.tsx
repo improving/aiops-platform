@@ -207,7 +207,6 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     // Validate that all argument and environment variable names are non-empty
     const invalidArgs = args.filter((arg) => arg.name.trim() === "");
     const invalidEnvVars = envVars.filter((env) => env.name.trim() === "");
@@ -222,6 +221,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const data = await modelService.createInferenceInstance({
         model: { id: params.id },
@@ -360,7 +360,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                     title={
                       host.gpu_model && host.gpu_model !== "N/A"
                         ? host.gpu_model
-                        : host.cpu_vendor
+                        : "No GPU detected"
                     }
                     content={
                       <>

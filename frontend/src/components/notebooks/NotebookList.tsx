@@ -11,6 +11,7 @@ import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "../RefreshButton";
+import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -18,20 +19,29 @@ export default function NotebookList() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchNotebooks = useCallback(async () => {
-    try {
-      const data = await notebookService.getNotebooks();
-      setNotebooks(data);
-    } catch (error) {
-      toast(parseApiError(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
+  const fetchNotebooks = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await notebookService.getNotebooks();
+        setNotebooks(data);
+      } catch (error) {
+        if (!options?.silent) toast(parseApiError(error));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
     fetchNotebooks();
   }, [fetchNotebooks]);
+
+  const pollNotebooks = useCallback(
+    () => fetchNotebooks({ silent: true }),
+    [fetchNotebooks]
+  );
+  usePolling(pollNotebooks, notebooks.some(isNonTerminal));
 
   const filteredNotebooks = notebooks.filter((notebook) =>
     notebook.name.toLowerCase().includes(searchTerm.toLowerCase())

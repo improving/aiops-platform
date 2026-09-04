@@ -132,10 +132,10 @@ export const modelService = {
   },
 
   getFineTuneJobLogs: async (modelId: string, jobId: string) => {
-    const response = await api.get<string>(
+    const response = await api.get<{ logs: string }>(
       `/api/v1alpha1/models/${modelId}/finetune/${jobId}/logs`
     );
-    return response.data;
+    return response.data.logs;
   },
 
   deleteFineTuneJob: async (modelId: string, jobId: string) => {
