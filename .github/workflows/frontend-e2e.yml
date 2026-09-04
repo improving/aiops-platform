@@ -15,6 +15,10 @@ concurrency:
   group: frontend-e2e-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Never re-resolve or rewrite uv.lock inside CI.
+  UV_LOCKED: "1"
+
 jobs:
   fast:
     runs-on: ubuntu-latest
