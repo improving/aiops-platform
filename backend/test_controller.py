@@ -3,8 +3,10 @@ from unittest import mock
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from pyhelm3.errors import ReleaseNotFoundError
 
 from controller import NotebooksController, VectorDBController, get_controller
+from controller.base_controller import ChartMetadataError, get_chart
 from controller.finetune_controller import FinetuneController
 from core import create_app
 from schemas import (
@@ -199,3 +201,121 @@ async def test_vectordb_controller_helm_values(snapshot):
         snapshot.assert_match(
             values_yaml, f"vectordb-values-{vector_db_schema.chart_name}.yaml"
         )
+
+
+MILVUS_CHART_METADATA = {
+    "apiVersion": "v2",
+    "name": "milvus",
+    "version": "5.0.27",
+    "appVersion": "2.6.9",
+    "home": "https://milvus.io/",
+    "maintainers": [
+        # The upstream Chart.yaml has a bare hostname, which pyhelm3
+        # rejects with "Input should be a valid URL".
+        {"name": "contact", "email": "contact@milvus.io", "url": "milvus.io"}
+    ],
+    "sources": ["https://github.com/zilliztech/milvus"],
+}
+
+
+CHART_REPO = "https://charts.example.test"
+
+
+def _helm_with_chart(metadata):
+    helm = mock.Mock()
+    helm._command.show_chart = mock.AsyncMock(return_value=metadata)
+    return helm
+
+
+@pytest.mark.asyncio
+async def test_get_chart_tolerates_invalid_maintainer_url():
+    helm = _helm_with_chart(MILVUS_CHART_METADATA)
+    chart = await get_chart(
+        helm, "milvus", repo="https://zilliztech.github.io/milvus-helm"
+    )
+    assert chart.ref == "milvus"
+    assert str(chart.repo) == "https://zilliztech.github.io/milvus-helm"
+    # install_or_upgrade_release uses the version to pin the chart.
+    assert chart.metadata.version == "5.0.27"
+    assert chart.metadata.name == "milvus"
+    assert chart.metadata.maintainers == []
+    helm._command.show_chart.assert_awaited_once_with(
+        "milvus",
+        devel=False,
+        repo="https://zilliztech.github.io/milvus-helm",
+        version=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_chart_keeps_valid_metadata():
+    metadata = {
+        **MILVUS_CHART_METADATA,
+        "maintainers": [{"name": "contact", "url": "https://milvus.io"}],
+    }
+    chart = await get_chart(
+        _helm_with_chart(metadata), "milvus", repo=CHART_REPO
+    )
+    assert str(chart.metadata.maintainers[0].url) == "https://milvus.io/"
+    assert str(chart.metadata.home) == "https://milvus.io/"
+
+
+@pytest.mark.asyncio
+async def test_get_chart_reports_broken_required_metadata():
+    metadata = {**MILVUS_CHART_METADATA, "version": "not-semver"}
+    with pytest.raises(
+        ChartMetadataError, match=r"(?s)'milvus'.*metadata\.version"
+    ):
+        await get_chart(_helm_with_chart(metadata), "milvus", repo=CHART_REPO)
+
+
+def _milvus_instance():
+    vectordb = VectorDBSchema(
+        id=genid.uuid4(),
+        name="Milvus",
+        chart_name="milvus",
+        chart_repo="https://zilliztech.github.io/milvus-helm",
+    )
+    return VectorDBInstanceSchema(vectorDB=vectordb)
+
+
+@pytest.mark.asyncio
+async def test_vectordb_controller_installs_milvus_without_status_parsing():
+    helm = _helm_with_chart(MILVUS_CHART_METADATA)
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    controller = VectorDBController(
+        namespace="ai-stack", core_v1_api=mock.Mock(), helm_client=helm
+    )
+    instance = _milvus_instance()
+    await controller.install(instance)
+    # The HelmClient wrapper parses the release status, which embeds the
+    # same invalid metadata; the raw command must be used instead.
+    helm.install_or_upgrade_release.assert_not_called()
+    helm._command.install_or_upgrade.assert_awaited_once()
+    args, kwargs = helm._command.install_or_upgrade.await_args
+    assert args[0] == controller._get_release_name(instance)
+    assert args[1] == "milvus"
+    assert kwargs["version"] == "5.0.27"
+    assert kwargs["namespace"] == "ai-stack"
+    assert kwargs["create_namespace"] is True
+    assert str(kwargs["repo"]) == "https://zilliztech.github.io/milvus-helm"
+
+
+@pytest.mark.asyncio
+async def test_vectordb_controller_uninstalls_without_status_parsing():
+    helm = mock.Mock()
+    helm._command.uninstall = mock.AsyncMock()
+    controller = VectorDBController(
+        namespace="ai-stack", core_v1_api=mock.Mock(), helm_client=helm
+    )
+    instance = _milvus_instance()
+    await controller.uninstall(instance)
+    helm.get_current_revision.assert_not_called()
+    helm._command.uninstall.assert_awaited_once_with(
+        controller._get_release_name(instance), namespace="ai-stack", wait=True
+    )
+    # A release that is already gone is not an error.
+    helm._command.uninstall.side_effect = ReleaseNotFoundError(
+        1, b"", b"Error: uninstall: Release not loaded: release: not found"
+    )
+    await controller.uninstall(instance)

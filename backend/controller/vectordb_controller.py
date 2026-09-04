@@ -8,6 +8,9 @@ from controller.base_controller import (
     HelmInstallError,
     HelmUninstallError,
     HelmUpgradeError,
+    get_chart,
+    install_or_upgrade_release,
+    uninstall_release,
 )
 from logger import setup_logger
 from paths import TEMPLATES_DIR
@@ -66,7 +69,7 @@ class VectorDBController:
         repo_url = instance.vectorDB.chart_repo
         chart_name = instance.vectorDB.chart_name
 
-        chart = await self.helm.get_chart(chart_name, repo=repo_url)
+        chart = await get_chart(self.helm, chart_name, repo=repo_url)
         self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
 
         return chart
@@ -78,7 +81,8 @@ class VectorDBController:
         values = await self.prepare_helm_values(instance)
 
         try:
-            await self.helm.install_or_upgrade_release(
+            await install_or_upgrade_release(
+                self.helm,
                 chart_name,
                 chart,
                 values,
@@ -100,8 +104,8 @@ class VectorDBController:
         values = await self.prepare_helm_values(instance)
 
         try:
-            await self.helm.install_or_upgrade_release(
-                chart_name, chart, values, namespace=self.namespace
+            await install_or_upgrade_release(
+                self.helm, chart_name, chart, values, namespace=self.namespace
             )
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except (
@@ -114,11 +118,9 @@ class VectorDBController:
         chart_name = self._get_release_name(instance)
 
         try:
-            revision = await self.helm.get_current_revision(
-                chart_name, namespace=self.namespace
+            await uninstall_release(
+                self.helm, chart_name, namespace=self.namespace
             )
-            self.logger.info(f"Current revision: {revision}")
-            await revision.release.uninstall(wait=True)
             self.logger.info(
                 f"Helm uninstall succeeded for chart: {chart_name}"
             )

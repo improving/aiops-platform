@@ -4,14 +4,104 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
+from pydantic import ValidationError
 from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
+from pyhelm3.models import Chart
 
 from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
+
+# Chart.yaml keys that Helm needs; every other key is informational.
+REQUIRED_CHART_METADATA_KEYS = frozenset({"apiVersion", "name", "version"})
+
+
+class ChartMetadataError(Exception):
+    """The Chart.yaml of a chart does not pass pyhelm3 validation."""
+
+
+async def get_chart(
+    helm: HelmClient,
+    chart_name: str,
+    *,
+    repo: str | None = None,
+    version: str | None = None,
+) -> Chart:
+    """Fetch a chart like HelmClient.get_chart, but tolerate bad metadata.
+
+    pyhelm3 validates Chart.yaml with pydantic and rejects, for example,
+    the Milvus chart whose maintainers[0].url is the bare hostname
+    "milvus.io". Helm itself does not care, and the install only needs
+    name and version, so drop the informational keys that fail and retry.
+    """
+    metadata = await helm._command.show_chart(
+        chart_name, devel=False, repo=repo, version=version
+    )
+    try:
+        return Chart(
+            helm._command, ref=chart_name, repo=repo, metadata=metadata
+        )
+    except ValidationError as e:
+        bad_keys = {
+            error["loc"][1]
+            for error in e.errors()
+            if len(error["loc"]) > 1 and error["loc"][0] == "metadata"
+        }
+        if not bad_keys or bad_keys & REQUIRED_CHART_METADATA_KEYS:
+            raise ChartMetadataError(
+                f"Chart {chart_name!r} has invalid metadata: {e}"
+            ) from e
+        cleaned = {k: v for k, v in metadata.items() if k not in bad_keys}
+    try:
+        return Chart(
+            helm._command, ref=chart_name, repo=repo, metadata=cleaned
+        )
+    except ValidationError as e:
+        raise ChartMetadataError(
+            f"Chart {chart_name!r} has invalid metadata: {e}"
+        ) from e
+
+
+async def install_or_upgrade_release(
+    helm: HelmClient,
+    release_name: str,
+    chart: Chart,
+    values: dict,
+    *,
+    namespace: str,
+    create_namespace: bool = True,
+) -> None:
+    """Run 'helm upgrade --install' for the chart.
+
+    HelmClient.install_or_upgrade_release parses the release status that
+    Helm prints, and that status embeds the same Chart.yaml metadata that
+    get_chart() had to clean up. The controllers never use the parsed
+    revision, so call the Helm command directly and skip the parsing.
+    """
+    await helm._command.install_or_upgrade(
+        release_name,
+        chart.ref,
+        values,
+        namespace=namespace,
+        create_namespace=create_namespace,
+        repo=chart.repo,
+        version=chart.metadata.version,
+    )
+
+
+async def uninstall_release(
+    helm: HelmClient, release_name: str, *, namespace: str
+) -> None:
+    """Run 'helm uninstall --wait' without reading the release status first.
+
+    Reading the status parses the chart metadata, see
+    install_or_upgrade_release. A missing release raises
+    pyhelm3.errors.ReleaseNotFoundError as before.
+    """
+    await helm._command.uninstall(release_name, namespace=namespace, wait=True)
 
 
 class Controller(ABC):
@@ -103,8 +193,11 @@ class Controller(ABC):
         repo_url = engineChart.chart_repo
         chart_name = engineChart.chart_name
 
-        chart = await self.helm.get_chart(
-            chart_name, repo=repo_url, version=engineChart.chart_version
+        chart = await get_chart(
+            self.helm,
+            chart_name,
+            repo=repo_url,
+            version=engineChart.chart_version,
         )
         self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
 
@@ -143,7 +236,8 @@ class Controller(ABC):
         values = await self.prepare_helm_values(instance, engineChart)
 
         try:
-            await self.helm.install_or_upgrade_release(
+            await install_or_upgrade_release(
+                self.helm,
                 chart_name,
                 chart,
                 values,
@@ -172,8 +266,8 @@ class Controller(ABC):
         values = await self.prepare_helm_values(instance, engineChart)
 
         try:
-            await self.helm.install_or_upgrade_release(
-                chart_name, chart, values, namespace=self.namespace
+            await install_or_upgrade_release(
+                self.helm, chart_name, chart, values, namespace=self.namespace
             )
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
         except (
@@ -188,11 +282,9 @@ class Controller(ABC):
         chart_name = self._get_release_name(instance)
 
         try:
-            revision = await self.helm.get_current_revision(
-                chart_name, namespace=self.namespace
+            await uninstall_release(
+                self.helm, chart_name, namespace=self.namespace
             )
-            self.logger.info(f"Current revision: {revision}")
-            await revision.release.uninstall(wait=True)
             self.logger.info(
                 f"Helm uninstall succeeded for chart: {chart_name}"
             )
