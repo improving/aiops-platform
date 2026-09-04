@@ -1,0 +1,21 @@
+{{- range $key, $notebook := .Values.notebooks }}
+{{- if $notebook.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ printf "%s-%s" (include "kf-notebooks.fullname" $) $notebook.name | trunc 53 | trimSuffix "-" }}-workspace
+  labels:
+    {{- include "kf-notebooks.labels" $ | nindent 4 }}
+    app: {{ $notebook.name }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ $notebook.storage.size }}
+  {{- if $.Values.global.storageClassName }}
+  storageClassName: {{ $.Values.global.storageClassName }}
+  {{- end }}
+{{- end }}
+{{- end }}
