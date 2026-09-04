@@ -76,12 +76,13 @@ export default function ModelCatalog() {
 
   return (
     <>
-      <div className="mb-4 flex space-x-4">
+      <div className="mb-4 flex flex-wrap gap-4">
         <Input
           type="text"
           placeholder="Search by model name or ID"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full sm:w-auto sm:flex-1 sm:min-w-[200px]"
         />
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="w-[180px]">
