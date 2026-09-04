@@ -1,9 +1,8 @@
 name: Backend image
 
+# Manual for now: the :main tag is pulled by the lab cluster manifests in
+# infra/aiops with imagePullPolicy Always, so builds run only on request.
 on:
-  push:
-    branches: [main]
-    paths: ["backend/**", ".github/workflows/backend-image.yml"]
   workflow_dispatch:
 
 env:
