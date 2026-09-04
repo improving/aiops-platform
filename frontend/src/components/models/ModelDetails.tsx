@@ -184,7 +184,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
     }
   };
 
-  const handleViewParams = (params: Record<string, any>) => {
+  const handleViewParams = (params: Record<string, unknown>) => {
     setSelectedJobParams(yaml.stringify(params, null, 2));
     setIsViewParamsDialogOpen(true);
   };

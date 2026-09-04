@@ -1,4 +1,7 @@
-FROM node:lts-alpine AS base
+FROM node:24-alpine AS base
+# Enable pnpm through corepack; the version comes from package.json packageManager.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -6,15 +9,9 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
-
+# pnpm-workspace.yaml carries the pnpm settings (allowed build scripts).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -22,17 +19,22 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# NEXT_PUBLIC_* values are inlined at build time; override with --build-arg.
+ARG NEXT_PUBLIC_AIOPS_BACKEND_URL=http://localhost:8000
+ARG NEXT_PUBLIC_LANGFLOW_URL=""
+ARG NEXT_PUBLIC_GRAFANA_URL=""
+ARG NEXT_PUBLIC_JAEGER_URL=""
+ENV NEXT_PUBLIC_AIOPS_BACKEND_URL=$NEXT_PUBLIC_AIOPS_BACKEND_URL \
+    NEXT_PUBLIC_LANGFLOW_URL=$NEXT_PUBLIC_LANGFLOW_URL \
+    NEXT_PUBLIC_GRAFANA_URL=$NEXT_PUBLIC_GRAFANA_URL \
+    NEXT_PUBLIC_JAEGER_URL=$NEXT_PUBLIC_JAEGER_URL
+
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry
 # Uncomment the following line in case you want to disable telemetry during the build.
 # ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN \
-  if [ -f yarn.lock ]; then yarn run build; \
-  elif [ -f package-lock.json ]; then npm run build; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+RUN pnpm build
 
 # Production image, copy all the files and run next
 FROM base AS runner

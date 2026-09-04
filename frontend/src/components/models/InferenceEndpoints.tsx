@@ -85,7 +85,7 @@ export default function InferenceEndpoints() {
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div className="flex flex-wrap gap-4 flex-grow">
+            <div className="flex flex-wrap gap-4 grow">
               <Input
                 placeholder="Search by ID or model name"
                 value={searchTerm}

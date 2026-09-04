@@ -33,7 +33,7 @@ export function DisplayCard({
 }: DisplayCardProps) {
   return (
     <Card className={`flex flex-col h-full ${className}`} onClick={onClick}>
-      <CardHeader className="flex-grow">
+      <CardHeader className="grow">
         <div className="flex justify-between">
           <div className="flex items-start space-x-4">
             {icon &&

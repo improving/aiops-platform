@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import NotConfigured from "@/components/NotConfigured";
 
 interface GrafanaEmbedProps {
   grafanaEndpoint: string;
@@ -38,6 +39,10 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
       setError("Failed to construct dashboard URL");
     }
   }, [grafanaEndpoint, dashboardID, panelID, orgID, queryParams]);
+
+  if (!grafanaEndpoint) {
+    return <NotConfigured name="Grafana" envVar="NEXT_PUBLIC_GRAFANA_URL" />;
+  }
 
   if (error) {
     return <div className="error">{error}</div>;
