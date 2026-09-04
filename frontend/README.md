@@ -34,7 +34,8 @@ rebuild after you change them.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NEXT_PUBLIC_AIOPS_BACKEND_URL` | `http://localhost:8000` | Backend API base URL |
+| `NEXT_PUBLIC_AIOPS_BACKEND_URL` | `http://localhost:8000` | Backend API base URL, inlined at build time |
+| `AIOPS_BACKEND_URL` | unset | Runtime override for the proxy target, read on the server per request |
 | `NEXT_PUBLIC_LANGFLOW_URL` | empty | Langflow UI embedded on the Develop page |
 | `NEXT_PUBLIC_GRAFANA_URL` | empty | Grafana dashboards on inference endpoint pages |
 | `NEXT_PUBLIC_JAEGER_URL` | empty | Jaeger traces on inference endpoint pages |
@@ -44,7 +45,7 @@ When an optional URL is empty the page shows a "not configured" card instead of 
 ## How API calls reach the backend
 
 The browser calls relative paths such as `/api/v1alpha1/models` (see `src/services/api.ts`).
-`src/proxy.ts` matches `/api/v1alpha1/*` and rewrites the request to `${NEXT_PUBLIC_AIOPS_BACKEND_URL}/v1alpha1/*`,
+`src/proxy.ts` matches `/api/v1alpha1/*` and rewrites the request to `${AIOPS_BACKEND_URL:-NEXT_PUBLIC_AIOPS_BACKEND_URL}/v1alpha1/*`,
 so the backend URL never has to be reachable from the browser and no CORS setup is needed.
 
 ## Docker
