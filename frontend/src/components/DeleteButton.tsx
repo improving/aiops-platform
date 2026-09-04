@@ -13,6 +13,7 @@ import {
 import { useToast } from "@/components/hooks/use-toast";
 import { AxiosError } from "axios";
 import { TrashIcon } from "@radix-ui/react-icons";
+import { parseApiError } from "@/lib/utils";
 
 interface DeleteButtonProps {
   onDelete: () => Promise<void>;
@@ -33,7 +34,7 @@ export function DeleteButton({
   modalTitle = "Confirm Deletion",
   modalDescription = "Are you sure you want to delete this item? This action cannot be undone.",
   successToastMessage = "Item deleted successfully",
-  errorToastMessage = "Failed to delete item",
+  errorToastMessage,
 }: DeleteButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -53,7 +54,7 @@ export function DeleteButton({
     } catch (error) {
       toast({
         title: "Error",
-        description: errorToastMessage,
+        description: errorToastMessage || parseApiError(error).description,
         variant: "destructive",
       });
       onError?.(error as AxiosError);

@@ -41,12 +41,12 @@ export default function CreateVectorDBInstanceDialog({
         description: "Vector database instance created successfully",
         variant: "success",
       });
+      onClose();
       router.push("/vector-databases/endpoints");
     } catch (error) {
       toast(parseApiError(error));
     } finally {
       setIsCreating(false);
-      onClose();
     }
   };
 
