@@ -20,12 +20,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -76,7 +71,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   const [isViewParamsDialogOpen, setIsViewParamsDialogOpen] = useState(false);
   const [isViewLogsDialogOpen, setIsViewLogsDialogOpen] = useState(false);
   const [selectedJobParams, setSelectedJobParams] = useState<string>("");
-  const [selectedJobLogs, setSelectedJobLogs] = useState<string>("");
+  const [selectedJobLogs, setSelectedJobLogs] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchAdapters = useCallback(async () => {
@@ -190,11 +185,13 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   };
 
   const handleViewLogs = async (jobId: string) => {
+    setIsViewLogsDialogOpen(true);
+    setSelectedJobLogs(null);
     try {
       const logs = await modelService.getFineTuneJobLogs(params.id, jobId);
       setSelectedJobLogs(logs);
-      setIsViewLogsDialogOpen(true);
     } catch (error) {
+      setIsViewLogsDialogOpen(false);
       toast(parseApiError(error));
     }
   };
@@ -256,11 +253,17 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           }
           footer={
             <div className="flex justify-between space-x-8">
-              <Button onClick={handleLaunchModel} icon={<RocketIcon className="mr-2 w-4 h-4" />}>
+              <Button
+                onClick={handleLaunchModel}
+                icon={<RocketIcon className="mr-2 w-4 h-4" />}
+              >
                 Launch Model
               </Button>
               <Link href={`/models/${model.id}/finetune`} passHref>
-                <Button variant="secondary" icon={<HandIcon className="mr-2 w-4 h-4" />}>
+                <Button
+                  variant="secondary"
+                  icon={<HandIcon className="mr-2 w-4 h-4" />}
+                >
                   Fine-tune
                 </Button>
               </Link>
@@ -398,8 +401,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                         className="mr-2"
                         onClick={() => handleViewParams(job.params)}
                         icon={<EyeOpenIcon className="mr-2 h-4 w-4" />}
-                      >
-                      </Button>
+                      ></Button>
                     </TableCell>
                     <TableCell>
                       <Button
@@ -408,8 +410,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                         className="mr-2"
                         onClick={() => handleViewLogs(job.id)}
                         icon={<FileTextIcon className="mr-2 h-4 w-4" />}
-                      >
-                      </Button>
+                      ></Button>
                     </TableCell>
                     <TableCell>
                       {new Date(job.created_at).toLocaleString()}
@@ -515,8 +516,10 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
           <DialogHeader>
             <DialogTitle>Fine-tune Job Logs</DialogTitle>
           </DialogHeader>
-          <pre className="max-h-96 overflow-auto bg-gray-100 p-4 rounded">
-            {selectedJobLogs}
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words bg-gray-100 p-4 rounded text-sm">
+            {selectedJobLogs === null
+              ? "Loading logs..."
+              : selectedJobLogs || "No logs yet."}
           </pre>
         </DialogContent>
       </Dialog>
