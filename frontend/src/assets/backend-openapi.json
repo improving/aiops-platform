@@ -1,0 +1,2844 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1alpha1/models": {
+      "get": {
+        "tags": ["models"],
+        "summary": "Get Models",
+        "description": "Retrieve all models from the database.\n\nReturns:\n    List[ModelSchema]: A list of all models, including the count of adapters for each.\n\nRaises:\n    HTTPException: If no models are found in the database.",
+        "operationId": "get_models_v1alpha1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Get Models V1Alpha1 Models Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["models"],
+        "summary": "Create Model",
+        "description": "Create a new model in the database. Remember to checkin the model\nto the code repository.\n\nArgs:\n    model (ModelSchema): The model data to create.\n\nReturns:\n    ModelSchema: The created model.",
+        "operationId": "create_model_v1alpha1_models_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/models/{id}": {
+      "get": {
+        "tags": ["models"],
+        "summary": "Get Model",
+        "description": "Retrieve a specific model by its ID.\n\nArgs:\n    id (uuid.UUID): The unique identifier of the model to retrieve.\n\nReturns:\n    ModelSchema: The requested model, including the count of its adapters.\n\nRaises:\n    HTTPException: If the model with the given ID is not found in the database.",
+        "operationId": "get_model_v1alpha1_models__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["models"],
+        "summary": "Update Model",
+        "description": "Update an existing model in the database.\n\nArgs:\n    model (ModelSchema): The updated model data.\n\nReturns:\n    ModelSchema: The updated model.",
+        "operationId": "update_model_v1alpha1_models__id__put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["models"],
+        "summary": "Delete Model",
+        "description": "Delete a model from the database.\n\nReturns:\n    dict: A message confirming the deletion.\n\nRaises:\n    HTTPException: If the model is not found or is still in use by instances.",
+        "operationId": "delete_model_v1alpha1_models__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/engines": {
+      "get": {
+        "tags": ["engines"],
+        "summary": "Get Engines",
+        "description": "Retrieve all engines from the database.\n\nReturns:\n    List[EngineSchema]: A list of all engines.\n\nRaises:\n    HTTPException: If no engines are found in the database.",
+        "operationId": "get_engines_v1alpha1_engines_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EngineSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Get Engines V1Alpha1 Engines Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/inferenceInstance": {
+      "get": {
+        "tags": ["inference_instance"],
+        "summary": "List Inference Instances",
+        "description": "List all inference instances.\n\nArgs:\n    db (Session): The database session, injected by FastAPI.\n\nReturns:\n    List[InferenceInstanceSchema]: A list of all inference instances.\n\nRaises:\n    HTTPException: If there's an error retrieving the inference instances.",
+        "operationId": "list_inference_instances_v1alpha1_inferenceInstance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
+                  },
+                  "type": "array",
+                  "title": "Response List Inference Instances V1Alpha1 Inferenceinstance Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["inference_instance"],
+        "summary": "Create Inference Instance",
+        "description": "Create a new inference instance.\n\nArgs:\n    instance (InferenceInstanceSchema): The inference instance data.\n\nReturns:\n    InferenceInstanceSchema: The created inference instance.\n\nRaises:\n    HTTPException: If there's an error creating the inference instance.",
+        "operationId": "create_inference_instance_v1alpha1_inferenceInstance_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InferenceInstanceSchema-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/inferenceInstance/{id}": {
+      "get": {
+        "tags": ["inference_instance"],
+        "summary": "Get Inference Instance",
+        "description": "Retrieve a specific inference instance by ID.\n\nArgs:\n    id (uuid.UUID): The ID of the inference instance to retrieve.\n\nReturns:\n    InferenceInstanceSchema: The requested inference instance.\n\nRaises:\n    HTTPException: If the inference instance is not found or there's an internal error.",
+        "operationId": "get_inference_instance_v1alpha1_inferenceInstance__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["inference_instance"],
+        "summary": "Update Inference Instance",
+        "description": "Update an existing inference instance.\n\nArgs:\n    id (uuid.UUID): The ID of the inference instance to update.\n    updated_instance (InferenceInstanceSchema): The updated inference instance data.\n\nReturns:\n    InferenceInstanceSchema: The updated inference instance.\n\nRaises:\n    HTTPException: If the inference instance is not found or there's an error during the update.",
+        "operationId": "update_inference_instance_v1alpha1_inferenceInstance__id__put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InferenceInstanceSchema-Input"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceInstanceSchema-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["inference_instance"],
+        "summary": "Delete Inference Instance",
+        "description": "Delete an inference instance.\n\nArgs:\n    id (uuid.UUID): The ID of the inference instance to delete.\n\nReturns:\n    dict: A message confirming the deletion.\n\nRaises:\n    HTTPException: If the inference instance is not found or there's an error during deletion.",
+        "operationId": "delete_inference_instance_v1alpha1_inferenceInstance__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/inferenceInstance/{id}/dashboards": {
+      "get": {
+        "tags": ["inference_instance"],
+        "summary": "Get Inference Instance Dashboards",
+        "description": "Retrieve dashboards for a specific inference instance.\n\nArgs:\n    id (uuid.UUID): The ID of the inference instance.\n\nReturns:\n    List[InferenceInstanceDashboardsSchema]: A list of dashboards associated with the inference instance.\n\nRaises:\n    HTTPException: If there's an error retrieving the dashboards.",
+        "operationId": "get_inference_instance_dashboards_v1alpha1_inferenceInstance__id__dashboards_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InferenceInstanceDashboardsSchema"
+                  },
+                  "title": "Response Get Inference Instance Dashboards V1Alpha1 Inferenceinstance  Id  Dashboards Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/hosts": {
+      "get": {
+        "tags": ["hosts"],
+        "summary": "Get Hosts",
+        "description": "Retrieve information about Kubernetes hosts.\n\nArgs:\n    includeNotReady (bool): If True, include nodes that are not in Ready status.\n\nReturns:\n    List[Host]: A list of Host objects containing information about each node.\n\nRaises:\n    HTTPException: If there's an error retrieving node information from Kubernetes.",
+        "operationId": "get_hosts_v1alpha1_hosts_get",
+        "parameters": [
+          {
+            "name": "includeNotReady",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include nodes that are not in Ready status",
+              "default": false,
+              "title": "Includenotready"
+            },
+            "description": "Include nodes that are not in Ready status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Host"
+                  },
+                  "title": "Response Get Hosts V1Alpha1 Hosts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/vectordb": {
+      "get": {
+        "tags": ["vectordb"],
+        "summary": "Get Vectordb",
+        "description": "Retrieve all vector databases from the database.\n\nReturns:\n    List[VectorDBSchema]: A list of all vector databases.\n\nRaises:\n    HTTPException: If no vector databases are found in the database.",
+        "operationId": "get_vectordb_v1alpha1_vectordb_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VectorDBSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Get Vectordb V1Alpha1 Vectordb Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/vectordb_instances": {
+      "get": {
+        "tags": ["vectordb_instance"],
+        "summary": "List Vectordb Instances",
+        "description": "List all vector database instances.\n\nReturns:\n    List[VectorDBInstanceSchema]: A list of all vector database instances.",
+        "operationId": "list_vectordb_instances_v1alpha1_vectordb_instances_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                  },
+                  "type": "array",
+                  "title": "Response List Vectordb Instances V1Alpha1 Vectordb Instances Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["vectordb_instance"],
+        "summary": "Create Vectordb Instance",
+        "description": "Create a new vector database instance.\n\nArgs:\n    vectordb_instance (VectorDBInstanceSchema): The vector database instance data.\n\nReturns:\n    VectorDBInstanceSchema: The created vector database instance.\n\nRaises:\n    HTTPException: If there's an error creating the vector database instance.",
+        "operationId": "create_vectordb_instance_v1alpha1_vectordb_instances_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorDBInstanceSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/vectordb_instances/{id}": {
+      "get": {
+        "tags": ["vectordb_instance"],
+        "summary": "Get Vectordb Instance",
+        "description": "Retrieve a specific vector database instance by ID.\n\nArgs:\n    id (uuid.UUID): The ID of the vector database instance to retrieve.\n\nReturns:\n    VectorDBInstanceSchema: The requested vector database instance.\n\nRaises:\n    HTTPException: If the vector database instance is not found or there's an internal error.",
+        "operationId": "get_vectordb_instance_v1alpha1_vectordb_instances__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The ID of the vector database instance to retrieve",
+              "title": "Id"
+            },
+            "description": "The ID of the vector database instance to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["vectordb_instance"],
+        "summary": "Update Vectordb Instance",
+        "description": "Update an existing vector database instance.\n\nArgs:\n    id (uuid.UUID): The ID of the vector database instance to update.\n    instanceSchema (VectorDBInstanceSchema): The updated vector database instance data.\n\nReturns:\n    VectorDBInstanceSchema: The updated vector database instance.\n\nRaises:\n    HTTPException: If the vector database instance is not found or there's an error during the update.",
+        "operationId": "update_vectordb_instance_v1alpha1_vectordb_instances__id__put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The ID of the vector database instance to update",
+              "title": "Id"
+            },
+            "description": "The ID of the vector database instance to update"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorDBInstanceSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorDBInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["vectordb_instance"],
+        "summary": "Delete Vectordb Instance",
+        "description": "Delete a vector database instance.\n\nArgs:\n    id (uuid.UUID): The ID of the vector database instance to delete.\n\nReturns:\n    dict: A message confirming the deletion.\n\nRaises:\n    HTTPException: If the vector database instance is not found or there's an error during deletion.",
+        "operationId": "delete_vectordb_instance_v1alpha1_vectordb_instances__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The ID of the vector database instance to delete",
+              "title": "Id"
+            },
+            "description": "The ID of the vector database instance to delete"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/notebooks": {
+      "get": {
+        "tags": ["notebooks"],
+        "summary": "List Notebooks",
+        "description": "List all notebook instances.\n\nReturns:\n    List[NotebookInstanceSchema]: A list of all notebook instances.\n\nRaises:\n    HTTPException: If there's an error retrieving the notebook instances.",
+        "operationId": "list_notebooks_v1alpha1_notebooks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotebookInstanceSchema"
+                  },
+                  "type": "array",
+                  "title": "Response List Notebooks V1Alpha1 Notebooks Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["notebooks"],
+        "summary": "Create Notebook",
+        "description": "Create a new notebook instance.\n\nArgs:\n    notebook (NotebookInstanceSchema): The notebook instance data.\n\nReturns:\n    NotebookInstanceSchema: The created notebook instance.\n\nRaises:\n    HTTPException: If there's an error creating the notebook instance.",
+        "operationId": "create_notebook_v1alpha1_notebooks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotebookInstanceSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/notebooks/{id}": {
+      "get": {
+        "tags": ["notebooks"],
+        "summary": "Get Notebook",
+        "description": "Retrieve a specific notebook instance by ID.\n\nArgs:\n    id (uuid.UUID): The ID of the notebook instance to retrieve.\n\nReturns:\n    NotebookInstanceSchema: The requested notebook instance.\n\nRaises:\n    HTTPException: If the notebook is not found or there's an error checking its status.",
+        "operationId": "get_notebook_v1alpha1_notebooks__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["notebooks"],
+        "summary": "Update Notebook",
+        "description": "Update an existing notebook instance.\n\nArgs:\n    id (uuid.UUID): The ID of the notebook instance to update.\n    notebook (NotebookInstanceSchema): The updated notebook instance data.\n\nReturns:\n    NotebookInstanceSchema: The updated notebook instance.\n\nRaises:\n    HTTPException: If the notebook is not found.",
+        "operationId": "update_notebook_v1alpha1_notebooks__id__put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotebookInstanceSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotebookInstanceSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["notebooks"],
+        "summary": "Delete Notebook",
+        "description": "Delete a notebook instance.\n\nArgs:\n    id (uuid.UUID): The ID of the notebook instance to delete.\n\nReturns:\n    dict: A message confirming the deletion.\n\nRaises:\n    HTTPException: If the notebook is not found.",
+        "operationId": "delete_notebook_v1alpha1_notebooks__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/model/{model_id}/adapters/{adapter_id}": {
+      "get": {
+        "tags": ["model_adapters"],
+        "summary": "Get Model Adapter Api",
+        "operationId": "get_model_adapter_api_v1alpha1_model__model_id__adapters__adapter_id__get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAdapterSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["model_adapters"],
+        "summary": "Update Model Adapter",
+        "operationId": "update_model_adapter_v1alpha1_model__model_id__adapters__adapter_id__put",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelAdapterSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAdapterSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["model_adapters"],
+        "summary": "Delete Model Adapter",
+        "operationId": "delete_model_adapter_v1alpha1_model__model_id__adapters__adapter_id__delete",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/model/{model_id}/adapters": {
+      "get": {
+        "tags": ["model_adapters"],
+        "summary": "List Model Adapters",
+        "operationId": "list_model_adapters_v1alpha1_model__model_id__adapters_get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelAdapterSchema"
+                  },
+                  "title": "Response List Model Adapters V1Alpha1 Model  Model Id  Adapters Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["model_adapters"],
+        "summary": "Create Model Adapter",
+        "operationId": "create_model_adapter_v1alpha1_model__model_id__adapters_post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelAdapterSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAdapterSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/models/{model_id}/finetune": {
+      "get": {
+        "tags": ["finetune"],
+        "summary": "List Finetunes",
+        "description": "List all finetune jobs available in the cluster.\n\nArgs:\n    model_id (UUID): ID of the model.\n\nReturns:\n    List[Finetune]: List of all finetune jobs.\n\nRaises:\n    HTTPException: If there's an error retrieving the finetune jobs.",
+        "operationId": "list_finetunes_v1alpha1_models__model_id__finetune_get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinetuneSchema"
+                  },
+                  "title": "Response List Finetunes V1Alpha1 Models  Model Id  Finetune Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["finetune"],
+        "summary": "Create Finetune",
+        "description": "Create a new finetune job.\n\nArgs:\n    model_id (UUID): ID of the model.\n    finetune (FinetuneCreate): Finetune job details.\n\nReturns:\n    Finetune: Created finetune job.\n\nRaises:\n    HTTPException: If there's an error creating the finetune job.",
+        "operationId": "create_finetune_v1alpha1_models__model_id__finetune_post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinetuneCreateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinetuneSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/models/{model_id}/finetune/{finetune_id}": {
+      "get": {
+        "tags": ["finetune"],
+        "summary": "Get Finetune",
+        "description": "Get details of a specific finetune job.\n\nArgs:\n    model_id (UUID): ID of the model.\n    finetune_id (UUID): ID of the finetune job.\n\nReturns:\n    Finetune: Details of the finetune job.\n\nRaises:\n    HTTPException: If the finetune job is not found or there's an error retrieving it.",
+        "operationId": "get_finetune_v1alpha1_models__model_id__finetune__finetune_id__get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "finetune_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Finetune Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinetuneSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["finetune"],
+        "summary": "Update Finetune",
+        "description": "Update a finetune job.\n\nArgs:\n    model_id (UUID): ID of the model.\n    finetune_id (UUID): ID of the finetune job to update.\n    finetune (FinetuneUpdate): Updated finetune job details.\n\nReturns:\n    Finetune: Updated finetune job.\n\nRaises:\n    HTTPException: If the finetune job is not found or there's an error updating it.",
+        "operationId": "update_finetune_v1alpha1_models__model_id__finetune__finetune_id__put",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "finetune_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Finetune Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinetuneUpdateSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinetuneSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["finetune"],
+        "summary": "Delete Finetune",
+        "description": "Delete a finetune job.\n\nArgs:\n    model_id (UUID): ID of the model.\n    finetune_id (UUID): ID of the finetune job to delete.\n\nRaises:\n    HTTPException: If the finetune job is not found or there's an error deleting it.",
+        "operationId": "delete_finetune_v1alpha1_models__model_id__finetune__finetune_id__delete",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "finetune_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Finetune Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1alpha1/models/{model_id}/finetune/{finetune_id}/logs": {
+      "get": {
+        "tags": ["finetune"],
+        "summary": "Get Finetune Logs",
+        "description": "Get logs of a finetune job.\n\nArgs:\n    model_id (UUID): ID of the model.\n    finetune_id (UUID): ID of the finetune job.\n\nReturns:\n    str: Logs of the finetune job.\n\nRaises:\n    HTTPException: If the finetune job is not found or there's an error retrieving logs.",
+        "operationId": "get_finetune_logs_v1alpha1_models__model_id__finetune__finetune_id__logs_get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "finetune_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Finetune Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reload-data": {
+      "post": {
+        "tags": ["utility"],
+        "summary": "Reload Data Endpoint",
+        "operationId": "reload_data_endpoint_reload_data_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/refresh-db": {
+      "post": {
+        "tags": ["utility"],
+        "summary": "Refresh Db Endpoint",
+        "operationId": "refresh_db_endpoint_refresh_db_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["utility"],
+        "summary": "Health Endpoint",
+        "operationId": "health_endpoint_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EngineDefaultConfigArgs": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "chart_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Type"
+          },
+          "defaultValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaultvalue"
+          },
+          "editable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "EngineDefaultConfigArgs"
+      },
+      "EngineDefaultConfigEnvVars": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "chart_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Type"
+          },
+          "defaultValue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaultvalue"
+          },
+          "editable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "EngineDefaultConfigEnvVars"
+      },
+      "EngineSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "llm_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Support",
+            "default": false
+          },
+          "embedding_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Support",
+            "default": false
+          },
+          "reranking_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranking Support",
+            "default": false
+          },
+          "prompt_guard_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Guard Support",
+            "default": false
+          },
+          "vector_db_support": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Db Support",
+            "default": false
+          },
+          "default_config": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EngineDefaultConfigEnvVars"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Config"
+          },
+          "default_args": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EngineDefaultConfigArgs"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Args"
+          }
+        },
+        "type": "object",
+        "required": ["id"],
+        "title": "EngineSchema"
+      },
+      "FinetuneCreateSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "params": {
+            "type": "object",
+            "title": "Params"
+          }
+        },
+        "type": "object",
+        "required": ["name", "params"],
+        "title": "FinetuneCreateSchema"
+      },
+      "FinetuneSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "params": {
+            "type": "object",
+            "title": "Params"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "base_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": ["name", "params", "id", "created_at", "updated_at"],
+        "title": "FinetuneSchema"
+      },
+      "FinetuneUpdateSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "base_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "params": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          }
+        },
+        "type": "object",
+        "title": "FinetuneUpdateSchema"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Host": {
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "title": "Hostname"
+          },
+          "cpu_vendor": {
+            "type": "string",
+            "title": "Cpu Vendor"
+          },
+          "cpu_memory": {
+            "type": "integer",
+            "title": "Cpu Memory"
+          },
+          "cpu_cores": {
+            "type": "integer",
+            "title": "Cpu Cores"
+          },
+          "cuda_driver_version": {
+            "type": "string",
+            "title": "Cuda Driver Version"
+          },
+          "cuda_runtime_version": {
+            "type": "string",
+            "title": "Cuda Runtime Version"
+          },
+          "gpu_count": {
+            "type": "integer",
+            "title": "Gpu Count"
+          },
+          "gpu_memory": {
+            "type": "integer",
+            "title": "Gpu Memory"
+          },
+          "gpu_model": {
+            "type": "string",
+            "title": "Gpu Model"
+          },
+          "gpu_replicas": {
+            "type": "integer",
+            "title": "Gpu Replicas"
+          },
+          "gpu_sharing_strategy": {
+            "type": "string",
+            "title": "Gpu Sharing Strategy"
+          },
+          "gpu_usage": {
+            "type": "number",
+            "title": "Gpu Usage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hostname",
+          "cpu_vendor",
+          "cpu_memory",
+          "cpu_cores",
+          "cuda_driver_version",
+          "cuda_runtime_version",
+          "gpu_count",
+          "gpu_memory",
+          "gpu_model",
+          "gpu_replicas",
+          "gpu_sharing_strategy",
+          "gpu_usage"
+        ],
+        "title": "Host"
+      },
+      "InferenceInstanceConfigParamsSchema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "maxInputLength": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxinputlength"
+          },
+          "maxTokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxtokens"
+          },
+          "maxBatchPrefillTokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxbatchprefilltokens"
+          },
+          "maxBatchTotalTokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxbatchtotaltokens"
+          },
+          "quantization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantization"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "env_vars": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Vars"
+          },
+          "args": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Args"
+          },
+          "lora_adapters": {
+            "items": {
+              "$ref": "#/components/schemas/ModelAdapterReferenceSchema"
+            },
+            "type": "array",
+            "title": "Lora Adapters",
+            "default": []
+          },
+          "enable_tracing": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Tracing",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "InferenceInstanceConfigParamsSchema"
+      },
+      "InferenceInstanceDashboardsSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "dashboard_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dashboard Id"
+          },
+          "dashboard_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dashboard Name"
+          },
+          "panel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Id"
+          },
+          "panel_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Name"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "query_params": {
+            "type": "object",
+            "title": "Query Params"
+          }
+        },
+        "type": "object",
+        "required": ["id", "org_id", "query_params"],
+        "title": "InferenceInstanceDashboardsSchema"
+      },
+      "InferenceInstanceSchema-Input": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelSchema"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineSchema"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InferenceInstanceConfigParamsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "healthEndpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthendpoint"
+          },
+          "metricsEndpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metricsendpoint"
+          },
+          "ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready",
+            "default": false
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": ["model", "engine", "host"],
+        "title": "InferenceInstanceSchema"
+      },
+      "InferenceInstanceSchema-Output": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelSchema"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineSchema"
+          },
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InferenceInstanceConfigParamsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "healthEndpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthendpoint"
+          },
+          "metricsEndpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metricsendpoint"
+          },
+          "ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready",
+            "default": false
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": ["model", "engine", "host"],
+        "title": "InferenceInstanceSchema"
+      },
+      "ModelAdapterReferenceSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "hf_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hf Id"
+          }
+        },
+        "type": "object",
+        "required": ["id"],
+        "title": "ModelAdapterReferenceSchema"
+      },
+      "ModelAdapterSchema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "base_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "hf_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hf Id"
+          }
+        },
+        "type": "object",
+        "required": ["name"],
+        "title": "ModelAdapterSchema"
+      },
+      "ModelSchema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "modelId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelid"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "subcategory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subcategory"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "countAdapters": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Countadapters",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "ModelSchema"
+      },
+      "NotebookInstanceSchema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "default": "ai-stack"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "nvidia_gpu": {
+            "type": "boolean",
+            "title": "Nvidia Gpu"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          },
+          "resources_cpu": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resources Cpu"
+          },
+          "resources_memory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resources Memory"
+          },
+          "resources_gpu": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resources Gpu"
+          },
+          "storage_size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Size"
+          },
+          "service_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Type"
+          },
+          "service_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Port"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready",
+            "default": false
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          }
+        },
+        "type": "object",
+        "required": ["name", "type", "nvidia_gpu"],
+        "title": "NotebookInstanceSchema"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      },
+      "VectorDBInstanceSchema": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "vectorDB": {
+            "$ref": "#/components/schemas/VectorDBSchema"
+          },
+          "configParams": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configparams"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ready",
+            "default": false
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": ["vectorDB"],
+        "title": "VectorDBInstanceSchema",
+        "exclude": ["vectorDB"]
+      },
+      "VectorDBSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "chart_repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Repo"
+          },
+          "chart_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Name"
+          }
+        },
+        "type": "object",
+        "required": ["id"],
+        "title": "VectorDBSchema"
+      }
+    }
+  }
+}

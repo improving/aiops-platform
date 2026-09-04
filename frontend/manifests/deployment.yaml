@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: aiops-frontend
+  name: aiops-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-frontend
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: aiops-frontend
+    spec:
+      containers:
+      - image: ghcr.io/infracloudio/aiops-frontend:main
+        name: aiops-frontend
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        envFrom:
+        - configMapRef:
+            name: aiops-frontend-configmap
+      nodeSelector:
+        kubernetes.io/hostname: gpu-node-4
