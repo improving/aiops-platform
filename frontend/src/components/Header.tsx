@@ -12,6 +12,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "next-themes";
 import { ThemeDropdown } from "./ThemeDropdown";
+import { MobileNav } from "./MobileNav";
 import { cn } from "@/lib/utils";
 import {
   CodeIcon,
@@ -81,7 +82,7 @@ export default function Header() {
           >
             AI Hub
           </Link>
-          <NavigationMenu>
+          <NavigationMenu className="hidden md:flex">
             <NavigationMenuList>
               {menuItems.map((item) => (
                 <NavigationMenuItem key={item.label}>
@@ -145,16 +146,20 @@ export default function Header() {
           </NavigationMenu>
         </div>
         <div className="flex items-center space-x-4">
-          <div className="flex items-center ml-4">
+          <div className="hidden items-center md:flex md:ml-4">
             <ThemeDropdown setTheme={setTheme} />
           </div>
-          <Avatar>
+          <Avatar className="hidden md:flex">
             <AvatarImage
               src="https://github.com/infracloudio.png"
               alt="User avatar"
             />
             <AvatarFallback>IC</AvatarFallback>
           </Avatar>
+          <div className="flex items-center gap-2 md:hidden">
+            <ThemeDropdown setTheme={setTheme} />
+            <MobileNav menuItems={menuItems} isActive={isActive} />
+          </div>
         </div>
       </div>
     </header>
