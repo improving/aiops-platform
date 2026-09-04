@@ -12,6 +12,6 @@ from .inference_instance import (
 )
 from .model import ModelSchema
 from .model_adapters import ModelAdapterSchema
-from .notebook import NotebookInstanceSchema
+from .notebook import NotebookCreateSchema, NotebookInstanceSchema
 from .vectordb import VectorDBSchema
 from .vectordb_instance import VectorDBInstanceSchema

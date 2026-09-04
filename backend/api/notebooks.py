@@ -10,7 +10,7 @@ from controller.notebooks_controller import NotebooksController
 from db.database import get_db
 from logger import setup_logger
 from models.notebook import Notebook
-from schemas.notebook import NotebookInstanceSchema
+from schemas.notebook import NotebookCreateSchema, NotebookInstanceSchema
 from utils.kubernetes_utils import (
     get_pod_status_and_readiness,
     get_service_endpoint,
@@ -43,13 +43,13 @@ def filter_notebook_fields(data: dict) -> dict:
 
 @router.post("/v1alpha1/notebooks", response_model=NotebookInstanceSchema)
 async def create_notebook(
-    notebook: NotebookInstanceSchema, db: Session = Depends(get_db)
+    notebook: NotebookCreateSchema, db: Session = Depends(get_db)
 ):
     """
     Create a new notebook instance.
 
     Args:
-        notebook (NotebookInstanceSchema): The notebook instance data.
+        notebook (NotebookCreateSchema): The notebook instance data.
 
     Returns:
         NotebookInstanceSchema: The created notebook instance.
