@@ -327,37 +327,48 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {adapters.map((adapter) => (
-                  <TableRow key={adapter.id}>
-                    <TableCell>{adapter.id}</TableCell>
-                    <TableCell>{adapter.name}</TableCell>
-                    <TableCell>
-                      <a
-                        href={`https://huggingface.co/${adapter.hf_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-600"
-                      >
-                        {adapter.hf_id}
-                      </a>
-                    </TableCell>
-                    <TableCell>{adapter.path}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2"
-                        onClick={() => handleEditAdapter(adapter)}
-                        icon={<Pencil2Icon className="h-4 w-4" />}
-                      ></Button>
-                      <DeleteButton
-                        buttonText=""
-                        onDelete={() => handleDeleteAdapter(adapter.id)}
-                        onSuccess={() => fetchAdapters()}
-                      />
+                {adapters.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-muted-foreground"
+                    >
+                      No adapters yet
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  adapters.map((adapter) => (
+                    <TableRow key={adapter.id}>
+                      <TableCell>{adapter.id}</TableCell>
+                      <TableCell>{adapter.name}</TableCell>
+                      <TableCell>
+                        <a
+                          href={`https://huggingface.co/${adapter.hf_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 hover:text-blue-600"
+                        >
+                          {adapter.hf_id}
+                        </a>
+                      </TableCell>
+                      <TableCell>{adapter.path}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mr-2"
+                          onClick={() => handleEditAdapter(adapter)}
+                          icon={<Pencil2Icon className="h-4 w-4" />}
+                        ></Button>
+                        <DeleteButton
+                          buttonText=""
+                          onDelete={() => handleDeleteAdapter(adapter.id)}
+                          onSuccess={() => fetchAdapters()}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -389,45 +400,56 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fineTuneJobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell>{job.id}</TableCell>
-                    <TableCell>{job.name}</TableCell>
-                    <TableCell>{job.status}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2"
-                        onClick={() => handleViewParams(job.params)}
-                        icon={<EyeOpenIcon className="mr-2 h-4 w-4" />}
-                      ></Button>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mr-2"
-                        onClick={() => handleViewLogs(job.id)}
-                        icon={<FileTextIcon className="mr-2 h-4 w-4" />}
-                      ></Button>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(job.created_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <DeleteButton
-                        buttonText=""
-                        onDelete={() => handleDeleteFineTuneJob(job.id)}
-                        onSuccess={() =>
-                          setFineTuneJobs(
-                            fineTuneJobs.filter((jobs) => jobs.id !== job.id)
-                          )
-                        }
-                      />
+                {fineTuneJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="text-center text-muted-foreground"
+                    >
+                      No fine-tune jobs yet
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  fineTuneJobs.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell>{job.id}</TableCell>
+                      <TableCell>{job.name}</TableCell>
+                      <TableCell>{job.status}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mr-2"
+                          onClick={() => handleViewParams(job.params)}
+                          icon={<EyeOpenIcon className="mr-2 h-4 w-4" />}
+                        ></Button>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mr-2"
+                          onClick={() => handleViewLogs(job.id)}
+                          icon={<FileTextIcon className="mr-2 h-4 w-4" />}
+                        ></Button>
+                      </TableCell>
+                      <TableCell>
+                        {new Date(job.created_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <DeleteButton
+                          buttonText=""
+                          onDelete={() => handleDeleteFineTuneJob(job.id)}
+                          onSuccess={() =>
+                            setFineTuneJobs(
+                              fineTuneJobs.filter((jobs) => jobs.id !== job.id)
+                            )
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
