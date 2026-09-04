@@ -4,6 +4,7 @@ from functools import lru_cache
 from sqlalchemy import URL, Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from paths import TMP_DIR
 from utils import genid
 
 
@@ -14,7 +15,10 @@ class Base(DeclarativeBase):
 def setup_engine():
     if os.environ.get("TEST_MODE", "false").lower() == "true":
         # Per test database in tmp folder
-        DATABASE_URL = f"sqlite:///./tmp/test_database_{genid.uuid4()}.db"
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        DATABASE_URL = (
+            f"sqlite:///{TMP_DIR / f'test_database_{genid.uuid4()}.db'}"
+        )
     else:
         DATABASE_URL = os.environ.get(
             "DATABASE_URL", "sqlite:///./database.db"

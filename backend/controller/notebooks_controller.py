@@ -5,6 +5,7 @@ from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 
 from logger import setup_logger
+from paths import TEMPLATES_DIR
 from schemas.notebook import NotebookInstanceSchema
 from utils.kubernetes_utils import get_core_v1_client
 
@@ -26,7 +27,7 @@ class NotebooksController:
         self.api_instance = api_instance or client.CustomObjectsApi()
         self.core_v1_api = core_v1_api or get_core_v1_client()
         self.helm = helm or HelmClient()
-        self.jinja_env = Environment(loader=FileSystemLoader("templates"))
+        self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
     def _get_release_name(self, instance: NotebookInstanceSchema):
         return f"{instance.name.lower()}-{str(instance.id)[:8]}"

@@ -12,6 +12,7 @@ from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine, DBEngineDefaultArgs, DBEngineDefaultConfig
 from models.models import DBModel
 from models.vectordb import DBVectorDB
+from paths import RAW_DATA_DIR
 from utils import genid
 
 logger = setup_logger(__name__)
@@ -142,7 +143,7 @@ def load_initial_data(db: Session):
 
 def load_vector_dbs(db):
     logger.info("Loading vector dbs")
-    with open("raw_data/vectordb.csv", encoding="utf-8") as f:
+    with open(RAW_DATA_DIR / "vectordb.csv", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             _vectordb = (
@@ -171,7 +172,9 @@ def load_vector_dbs(db):
 
 def load_engine_chart_dashboards(db):
     logger.info("Loading engine chart dashboards")
-    with open("raw_data/engine_chart_dashboards.csv", encoding="utf-8") as f:
+    with open(
+        RAW_DATA_DIR / "engine_chart_dashboards.csv", encoding="utf-8"
+    ) as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             _engine_chart_dashboard = (
@@ -216,7 +219,7 @@ def load_engine_chart_dashboards(db):
 
 def load_engine_charts(db):
     logger.info("Loading engine charts")
-    with open("raw_data/engine_charts.csv", encoding="utf-8") as f:
+    with open(RAW_DATA_DIR / "engine_charts.csv", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             _engine_chart = (
@@ -247,7 +250,7 @@ def load_engine_charts(db):
 
 def load_engines(db: Session):
     logger.info("Loading engines")
-    with open("raw_data/engines.csv", encoding="utf-8") as f:
+    with open(RAW_DATA_DIR / "engines.csv", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             _engine = (
@@ -280,7 +283,9 @@ def load_engines(db: Session):
 
 def load_engine_default_configs(db):
     logger.info("Loading engine default configs")
-    with open("raw_data/engine_default_configs.csv", encoding="utf-8") as f:
+    with open(
+        RAW_DATA_DIR / "engine_default_configs.csv", encoding="utf-8"
+    ) as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             _engine_default_config = (
@@ -319,7 +324,7 @@ def load_engine_default_configs(db):
 
 def load_engine_default_args(db):
     logger.info("Loading engine default args")
-    with open("raw_data/engine_default_args.csv", encoding="utf-8") as f:
+    with open(RAW_DATA_DIR / "engine_default_args.csv", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             _engine_default_arg = (
@@ -358,7 +363,7 @@ def load_engine_default_args(db):
 
 def load_models(db):
     logger.info("Loading models")
-    with open("raw_data/models.csv", encoding="utf-8") as f:
+    with open(RAW_DATA_DIR / "models.csv", encoding="utf-8") as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
             model = (

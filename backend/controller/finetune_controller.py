@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from kubernetes import client
 
 from logger import setup_logger
+from paths import TEMPLATES_DIR
 from schemas.finetune import FinetuneSchema
 from utils.kubernetes_utils import (
     create_config_map,
@@ -22,7 +23,7 @@ class FinetuneController:
     def __init__(self):
         self.namespace = "ai-stack"
         self.HF_API_TOKEN = os.environ.get("HF_API_TOKEN")
-        self.jinja_env = Environment(loader=FileSystemLoader("templates"))
+        self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
     def get_job_name(self, finetune: FinetuneSchema) -> str:
         return f"finetune-job-{str(finetune.id)[:8]}"

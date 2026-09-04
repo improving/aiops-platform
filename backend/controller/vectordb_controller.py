@@ -10,6 +10,7 @@ from controller.base_controller import (
     HelmUpgradeError,
 )
 from logger import setup_logger
+from paths import TEMPLATES_DIR
 from schemas.vectordb_instance import VectorDBInstanceSchema
 from utils.kubernetes_utils import get_core_v1_client
 
@@ -27,7 +28,7 @@ class VectorDBController:
         self.core_v1_api = core_v1_api or get_core_v1_client()
         self.namespace = namespace
         self.helm = helm_client or HelmClient()
-        self.jinja_env = Environment(loader=FileSystemLoader("templates"))
+        self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
     def _get_release_name(self, instance: VectorDBInstanceSchema):
         return f"{instance.vectorDB.chart_name.lower()}-{str(instance.id)[:8]}"

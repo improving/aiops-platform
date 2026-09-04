@@ -8,6 +8,7 @@ from pyhelm3 import Client as HelmClient
 from pyhelm3.errors import ReleaseNotFoundError
 
 from logger import setup_logger
+from paths import TEMPLATES_DIR
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
 from utils.kubernetes_utils import get_core_v1_client
@@ -26,7 +27,7 @@ class Controller(ABC):
         self.core_v1_api = core_v1_api or get_core_v1_client()
         self.namespace = namespace
         self.helm = helm_client or HelmClient()
-        self.jinja_env = Environment(loader=FileSystemLoader("templates"))
+        self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
     def _get_release_name(self, instance: InferenceInstanceSchema):
         # name = <engine_name>-<instance_id_first_8_chars>
