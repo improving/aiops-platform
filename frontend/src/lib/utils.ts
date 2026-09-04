@@ -103,6 +103,27 @@ export function GetModelIcon(modelId: string) {
   }
 }
 
+// Words that should render in all caps rather than Title Case, e.g. "llm" -> "LLM".
+const ACRONYM_LABELS = new Set(["llm"]);
+
+/**
+ * Formats a raw enum-ish value (e.g. "llm", "prompt_guard", "text
+ * generation") as a human-readable Title Case label ("LLM", "Prompt
+ * Guard", "Text Generation") for display, while callers keep using the
+ * raw value for filtering/comparison.
+ */
+export function formatEnumLabel(value: string): string {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) =>
+      ACRONYM_LABELS.has(word.toLowerCase())
+        ? word.toUpperCase()
+        : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    )
+    .join(" ");
+}
+
 export function GetVectorDBIcon(vectorDBId: string) {
   try {
     switch (vectorDBId) {

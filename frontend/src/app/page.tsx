@@ -58,7 +58,7 @@ const homecatalogs: {
     icon: <Pencil2Icon className="mr-2 h-8 w-8" />,
     title: "Notebooks",
     description: "Explore our notebooks",
-    content: "Interactive enviroment for data science and machine learning",
+    content: "Interactive environment for data science and machine learning",
     buttons: [
       {
         link: "/notebooks/",

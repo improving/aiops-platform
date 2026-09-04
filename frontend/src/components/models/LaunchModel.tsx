@@ -360,7 +360,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                     title={
                       host.gpu_model && host.gpu_model !== "N/A"
                         ? host.gpu_model
-                        : host.cpu_vendor
+                        : "No GPU detected"
                     }
                     content={
                       <>
