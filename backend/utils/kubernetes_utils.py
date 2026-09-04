@@ -219,6 +219,26 @@ def get_container_status_obj(pod):
     return container_status
 
 
+def _get_service_host(service):
+    """Return the host to reach the service on, or None when unknown.
+
+    A LoadBalancer service gets its ingress IP, else its ingress hostname.
+    Without an ingress (no LoadBalancer provider, as on kind) the cluster IP
+    is used. Headless services report the string "None" as cluster IP.
+    """
+    if service.spec.type == "LoadBalancer":
+        ingress = service.status.load_balancer.ingress or []
+        for entry in ingress:
+            host = entry.ip or entry.hostname
+            if host:
+                return host
+
+    cluster_ip = service.spec.cluster_ip
+    if cluster_ip and cluster_ip != "None":
+        return cluster_ip
+    return None
+
+
 def get_service_endpoint(namespace, service_name):
     endpoint = None
     try:
@@ -227,23 +247,17 @@ def get_service_endpoint(namespace, service_name):
             name=service_name, namespace=namespace
         )
 
-        # Get the service IP and port
-        if service.spec.type == "LoadBalancer":
-            ip = (
-                service.status.load_balancer.ingress[0].ip
-                if service.status.load_balancer.ingress
-                else None
-            )
-        else:
-            ip = service.spec.cluster_ip
-
+        host = _get_service_host(service)
         port = service.spec.ports[0].port if service.spec.ports else None
 
-        if not (ip and port):
+        if host and port:
+            endpoint = f"http://{host}:{port}"
+        else:
+            # Return None so the scheduler polls again instead of
+            # storing an endpoint such as http://None:6333.
             logger.warning(
                 f"Warning: Could not determine IP or port for service {service_name}"
             )
-        endpoint = f"http://{ip}:{port}"
     except client.exceptions.ApiException as e:
         if e.status == 404:
             # The scheduler polls until the Helm release creates the service.
