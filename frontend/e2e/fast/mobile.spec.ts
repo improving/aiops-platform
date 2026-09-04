@@ -17,9 +17,6 @@ const paths = [
 test.describe("mobile layout", () => {
   for (const path of paths) {
     test(`${path} has no horizontal overflow`, async ({ page }) => {
-      fixme(
-        "the desktop header nav overflows at 390px; the mobile menu is pending"
-      );
       const shell = new AppShell(page);
       await shell.goto(path);
       await expect(shell.heading).toBeVisible();
@@ -36,7 +33,6 @@ test.describe("mobile layout", () => {
   }
 
   test("the hamburger opens the menu and navigates", async ({ page }) => {
-    fixme("there is no mobile menu yet; the sheet nav is pending");
     const shell = new AppShell(page);
     await shell.goto("/");
     await expect(shell.mobileMenuButton).toBeVisible();

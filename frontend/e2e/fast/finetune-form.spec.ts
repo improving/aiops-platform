@@ -170,7 +170,6 @@ test.describe("fine-tune form", () => {
       page,
       api,
     }) => {
-      fixme("the logs response is an object and rendering it crashes the page");
       const [model] = await api.models();
       const job = {
         id: "11111111-2222-4333-8444-555555555555",

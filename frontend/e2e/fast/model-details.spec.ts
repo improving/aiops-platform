@@ -97,7 +97,6 @@ test.describe("model details", () => {
     page,
     api,
   }) => {
-    fixme("empty tables render no rows today; an empty-state row is pending");
     const [model] = await api.models();
     const details = new ModelDetailsPage(page);
 

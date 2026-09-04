@@ -27,7 +27,6 @@ test.describe("error pages", () => {
   test("an unknown route shows the not-found page with a way home", async ({
     page,
   }) => {
-    fixme("the app has no custom not-found page yet");
     const shell = new AppShell(page);
     const response = await page.goto("/nonexistent");
     expect(response?.status()).toBe(404);

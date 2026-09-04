@@ -62,7 +62,6 @@ test.describe("new notebook form", () => {
   test("a name that is not a valid resource name is rejected", async ({
     page,
   }) => {
-    fixme("the name has no format validation yet; a DNS-label rule is pending");
     const form = new NotebookFormPage(page);
     await form.open();
     await form.name.fill("Invalid Name!");
@@ -90,7 +89,6 @@ test.describe("new notebook form", () => {
   });
 
   test("the storage field explains its range", async ({ page }) => {
-    fixme("the storage field has no helper text yet");
     const form = new NotebookFormPage(page);
     await form.open();
     const description = await form.description(form.storage);

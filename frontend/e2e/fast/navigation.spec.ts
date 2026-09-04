@@ -76,7 +76,6 @@ test.describe("header navigation", () => {
   });
 
   test("the footer shows the current year", async ({ page }) => {
-    fixme("footer is hard-coded to 2024; the shell fix is pending");
     const shell = new AppShell(page);
     await shell.goto("/");
     await expect(shell.footer).toContainText(String(new Date().getFullYear()));

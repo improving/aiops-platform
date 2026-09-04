@@ -151,9 +151,6 @@ test.describe("launch wizard", () => {
   });
 
   test("the error toast carries the backend detail", async ({ page, api }) => {
-    fixme(
-      "the toast shows the generic axios message; the detail string fix is pending"
-    );
     const model = await firstLlm(api);
     const launch = new LaunchModelPage(page);
     await openLaunch(page, launch, model.id);
