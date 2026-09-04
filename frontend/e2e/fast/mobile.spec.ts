@@ -1,4 +1,4 @@
-import { test, expect, fixme } from "../fixtures";
+import { test, expect } from "../fixtures";
 import { AppShell } from "../pages/app-shell";
 
 test.use({

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { test, expect, FAILED_RESOURCE, fixme } from "../fixtures";
+import { test, expect, FAILED_RESOURCE } from "../fixtures";
 import { LaunchModelPage } from "../pages/launch-model";
 
 // The TEST_MODE backend has no cluster: GET /hosts answers 500, which the

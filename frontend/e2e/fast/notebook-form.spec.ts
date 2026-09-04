@@ -1,4 +1,4 @@
-import { test, expect, fixme } from "../fixtures";
+import { test, expect } from "../fixtures";
 import { NotebookFormPage } from "../pages/notebook-form";
 
 test.describe("new notebook form", () => {
@@ -43,20 +43,14 @@ test.describe("new notebook form", () => {
     await expect(form.gpuCount).toHaveCount(0);
   });
 
-  test("an empty name is rejected", async ({ page }) => {
+  test("an empty name keeps Launch disabled", async ({ page }) => {
     const form = new NotebookFormPage(page);
     await form.open();
-    await form.cpu.fill("1");
-    await expect(form.launchButton).toBeEnabled();
-
-    const posts: string[] = [];
-    page.on("request", (req) => {
-      if (req.method() === "POST") posts.push(req.url());
-    });
-    await form.launchButton.click();
+    await form.name.fill("a");
+    await form.name.fill("");
     await expect(page.getByText("Name is required")).toBeVisible();
+    await expect(form.launchButton).toBeDisabled();
     await expect(page).toHaveURL(/\/notebooks\/new$/);
-    expect(posts).toEqual([]);
   });
 
   test("a name that is not a valid resource name is rejected", async ({
@@ -65,8 +59,10 @@ test.describe("new notebook form", () => {
     const form = new NotebookFormPage(page);
     await form.open();
     await form.name.fill("Invalid Name!");
-    await form.launchButton.click();
-    await expect(page.getByText(/lowercase|letters|hyphen/i)).toBeVisible();
+    await expect(
+      page.getByText(/lowercase|letters|hyphen/i).first()
+    ).toBeVisible();
+    await expect(form.launchButton).toBeDisabled();
     await expect(page).toHaveURL(/\/notebooks\/new$/);
   });
 
@@ -75,17 +71,12 @@ test.describe("new notebook form", () => {
     await form.open();
     await form.name.fill("e2e-range");
     await form.storage.fill("50");
-    const posts: string[] = [];
-    page.on("request", (req) => {
-      if (req.method() === "POST") posts.push(req.url());
-    });
-    await form.launchButton.click();
-    // The input's max attribute stops the submit in the browser.
+    // Both the schema and the input's max attribute reject the value.
     expect(
       await form.storage.evaluate((el: HTMLInputElement) => el.checkValidity())
     ).toBe(false);
+    await expect(form.launchButton).toBeDisabled();
     await expect(page).toHaveURL(/\/notebooks\/new$/);
-    expect(posts).toEqual([]);
   });
 
   test("the storage field explains its range", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { test, expect, FAILED_RESOURCE, fixme } from "../fixtures";
+import { test, expect, FAILED_RESOURCE } from "../fixtures";
 import { ModelDetailsPage } from "../pages/model-details";
 
 test.describe("model details", () => {

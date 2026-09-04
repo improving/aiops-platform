@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { test, expect, shortId, FAILED_RESOURCE, fixme } from "../fixtures";
+import { test, expect, shortId, FAILED_RESOURCE } from "../fixtures";
 import { FineTuneFormPage } from "../pages/finetune-form";
 import { ModelDetailsPage } from "../pages/model-details";
 

@@ -1,4 +1,4 @@
-import { test, expect, FAILED_RESOURCE, fixme } from "../fixtures";
+import { test, expect, FAILED_RESOURCE } from "../fixtures";
 import { AppShell } from "../pages/app-shell";
 import { NotebookDetailsPage } from "../pages/notebooks";
 

@@ -64,12 +64,12 @@ test.describe("model catalog", () => {
     await catalog.open();
     await expect(catalog.cards).toHaveCount(models.length);
 
-    await catalog.selectCategory("embedding");
+    await catalog.selectCategory("Embedding");
     await expect(catalog.cards).toHaveCount(embedding.length);
     await expect(catalog.titleLinks()).toHaveText(embedding.map((m) => m.name));
 
     // A subcategory that does not exist in this category empties the grid.
-    await catalog.selectSubcategory("reranker");
+    await catalog.selectSubcategory("Reranker");
     await expect(catalog.cards).toHaveCount(0);
 
     await catalog.selectSubcategory("All Subcategories");
@@ -90,7 +90,7 @@ test.describe("model catalog", () => {
 
     const catalog = new ModelCatalogPage(page);
     await catalog.open();
-    await catalog.selectCategory("llm");
+    await catalog.selectCategory("LLM");
     await catalog.search.fill("phi");
     await expect(catalog.cards).toHaveCount(expected.length);
   });
