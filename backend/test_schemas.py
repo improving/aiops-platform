@@ -55,15 +55,17 @@ def test_notebook_create_schema_accepts_valid_names(name):
     assert instance.name == name
 
 
-def test_notebook_create_schema_name_never_truncates():
-    """The chart truncates service and notebook names at 41 characters."""
+def test_notebook_create_schema_name_keeps_release_prefix():
+    """The 41-character cut must never eat into the unique release prefix."""
     controller = NotebooksController(core_v1_api=mock.Mock())
     instance = NotebookCreateSchema(
         name="a" * NOTEBOOK_NAME_MAX_LENGTH, type="vscode", nvidia_gpu=False
     )
-    expected = f"{controller._get_release_name(instance)}-kf-notebooks-{instance.name}"
-    assert len(expected) <= 41
-    assert controller.get_service_name(instance) == expected
+    release = controller._get_release_name(instance)
+    service = controller.get_service_name(instance)
+    assert len(release) <= 41
+    assert len(service) <= 41
+    assert service.startswith(release)
 
 
 def test_notebook_response_schema_keeps_existing_long_names():

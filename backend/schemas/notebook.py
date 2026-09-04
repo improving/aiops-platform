@@ -12,11 +12,13 @@ from pydantic import (
 
 from utils import genid
 
-# The kf-notebooks chart names the Service and the Notebook resource
-# "<release>-kf-notebooks-<name>" and truncates that at 41 characters,
-# with release = "<name>-<8 id chars>". So the length is 2n + 23, and it
-# stays under 41 (no truncation, no name collisions) only when n <= 9.
-NOTEBOOK_NAME_MAX_LENGTH = 9
+# The chart names the Service and Notebook "<release>-kf-notebooks-<name>"
+# with release = "<name>-<8 id chars>", and both the chart and
+# NotebooksController.get_service_name cut that at 41 characters. The
+# release prefix carries the uniqueness, and it fits in 41 characters as
+# long as the name has at most 32; the trailing "-kf-notebooks-<name>" part
+# may be truncated without harm.
+NOTEBOOK_NAME_MAX_LENGTH = 32
 # DNS-1123 label, which Kubernetes requires for Service and Notebook names.
 NOTEBOOK_NAME_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 

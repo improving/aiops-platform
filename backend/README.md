@@ -46,7 +46,7 @@ The API listens on `http://127.0.0.1:8000`;
   The endpoint is stored once and the scheduler stops polling it,
   so an ingress IP that appears later is not picked up.
 - Engines that pull from Hugging Face need `HF_API_TOKEN`.
-- Notebook names are DNS-1123 labels of at most 9 characters;
+- Notebook names are DNS-1123 labels of at most 32 characters;
   the kf-notebooks chart cuts `<name>-<id>-kf-notebooks-<name>` at 41 characters.
 - The Milvus chart has `maintainers[0].url: milvus.io` in its `Chart.yaml`,
   which pyhelm3 rejects as a URL;
