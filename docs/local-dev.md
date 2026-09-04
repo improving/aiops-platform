@@ -75,6 +75,21 @@ Leave that running in its own terminal while you use the stack.
 
 ## Troubleshooting
 
+### Start over from scratch
+
+`colima delete` keeps the container runtime data on a separate disk
+(`~/.colima/_lima/_disks`), so images, volumes and the kind cluster survive it.
+To wipe everything and rebuild:
+
+```
+make kind-down          # optional, the VM goes anyway
+colima stop
+colima delete --data    # removes the VM and the data disk
+colima start --cpu 4 --memory 8 --disk 60
+make kind-up
+make db-up
+```
+
 ### colima not running
 
 `colima status` reports `colima is not running`.
