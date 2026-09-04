@@ -29,9 +29,24 @@ import { useState } from "react";
 import { notebookService } from "@/services/notebookService";
 import { parseApiError } from "@/lib/utils";
 
+const NAME_MAX_LENGTH = 24;
+// DNS-1123 label: lowercase alphanumeric, hyphens allowed in the middle,
+// must start and end with an alphanumeric character.
+const DNS_1123_LABEL_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+
 const notebookSchema = z
   .object({
-    name: z.string().min(1, "Name is required"),
+    name: z
+      .string()
+      .min(1, "Name is required")
+      .max(
+        NAME_MAX_LENGTH,
+        `Name must be ${NAME_MAX_LENGTH} characters or fewer`
+      )
+      .regex(
+        DNS_1123_LABEL_PATTERN,
+        "Use lowercase letters, digits, and hyphens; must start and end with a letter or digit"
+      ),
     type: z.enum(["jupyter", "vscode"]),
     framework: z.enum(["pytorch", "tensorflow"]).optional(),
     resources_cpu: z.coerce.number().min(0.5).max(4),
@@ -64,6 +79,7 @@ export default function NewNotebookForm() {
 
   const form = useForm<NotebookFormValues>({
     resolver: zodResolver(notebookSchema),
+    mode: "onChange",
     defaultValues: {
       name: "",
       type: "jupyter",
@@ -117,8 +133,12 @@ export default function NewNotebookForm() {
             <FormItem>
               <FormLabel>Name</FormLabel>
               <FormControl>
-                <Input {...field} />
+                <Input {...field} maxLength={NAME_MAX_LENGTH} />
               </FormControl>
+              <FormDescription>
+                Lowercase letters, digits, and hyphens only; must start and end
+                with a letter or digit. Up to {NAME_MAX_LENGTH} characters.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -287,6 +307,7 @@ export default function NewNotebookForm() {
                   onChange={(e) => field.onChange(parseInt(e.target.value))}
                 />
               </FormControl>
+              <FormDescription>Minimum 5 GB, maximum 20 GB.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -295,7 +316,7 @@ export default function NewNotebookForm() {
         <Button
           type="submit"
           icon={<RocketIcon className="w-4 h-4" />}
-          disabled={!form.formState.isDirty}
+          disabled={!form.formState.isDirty || !form.formState.isValid}
           loading={isSubmitting}
         >
           {isSubmitting ? "Launching..." : "Launch"}
