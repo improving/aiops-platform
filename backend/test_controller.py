@@ -6,11 +6,16 @@ from fastapi.testclient import TestClient
 
 from controller import NotebooksController, VectorDBController, get_controller
 from core import create_app
-from schemas import (EngineChartsSchema, EngineSchema,
-                     InferenceInstanceConfigParamsSchema,
-                     InferenceInstanceSchema, ModelSchema,
-                     NotebookInstanceSchema, VectorDBInstanceSchema,
-                     VectorDBSchema)
+from schemas import (
+    EngineChartsSchema,
+    EngineSchema,
+    InferenceInstanceConfigParamsSchema,
+    InferenceInstanceSchema,
+    ModelSchema,
+    NotebookInstanceSchema,
+    VectorDBInstanceSchema,
+    VectorDBSchema,
+)
 from utils import genid
 
 
@@ -34,14 +39,14 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
 
     # load list of engines in engine schema
     engine_schemas_map = {
-        engine["name"].lower(): EngineSchema(**engine)
-        for engine in engines
+        engine["name"].lower(): EngineSchema(**engine) for engine in engines
     }
 
     # get model schema for model id
     model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
     model_schema = next(
-        (model for model in model_schemas if model.modelId == model_id), None)
+        (model for model in model_schemas if model.modelId == model_id), None
+    )
     if model_schema is None:
         raise ValueError(f"Model with id {model_id} not found")
 
@@ -94,8 +99,9 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
         )
         values = await controller.prepare_helm_values(instance, engine_chart)
         values_yaml = yaml.dump(values)
-        snapshot.assert_match(values_yaml,
-                              engine_name.lower() + "-values.yaml")
+        snapshot.assert_match(
+            values_yaml, engine_name.lower() + "-values.yaml"
+        )
 
 
 @pytest.mark.asyncio
@@ -150,4 +156,5 @@ async def test_vectordb_controller_helm_values(snapshot):
         values = await controller.prepare_helm_values(instance)
         values_yaml = yaml.dump(values)
         snapshot.assert_match(
-            values_yaml, f"vectordb-values-{vector_db_schema.chart_name}.yaml")
+            values_yaml, f"vectordb-values-{vector_db_schema.chart_name}.yaml"
+        )

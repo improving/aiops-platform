@@ -11,20 +11,22 @@ from utils import genid
 class DBFinetune(Base):
     __tablename__ = "finetunes"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
     name = Column(String, nullable=False)
-    model_id = Column(UUID(as_uuid=True),
-                      ForeignKey('models.id'),
-                      nullable=False)
+    model_id = Column(
+        UUID(as_uuid=True), ForeignKey("models.id"), nullable=False
+    )
     params = Column(JSON, nullable=False)
-    created_at = Column(DateTime(timezone=True),
-                        default=datetime.now,
-                        nullable=False)
-    updated_at = Column(DateTime(timezone=True),
-                        default=datetime.now,
-                        onupdate=datetime.now,
-                        nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=datetime.now, nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=datetime.now,
+        onupdate=datetime.now,
+        nullable=False,
+    )
 
     base_model = relationship("DBModel")

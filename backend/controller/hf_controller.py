@@ -11,35 +11,29 @@ from .base_controller import Controller
 
 
 class HuggingFaceController(Controller):
-
-    def _get_engine_specific_context(self, instance: InferenceInstanceSchema,
-                                     engineChart: EngineChartsSchema):
+    def _get_engine_specific_context(
+        self,
+        instance: InferenceInstanceSchema,
+        engineChart: EngineChartsSchema,
+    ):
         context = {
-            "config": {
-                "modelID": instance.model.modelId
-            },
+            "config": {"modelID": instance.model.modelId},
             "env": [],
             "volumes": {
                 "hf_cache": {
                     "claimName": "hf-cache",
                 },
-                "shm": {
-                    "sizeLimit": "1Gi"
-                }
+                "shm": {"sizeLimit": "1Gi"},
             },
             "strategy": {},
-            "serviceMonitor": {
-                "additionalLabels": {}
-            },
+            "serviceMonitor": {"additionalLabels": {}},
             "livenessProbe": {
                 "httpGet": {},
             },
             "readinessProbe": {
                 "httpGet": {},
             },
-            "volumeMounts": {
-                "hf_cache": {}
-            },
+            "volumeMounts": {"hf_cache": {}},
         }
 
         if instance.config.enable_tracing:
@@ -47,22 +41,27 @@ class HuggingFaceController(Controller):
                 instance.config.env_vars = {}
             instance.config.env_vars["OTLP_ENDPOINT"] = os.environ.get(
                 "TRACING_URL",
-                "grpc://infra-jaeger-collector.observability.svc:4317")
-            instance.config.env_vars[
-                "OTLP_SERVICE_NAME"] = self.get_service_name(
-                    instance, engineChart)
+                "grpc://infra-jaeger-collector.observability.svc:4317",
+            )
+            instance.config.env_vars["OTLP_SERVICE_NAME"] = (
+                self.get_service_name(instance, engineChart)
+            )
 
         if instance.config and instance.config.maxInputLength:
-            context["env"].append({
-                "name": "MAX_INPUT_TOKENS",
-                "value": str(instance.config.maxInputLength)
-            })
+            context["env"].append(
+                {
+                    "name": "MAX_INPUT_TOKENS",
+                    "value": str(instance.config.maxInputLength),
+                }
+            )
 
         if instance.config and instance.config.maxTokens:
-            context["env"].append({
-                "name": "MAX_TOTAL_TOKENS",
-                "value": str(instance.config.maxTokens)
-            })
+            context["env"].append(
+                {
+                    "name": "MAX_TOTAL_TOKENS",
+                    "value": str(instance.config.maxTokens),
+                }
+            )
 
         self.get_env_vars(instance, context)
 
@@ -73,14 +72,18 @@ class HuggingFaceController(Controller):
                     lora_adapters_paths.append(adapter_to_use.hf_id)
                 elif adapter_to_use.path:
                     lora_adapters_paths.append(
-                        f"/root/.cache/huggingface/hub/{adapter_to_use.path}".
-                        replace("//", "/"))
+                        f"/root/.cache/huggingface/hub/{adapter_to_use.path}".replace(
+                            "//", "/"
+                        )
+                    )
 
             if lora_adapters_paths:
-                context["env"].append({
-                    "name": "lora_adapters",
-                    "value": ",".join(lora_adapters_paths)
-                })
+                context["env"].append(
+                    {
+                        "name": "lora_adapters",
+                        "value": ",".join(lora_adapters_paths),
+                    }
+                )
 
         return context
 
@@ -93,8 +96,9 @@ class HuggingFaceController(Controller):
             model_type = instance.model.category
             for default_config in instance.engine.default_config:
                 if default_config.chart_type == model_type:
-                    default_env[
-                        default_config.name] = default_config.defaultValue
+                    default_env[default_config.name] = (
+                        default_config.defaultValue
+                    )
 
         # Merge with instance.config.env_vars, preferring the latter
         if instance.config and instance.config.env_vars:
@@ -103,16 +107,21 @@ class HuggingFaceController(Controller):
 
         # Create the final env_vars list
         for key, value in default_env.items():
-            env_vars.append({
-                "name": key,
-                "value": str(value)  # Ensure the value is a string
-            })
+            env_vars.append(
+                {
+                    "name": key,
+                    "value": str(value),  # Ensure the value is a string
+                }
+            )
 
         self.logger.info(f"Final env vars: {env_vars}")
         context["env"] = env_vars
 
-    async def install(self, instance: InferenceInstanceSchema,
-                      engineChart: EngineChartsSchema):
+    async def install(
+        self,
+        instance: InferenceInstanceSchema,
+        engineChart: EngineChartsSchema,
+    ):
         self.create_ns_if_needed()
         await self._create_hf_api_token_secret()
         await super().install(instance, engineChart)
@@ -130,7 +139,8 @@ class HuggingFaceController(Controller):
         secret = client.V1Secret(
             metadata=client.V1ObjectMeta(name=secret_name),
             type="Opaque",
-            data=secret_data)
+            data=secret_data,
+        )
 
         try:
             self.core_v1_api.create_namespaced_secret(self.namespace, secret)
@@ -140,5 +150,6 @@ class HuggingFaceController(Controller):
                 self.logger.info(f"Secret '{secret_name}' already exists")
             else:
                 self.logger.exception(
-                    f"Failed to create secret '{secret_name}': {str(e)}")
+                    f"Failed to create secret '{secret_name}': {str(e)}"
+                )
                 raise

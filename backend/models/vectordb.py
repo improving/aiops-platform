@@ -9,9 +9,9 @@ from utils import genid
 class DBVectorDB(Base):
     __tablename__ = "vectordb"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
     name = Column(String, nullable=False)
     description = Column(String, nullable=False)
     chart_repo = Column(String, nullable=False)

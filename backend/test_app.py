@@ -31,8 +31,9 @@ def test_get_apis(snapshot, name, endpoint):
     client = TestClient(app)
     response = client.get(endpoint)
     assert response.status_code == 200
-    snapshot.assert_match(json.dumps(response.json(), indent=2),
-                          f"{name}.json")
+    snapshot.assert_match(
+        json.dumps(response.json(), indent=2), f"{name}.json"
+    )
 
 
 def test_model_create_delete(snapshot):
@@ -64,5 +65,6 @@ def test_model_create_delete(snapshot):
     # Delete model
     response = client.delete(f"/v1alpha1/models/{model_id}")
     assert response.status_code == 200
-    snapshot.assert_match(json.dumps(response.json(), indent=2),
-                          "model-delete.json")
+    snapshot.assert_match(
+        json.dumps(response.json(), indent=2), "model-delete.json"
+    )

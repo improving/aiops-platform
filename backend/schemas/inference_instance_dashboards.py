@@ -1,15 +1,14 @@
 import uuid
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
 class InferenceInstanceDashboardsSchema(BaseModel):
     id: uuid.UUID
-    dashboard_id: Optional[str] = None
-    dashboard_name: Optional[str] = None
-    panel_id: Optional[str] = None
-    panel_name: Optional[str] = None
+    dashboard_id: str | None = None
+    dashboard_name: str | None = None
+    panel_id: str | None = None
+    panel_name: str | None = None
     org_id: str
     query_params: dict
 

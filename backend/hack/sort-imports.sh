@@ -1,2 +1,4 @@
 #!/bin/bash
-isort $(git ls-files '*.py')
+set -euo pipefail
+cd "$(dirname "$0")/.."
+uv run ruff check --select I --fix .

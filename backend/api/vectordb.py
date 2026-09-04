@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -11,7 +9,7 @@ router = APIRouter()
 
 
 # API to get vectordb catalog
-@router.get("/v1alpha1/vectordb", response_model=List[VectorDBSchema])
+@router.get("/v1alpha1/vectordb", response_model=list[VectorDBSchema])
 def get_vectordb(db: Session = Depends(get_db)):
     """
     Retrieve all vector databases from the database.
@@ -24,6 +22,7 @@ def get_vectordb(db: Session = Depends(get_db)):
     """
     vectordb = db.query(DBVectorDB).all()
     if not vectordb:
-        raise HTTPException(status_code=404,
-                            detail="No vector databases found")
+        raise HTTPException(
+            status_code=404, detail="No vector databases found"
+        )
     return vectordb

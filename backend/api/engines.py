@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -11,7 +9,7 @@ router = APIRouter()
 
 
 # API to get engine information
-@router.get("/v1alpha1/engines", response_model=List[EngineSchema])
+@router.get("/v1alpha1/engines", response_model=list[EngineSchema])
 def get_engines(db: Session = Depends(get_db)):
     """
     Retrieve all engines from the database.

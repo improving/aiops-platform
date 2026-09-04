@@ -44,8 +44,9 @@ def create_app(setup_db: bool = True):
         return {"message": "Data reloaded successfully"}
 
     @_app.post("/refresh-db", tags=["utility"])
-    async def refresh_db_endpoint(db: Session = Depends(get_db),
-                                  engine: Engine = Depends(get_engine)):
+    async def refresh_db_endpoint(
+        db: Session = Depends(get_db), engine: Engine = Depends(get_engine)
+    ):
         refresh_db(db, engine)
         return {"message": "Data refreshed successfully"}
 

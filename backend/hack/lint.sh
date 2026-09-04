@@ -1,2 +1,5 @@
 #!/bin/bash
-pylint $(git ls-files '*.py')
+set -euo pipefail
+cd "$(dirname "$0")/.."
+uv run ruff check .
+uv run ruff format --check .

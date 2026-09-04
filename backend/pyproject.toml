@@ -36,3 +36,38 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["."]
 norecursedirs = ["tmp", ".venv", "snapshots", "templates", "raw_data", "manifests"]
+
+[tool.ruff]
+# .style.yapf was "based_on_style = pep8", whose column limit is 79.
+line-length = 79
+target-version = "py313"
+extend-exclude = ["tmp", "snapshots", "templates", "raw_data", "manifests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    # FastAPI dependency injection uses Depends() in argument defaults.
+    "B008",
+    # Existing handlers re-raise HTTPException without chaining.
+    "B904",
+    # The formatter owns line length; the remainder are long strings.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ modules re-export names.
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "api",
+    "controller",
+    "core",
+    "db",
+    "logger",
+    "models",
+    "paths",
+    "repositories",
+    "schemas",
+    "utils",
+]

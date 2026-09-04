@@ -9,10 +9,10 @@ from utils import genid
 class DBVectorDBInstance(Base):
     __tablename__ = "vectordb_instances"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
-    vectordb_id = Column(UUID(as_uuid=True), ForeignKey('vectordb.id'))
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
+    vectordb_id = Column(UUID(as_uuid=True), ForeignKey("vectordb.id"))
     configParams = Column(JSON, nullable=True)  # Change this line
     endpoint = Column(String, nullable=True)
 

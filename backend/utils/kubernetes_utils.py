@@ -19,7 +19,8 @@ def load_kubernetes_config():
         except config.config_exception.ConfigException:
             raise HTTPException(
                 status_code=500,
-                detail="Failed to load Kubernetes configuration")
+                detail="Failed to load Kubernetes configuration",
+            )
 
 
 def get_core_v1_client():
@@ -37,9 +38,9 @@ def get_kubernetes_api_client():
     configuration = client.Configuration.get_default_copy()
     configuration.client_side_validation = False
     configuration.timeout = 2
-    retry = Retry(total=3,
-                  backoff_factor=1,
-                  status_forcelist=[500, 502, 503, 504])
+    retry = Retry(
+        total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504]
+    )
     configuration.retries = retry
     api_client = client.ApiClient(configuration)
     return api_client
@@ -60,7 +61,8 @@ def delete_job(namespace, job_name):
         job_client.delete_namespaced_job(
             namespace=namespace,
             name=job_name,
-            body=client.V1DeleteOptions(propagation_policy="Foreground"))
+            body=client.V1DeleteOptions(propagation_policy="Foreground"),
+        )
         logger.info(f"Job {job_name} deleted successfully")
     except client.exceptions.ApiException as e:
         logger.exception(f"Error deleting job: {e}")
@@ -69,10 +71,12 @@ def delete_job(namespace, job_name):
 def create_config_map(namespace, config_map):
     core_v1_api = get_core_v1_client()
     try:
-        core_v1_api.create_namespaced_config_map(namespace=namespace,
-                                                 body=config_map)
+        core_v1_api.create_namespaced_config_map(
+            namespace=namespace, body=config_map
+        )
         logger.info(
-            f"ConfigMap {config_map.metadata.name} created successfully")
+            f"ConfigMap {config_map.metadata.name} created successfully"
+        )
     except client.exceptions.ApiException as e:
         logger.exception(f"Error creating config map: {e}")
         raise
@@ -81,8 +85,9 @@ def create_config_map(namespace, config_map):
 def delete_config_map(namespace, config_map_name):
     core_v1_api = get_core_v1_client()
     try:
-        core_v1_api.delete_namespaced_config_map(namespace=namespace,
-                                                 name=config_map_name)
+        core_v1_api.delete_namespaced_config_map(
+            namespace=namespace, name=config_map_name
+        )
         logger.info(f"ConfigMap {config_map_name} deleted successfully")
     except client.exceptions.ApiException as e:
         logger.exception(f"Error deleting config map: {e}")
@@ -93,13 +98,18 @@ def get_pod_status_and_readiness(namespace, pod_labels):
     try:
         core_v1_api = get_core_v1_client()
         # Query pods
-        pods = core_v1_api.list_namespaced_pod(namespace=namespace,
-                                               label_selector=pod_labels)
+        pods = core_v1_api.list_namespaced_pod(
+            namespace=namespace, label_selector=pod_labels
+        )
 
         # Check if any pod is ready
-        instance_ready = any(pod.status.phase == 'Running' and all(
-            container.ready for container in pod.status.container_statuses)
-                             for pod in pods.items)
+        instance_ready = any(
+            pod.status.phase == "Running"
+            and all(
+                container.ready for container in pod.status.container_statuses
+            )
+            for pod in pods.items
+        )
 
         instance_status = "Unknown"
         if pods.items:
@@ -110,13 +120,20 @@ def get_pod_status_and_readiness(namespace, pod_labels):
                 logger.debug(
                     f"Pod Name: {pod.metadata.name}, Status: {container_status}"
                 )
-                if not container_status.started and container_status.state.waiting:
+                if (
+                    not container_status.started
+                    and container_status.state.waiting
+                ):
                     instance_status = container_status.state.waiting.reason
-                elif not container_status.started and container_status.state.terminated:
+                elif (
+                    not container_status.started
+                    and container_status.state.terminated
+                ):
                     instance_status = "Terminated"
                 elif container_status.started or (
-                        not container_status.started
-                        and container_status.state.running.started_at):
+                    not container_status.started
+                    and container_status.state.running.started_at
+                ):
                     instance_status = "Running"
                 else:
                     instance_status = container_status.state
@@ -132,8 +149,9 @@ async def get_job_status(job_name, namespace):
     job_client = get_batch_v1_client()
     job_status = "Unknown"
     try:
-        job = job_client.read_namespaced_job_status(name=job_name,
-                                                    namespace=namespace)
+        job = job_client.read_namespaced_job_status(
+            name=job_name, namespace=namespace
+        )
         if job:
             job_status = interpret_job_status(job.status)
 
@@ -148,7 +166,9 @@ def interpret_job_status(job_status):
     if job_status.conditions:
         for condition in job_status.conditions:
             if condition.type == "Complete":
-                status = "Completed" if condition.status == "True" else "Failed"
+                status = (
+                    "Completed" if condition.status == "True" else "Failed"
+                )
                 break
             if condition.type == "Failed":
                 status = "Failed"
@@ -162,11 +182,13 @@ async def get_job_logs(job_name, namespace):
     logs = "No logs available"
     try:
         pods = core_client.list_namespaced_pod(
-            namespace=namespace, label_selector=f"job-name={job_name}")
+            namespace=namespace, label_selector=f"job-name={job_name}"
+        )
         if pods.items:
             pod_name = pods.items[0].metadata.name
-            logs = core_client.read_namespaced_pod_log(name=pod_name,
-                                                       namespace=namespace)
+            logs = core_client.read_namespaced_pod_log(
+                name=pod_name, namespace=namespace
+            )
         return logs
     except client.ApiException as e:
         logger.error(f"Error getting job logs: {e}")
@@ -192,12 +214,16 @@ def get_service_endpoint(namespace, service_name):
     try:
         # Get the service information
         service = get_core_v1_client().read_namespaced_service(
-            name=service_name, namespace=namespace)
+            name=service_name, namespace=namespace
+        )
 
         # Get the service IP and port
         if service.spec.type == "LoadBalancer":
-            ip = service.status.load_balancer.ingress[
-                0].ip if service.status.load_balancer.ingress else None
+            ip = (
+                service.status.load_balancer.ingress[0].ip
+                if service.status.load_balancer.ingress
+                else None
+            )
         else:
             ip = service.spec.cluster_ip
 

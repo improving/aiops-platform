@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Dict, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -9,7 +8,7 @@ from schemas.model import ModelSchema
 
 class FinetuneBaseSchema(BaseModel):
     name: str
-    params: Dict
+    params: dict
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,15 +18,15 @@ class FinetuneCreateSchema(FinetuneBaseSchema):
 
 
 class FinetuneUpdateSchema(BaseModel):
-    name: Optional[str] = None
-    base_model: Optional[ModelSchema] = None
-    params: Optional[Dict] = None
+    name: str | None = None
+    base_model: ModelSchema | None = None
+    params: dict | None = None
 
 
 class FinetuneSchema(FinetuneBaseSchema):
     id: uuid.UUID
-    base_model: Optional[ModelSchema] = None
-    status: Optional[str] = None
+    base_model: ModelSchema | None = None
+    status: str | None = None
     created_at: datetime
     updated_at: datetime
 

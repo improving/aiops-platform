@@ -9,12 +9,12 @@ from utils import genid
 class DBEngineDefaultConfig(Base):
     __tablename__ = "engine_default_configs"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
-    engine_id = Column(UUID(as_uuid=True),
-                       ForeignKey('engines.id'),
-                       nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
+    engine_id = Column(
+        UUID(as_uuid=True), ForeignKey("engines.id"), nullable=False
+    )
     chart_type = Column(String, nullable=False)
     name = Column(String, nullable=False)
     defaultValue = Column(String, nullable=False)
@@ -24,12 +24,12 @@ class DBEngineDefaultConfig(Base):
 class DBEngineDefaultArgs(Base):
     __tablename__ = "engine_default_args"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
-    engine_id = Column(UUID(as_uuid=True),
-                       ForeignKey('engines.id'),
-                       nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
+    engine_id = Column(
+        UUID(as_uuid=True), ForeignKey("engines.id"), nullable=False
+    )
     chart_type = Column(String, nullable=False)
     name = Column(String, nullable=False)
     defaultValue = Column(String, nullable=False)
@@ -40,9 +40,9 @@ class DBEngineDefaultArgs(Base):
 class DBEngine(Base):
     __tablename__ = "engines"
 
-    id = Column(UUID(as_uuid=True),
-                primary_key=True,
-                default=genid.uuid4_gen())
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
+    )
     name = Column(String, nullable=False)
     llm_support = Column(Boolean, nullable=False)
     embedding_support = Column(Boolean, nullable=False)

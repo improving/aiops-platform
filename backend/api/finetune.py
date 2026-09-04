@@ -1,4 +1,3 @@
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,16 +7,20 @@ from controller.finetune_controller import FinetuneController
 from db.database import get_db
 from logger import setup_logger
 from repositories.finetune_repository import FinetuneRepository
-from schemas.finetune import (FinetuneCreateSchema, FinetuneSchema,
-                              FinetuneUpdateSchema)
+from schemas.finetune import (
+    FinetuneCreateSchema,
+    FinetuneSchema,
+    FinetuneUpdateSchema,
+)
 
 router = APIRouter()
 logger = setup_logger(__name__)
 finetune_controller = FinetuneController()
 
 
-@router.get("/v1alpha1/models/{model_id}/finetune",
-            response_model=List[FinetuneSchema])
+@router.get(
+    "/v1alpha1/models/{model_id}/finetune", response_model=list[FinetuneSchema]
+)
 async def list_finetunes(model_id: UUID, db: Session = Depends(get_db)):
     """
     List all finetune jobs available in the cluster.
@@ -35,20 +38,26 @@ async def list_finetunes(model_id: UUID, db: Session = Depends(get_db)):
         repository = FinetuneRepository(db)
         finetunes = repository.get_by_model_id(model_id)
         for finetune in finetunes:
-            finetune.status = await finetune_controller.get_job_status(finetune
-                                                                       )
+            finetune.status = await finetune_controller.get_job_status(
+                finetune
+            )
         return finetunes
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Error retrieving finetune jobs: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving finetune jobs: {str(e)}"
+        )
 
 
-@router.post("/v1alpha1/models/{model_id}/finetune",
-             response_model=FinetuneSchema,
-             status_code=201)
-async def create_finetune(model_id: UUID,
-                          finetune: FinetuneCreateSchema,
-                          db: Session = Depends(get_db)):
+@router.post(
+    "/v1alpha1/models/{model_id}/finetune",
+    response_model=FinetuneSchema,
+    status_code=201,
+)
+async def create_finetune(
+    model_id: UUID,
+    finetune: FinetuneCreateSchema,
+    db: Session = Depends(get_db),
+):
     """
     Create a new finetune job.
 
@@ -75,15 +84,18 @@ async def create_finetune(model_id: UUID,
         return db_finetune
     except Exception as e:
         repository.delete(model_id, db_finetune.id)
-        raise HTTPException(status_code=500,
-                            detail=f"Error creating finetune job: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error creating finetune job: {str(e)}"
+        )
 
 
-@router.get("/v1alpha1/models/{model_id}/finetune/{finetune_id}",
-            response_model=FinetuneSchema)
-async def get_finetune(model_id: UUID,
-                       finetune_id: UUID,
-                       db: Session = Depends(get_db)):
+@router.get(
+    "/v1alpha1/models/{model_id}/finetune/{finetune_id}",
+    response_model=FinetuneSchema,
+)
+async def get_finetune(
+    model_id: UUID, finetune_id: UUID, db: Session = Depends(get_db)
+):
     """
     Get details of a specific finetune job.
 
@@ -101,8 +113,9 @@ async def get_finetune(model_id: UUID,
         repository = FinetuneRepository(db)
         finetune = repository.get_by_id(model_id, finetune_id)
         if finetune is None:
-            raise HTTPException(status_code=404,
-                                detail="Finetune job not found")
+            raise HTTPException(
+                status_code=404, detail="Finetune job not found"
+            )
 
         # Get Kubernetes job status
         finetune.status = await finetune_controller.get_job_status(finetune)
@@ -111,16 +124,21 @@ async def get_finetune(model_id: UUID,
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Error retrieving finetune job: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving finetune job: {str(e)}"
+        )
 
 
-@router.put("/v1alpha1/models/{model_id}/finetune/{finetune_id}",
-            response_model=FinetuneSchema)
-async def update_finetune(model_id: UUID,
-                          finetune_id: UUID,
-                          finetune: FinetuneUpdateSchema,
-                          db: Session = Depends(get_db)):
+@router.put(
+    "/v1alpha1/models/{model_id}/finetune/{finetune_id}",
+    response_model=FinetuneSchema,
+)
+async def update_finetune(
+    model_id: UUID,
+    finetune_id: UUID,
+    finetune: FinetuneUpdateSchema,
+    db: Session = Depends(get_db),
+):
     """
     Update a finetune job.
 
@@ -139,8 +157,9 @@ async def update_finetune(model_id: UUID,
         repository = FinetuneRepository(db)
         updated_finetune = repository.update(model_id, finetune_id, finetune)
         if updated_finetune is None:
-            raise HTTPException(status_code=404,
-                                detail="Finetune job not found")
+            raise HTTPException(
+                status_code=404, detail="Finetune job not found"
+            )
 
         # For now, we don't update the Kubernetes job
         # If needed, we can implement job update logic in the controller
@@ -149,15 +168,17 @@ async def update_finetune(model_id: UUID,
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Error updating finetune job: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating finetune job: {str(e)}"
+        )
 
 
-@router.delete("/v1alpha1/models/{model_id}/finetune/{finetune_id}",
-               status_code=204)
-async def delete_finetune(model_id: UUID,
-                          finetune_id: UUID,
-                          db: Session = Depends(get_db)):
+@router.delete(
+    "/v1alpha1/models/{model_id}/finetune/{finetune_id}", status_code=204
+)
+async def delete_finetune(
+    model_id: UUID, finetune_id: UUID, db: Session = Depends(get_db)
+):
     """
     Delete a finetune job.
 
@@ -172,8 +193,9 @@ async def delete_finetune(model_id: UUID,
         repository = FinetuneRepository(db)
         finetune = repository.get_by_id(model_id, finetune_id)
         if not finetune:
-            raise HTTPException(status_code=404,
-                                detail="Finetune job not found")
+            raise HTTPException(
+                status_code=404, detail="Finetune job not found"
+            )
 
         # Delete Kubernetes job
         await finetune_controller.delete_job(finetune)
@@ -183,14 +205,15 @@ async def delete_finetune(model_id: UUID,
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Error deleting finetune job: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error deleting finetune job: {str(e)}"
+        )
 
 
 @router.get("/v1alpha1/models/{model_id}/finetune/{finetune_id}/logs")
-async def get_finetune_logs(model_id: UUID,
-                            finetune_id: UUID,
-                            db: Session = Depends(get_db)):
+async def get_finetune_logs(
+    model_id: UUID, finetune_id: UUID, db: Session = Depends(get_db)
+):
     """
     Get logs of a finetune job.
 
@@ -208,8 +231,9 @@ async def get_finetune_logs(model_id: UUID,
         repository = FinetuneRepository(db)
         finetune = repository.get_by_id(model_id, finetune_id)
         if not finetune:
-            raise HTTPException(status_code=404,
-                                detail="Finetune job not found")
+            raise HTTPException(
+                status_code=404, detail="Finetune job not found"
+            )
 
         logs = await finetune_controller.get_job_logs(finetune)
         return {"logs": logs}
@@ -218,4 +242,5 @@ async def get_finetune_logs(model_id: UUID,
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error retrieving finetune job logs: {str(e)}")
+            detail=f"Error retrieving finetune job logs: {str(e)}",
+        )

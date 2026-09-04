@@ -1,14 +1,13 @@
 import uuid
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
 class VectorDBSchema(BaseModel):
     id: uuid.UUID
-    name: Optional[str] = None
-    description: Optional[str] = None
-    chart_repo: Optional[str] = None
-    chart_name: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    chart_repo: str | None = None
+    chart_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

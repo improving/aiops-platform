@@ -12,7 +12,8 @@ def _mock_uuid4_generator():
         _uuid_counter += 1
         seed = 20240101
         bytes = seed.to_bytes(12, byteorder="big") + _uuid_counter.to_bytes(
-            4, byteorder="big")
+            4, byteorder="big"
+        )
         return uuid.UUID(bytes=bytes, version=4)
 
     return _mock_uuid4

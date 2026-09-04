@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -8,16 +8,14 @@ from utils import genid
 
 
 class VectorDBInstanceSchema(BaseModel):
-    id: Optional[uuid.UUID] = Field(default_factory=genid.uuid4_gen())
+    id: uuid.UUID | None = Field(default_factory=genid.uuid4_gen())
     vectorDB: VectorDBSchema
-    configParams: Optional[Dict[str, Any]] = None
-    endpoint: Optional[str] = None
-    ready: Optional[bool] = False
-    status: Optional[str] = None
+    configParams: dict[str, Any] | None = None
+    endpoint: str | None = None
+    ready: bool | None = False
+    status: str | None = None
 
     model_config = {
         "from_attributes": True,
-        "json_schema_extra": {
-            "exclude": ["vectorDB"]
-        }
+        "json_schema_extra": {"exclude": ["vectorDB"]},
     }
