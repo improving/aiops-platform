@@ -96,23 +96,17 @@ lb: ## Print the cloud-provider-kind command to enable LoadBalancer IPs (require
 
 # --- backend / frontend ------------------------------------------------------
 
-backend: ## Run the backend API (pre-modernization: uv run --with-requirements)
-	@# TODO(modernize/backend): once backend/pyproject.toml lands, this becomes
-	@#   cd backend && uv run uvicorn app:app --reload --port 8000
+backend: ## Run the backend API with uv (needs helm on PATH and a kubeconfig)
 	cd backend && \
 		DATABASE_URL=postgresql://localhost:5432 \
 		DATABASE_NAME=postgres \
 		DATABASE_USER=postgres \
 		DATABASE_PASSWORD=postgres \
 		AIOPS_NAMESPACE=$(NAMESPACE) \
-		KUBECONFIG=$${KUBECONFIG:-$$HOME/.kube/config} \
-		uv run --python 3.11 --with-requirements requirements.txt \
-		uvicorn app:app --reload --port 8000
+		uv run uvicorn app:app --reload --port 8000
 
-frontend: ## Run the frontend dev server (npm ci; becomes 'pnpm dev' once pnpm-lock lands)
-	@# TODO(modernize/frontend): once the frontend is on pnpm, this becomes
-	@#   cd frontend && pnpm dev
-	cd frontend && npm install && npm run dev
+frontend: ## Run the frontend dev server with pnpm
+	cd frontend && pnpm install --frozen-lockfile && pnpm dev
 
 # --- smoke test ---------------------------------------------------------------
 
