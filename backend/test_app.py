@@ -6,6 +6,25 @@ from fastapi.testclient import TestClient
 from core import create_app
 
 
+def test_lifespan_skips_scheduler_in_test_mode():
+    app = create_app(setup_db=False)
+    with TestClient(app) as client:
+        assert getattr(app.state, "scheduler", None) is None
+        assert client.get("/health").status_code == 200
+
+
+def test_lifespan_runs_scheduler(monkeypatch):
+    monkeypatch.setenv("TEST_MODE", "false")
+    app = create_app(setup_db=False)
+    with TestClient(app) as client:
+        scheduler = app.state.scheduler
+        assert scheduler.running
+        assert len(scheduler.get_jobs()) == 3
+        assert client.get("/health").status_code == 200
+    assert not scheduler.running
+    assert app.state.scheduler is None
+
+
 def test_health_endpoint():
     app = create_app()
     client = TestClient(app)
