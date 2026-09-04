@@ -55,4 +55,9 @@ docker run --rm -p 3000:3000 aiops-frontend:dev
 ```
 
 The image is a multi-stage `node:24-alpine` build that runs the standalone server on port 3000.
-Pass build-time `NEXT_PUBLIC_*` values with `--build-arg` and matching `ARG`/`ENV` lines if you need non-default URLs baked in.
+The `NEXT_PUBLIC_*` variables are build args, so pass non-default URLs with `--build-arg`:
+
+```bash
+docker build -t aiops-frontend:dev \
+  --build-arg NEXT_PUBLIC_AIOPS_BACKEND_URL=http://backend:8000 .
+```

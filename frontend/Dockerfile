@@ -18,6 +18,16 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# NEXT_PUBLIC_* values are inlined at build time; override with --build-arg.
+ARG NEXT_PUBLIC_AIOPS_BACKEND_URL=http://localhost:8000
+ARG NEXT_PUBLIC_LANGFLOW_URL=""
+ARG NEXT_PUBLIC_GRAFANA_URL=""
+ARG NEXT_PUBLIC_JAEGER_URL=""
+ENV NEXT_PUBLIC_AIOPS_BACKEND_URL=$NEXT_PUBLIC_AIOPS_BACKEND_URL \
+    NEXT_PUBLIC_LANGFLOW_URL=$NEXT_PUBLIC_LANGFLOW_URL \
+    NEXT_PUBLIC_GRAFANA_URL=$NEXT_PUBLIC_GRAFANA_URL \
+    NEXT_PUBLIC_JAEGER_URL=$NEXT_PUBLIC_JAEGER_URL
+
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry
 # Uncomment the following line in case you want to disable telemetry during the build.
