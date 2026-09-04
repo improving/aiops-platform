@@ -1,18 +1,18 @@
 dependencies:
 - name: text-generation-inference
   repository: file://../text-generation-inference
-  version: 0.2.0
+  version: 0.3.0
 - name: text-embeddings-inference
   repository: file://../text-embeddings-inference
-  version: 0.2.0
+  version: 0.3.0
 - name: text-embeddings-inference
   repository: file://../text-embeddings-inference
-  version: 0.2.0
+  version: 0.3.0
 - name: chromadb
   repository: file://../chromadb
-  version: 0.2.0
+  version: 0.3.0
 - name: vllm
   repository: file://../vllm
-  version: 0.3.0
-digest: sha256:b8a18b0fe9097f6d106565c47e3eb4b95f845425aa713294405592ccc79c1966
-generated: "2026-09-04T16:23:07.684262+05:30"
+  version: 0.4.0
+digest: sha256:be2ade4537f8035ccb268e2d6bce26e98810f48df95ad37cc61db9595f5fc7e2
+generated: "2026-09-04T22:40:24.388114+05:30"
