@@ -1,5 +1,5 @@
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -37,14 +37,35 @@ def is_test_mode() -> bool:
     return os.environ.get("TEST_MODE", "false").lower() == "true"
 
 
-def build_scheduler(db: Session) -> AsyncIOScheduler:
+def _run_with_own_session(
+    job: Callable[[Session], None],
+) -> Callable[[], None]:
+    """Give each scheduled run a fresh session.
+
+    The jobs run in the scheduler's thread pool, so sharing one Session
+    between them (and with the request handlers) is not safe and ends in
+    ``ResourceClosedError`` once a connection is closed under another job.
+    """
+
+    def run() -> None:
+        db = get_db_direct()
+        try:
+            job(db)
+        finally:
+            db.close()
+
+    run.__name__ = job.__name__
+    return run
+
+
+def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     for job in SCHEDULED_JOBS:
         scheduler.add_job(
-            job,
+            _run_with_own_session(job),
             trigger="interval",
             seconds=SCHEDULER_INTERVAL_SECONDS,
-            args=[db],
+            id=job.__name__,
         )
     return scheduler
 
@@ -62,7 +83,7 @@ def create_app(setup_db: bool = True):
             yield
             return
 
-        scheduler = build_scheduler(db)
+        scheduler = build_scheduler()
         for job in scheduler.get_jobs():
             logger.info("Job: %s", job)
         logger.info(
