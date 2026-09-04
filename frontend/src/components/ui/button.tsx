@@ -1,8 +1,8 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
-import { Slot } from "radix-ui"
-import { ShadowInnerIcon } from "@radix-ui/react-icons"
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "cn";
+import { Slot } from "radix-ui";
+import { ShadowInnerIcon } from "@radix-ui/react-icons";
 
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -36,7 +36,7 @@ const buttonVariants = cva(
       size: "default",
     },
   }
-)
+);
 
 // Local additions to the shadcn button: `loading` shows a spinner and
 // disables the button, `icon` renders a leading icon.
@@ -53,12 +53,29 @@ function Button({
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-    loading?: boolean
-    loadingIcon?: React.ReactNode
-    icon?: React.ReactNode
+    asChild?: boolean;
+    loading?: boolean;
+    loadingIcon?: React.ReactNode;
+    icon?: React.ReactNode;
   }) {
-  const Comp = asChild ? Slot.Root : "button"
+  const Comp = asChild ? Slot.Root : "button";
+
+  // Slot needs exactly one child element, so asChild passes children through
+  // untouched; the spinner and leading icon only apply to a real button.
+  const content = asChild ? (
+    children
+  ) : (
+    <>
+      {loading ? (
+        <span className="animate-spin">
+          {loadingIcon ?? <ShadowInnerIcon />}
+        </span>
+      ) : (
+        icon
+      )}
+      {children}
+    </>
+  );
 
   return (
     <Comp
@@ -69,16 +86,9 @@ function Button({
       disabled={disabled || loading}
       {...props}
     >
-      {loading ? (
-        <span className="animate-spin">
-          {loadingIcon ?? <ShadowInnerIcon />}
-        </span>
-      ) : (
-        icon
-      )}
-      {children}
+      {content}
     </Comp>
-  )
+  );
 }
 
-export { Button, buttonVariants }
+export { Button, buttonVariants };
