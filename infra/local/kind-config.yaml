@@ -1,0 +1,13 @@
+# Local kind cluster for the aiops-platform dev stack.
+#
+# Node image pinned to the default published for kind v0.32.0 (see
+# `kind version` and the v0.32.0 release notes:
+# https://github.com/kubernetes-sigs/kind/releases/tag/v0.32.0).
+# The image supports both amd64 and arm64; use the same platform as
+# the host per https://github.com/kubernetes-sigs/kind/issues/2718.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: aiops
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
