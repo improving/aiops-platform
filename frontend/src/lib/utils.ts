@@ -7,29 +7,64 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+interface FastAPIValidationError {
+  msg: string;
+  loc?: (string | number)[];
+}
+
+type ApiErrorDetail =
+  | string
+  | FastAPIValidationError[]
+  | Record<string, unknown>;
+
 interface ErrorResponse {
-  detail?: { msg: string }[];
+  detail?: ApiErrorDetail;
+}
+
+function formatErrorDetail(
+  detail: ApiErrorDetail | undefined
+): string | undefined {
+  if (detail === undefined || detail === null) {
+    return undefined;
+  }
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          const loc = Array.isArray(item.loc)
+            ? item.loc.filter((part) => part !== "body").join(".")
+            : undefined;
+          return loc ? `${loc}: ${item.msg}` : item.msg;
+        }
+        return typeof item === "string" ? item : JSON.stringify(item);
+      })
+      .join("; ");
+  }
+
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseApiError(error: unknown): Toast {
   if (error instanceof AxiosError) {
     const status = error.response?.status;
-    const statusText = error.response?.statusText;
-    const data = error.response?.data as ErrorResponse;
+    const data = error.response?.data as ErrorResponse | string | undefined;
 
-    let description: string;
-
-    if (data?.detail && Array.isArray(data.detail)) {
-      description = data.detail.map((d) => d.msg).join(", ");
-    } else if (typeof data === "string") {
-      description = data;
-    } else {
-      description = error.message;
-    }
+    const detail =
+      typeof data === "string" ? data : formatErrorDetail(data?.detail);
+    const description = detail || error.message;
 
     return {
       title: "API Error",
-      description: `HTTP ${status} - ${statusText}: ${description}`,
+      description: status ? `HTTP ${status}: ${description}` : description,
       variant: "destructive",
     };
   } else if (error instanceof Error) {
