@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "format": "prettier --write src/**/*.{js,jsx,ts,tsx,css,md,json}"
+    "format": "prettier --write src/**/*.{js,jsx,ts,tsx,css,md,json}",
+    "e2e": "playwright test --project=fast",
+    "e2e:cluster": "playwright test --project=cluster --workers=1",
+    "e2e:ui": "playwright test --project=fast --ui",
+    "e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -31,6 +35,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "19.2.18",

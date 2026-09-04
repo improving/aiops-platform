@@ -1,12 +1,13 @@
 SHELL := /bin/bash
 
-.PHONY: help prereqs kind-up kind-down db-up db-down lb backend frontend e2e-smoke dev
+.PHONY: help prereqs kind-up kind-down db-up db-down lb backend frontend e2e-smoke ui-e2e ui-e2e-cluster dev
 
 # --- Variables ----------------------------------------------------------
 
 CLUSTER_NAME       ?= aiops
 NAMESPACE          ?= ai-stack
 BACKEND_URL        ?= http://localhost:8000
+FRONTEND_URL       ?= http://localhost:3000
 KIND_CONFIG        := infra/local/kind-config.yaml
 COMPOSE_FILE       := infra/local/docker-compose.yml
 NOTEBOOK_CTRL_REF  ?= v1.11.0
@@ -113,6 +114,14 @@ frontend: ## Run the frontend dev server with pnpm
 e2e-smoke: ## Run the end-to-end smoke test against a running backend (pass ARGS="--skip-notebook" to skip the notebook part)
 	BACKEND_URL=$(BACKEND_URL) ./hack/e2e-smoke.sh $(ARGS)
 
+# --- UI end-to-end tests (Playwright, see docs/testing.md) -------------------
+
+ui-e2e: ## Run the fast UI e2e tier; starts a TEST_MODE backend on :8001 and a built frontend on :3001
+	cd frontend && E2E_START_SERVERS=1 pnpm e2e $(ARGS)
+
+ui-e2e-cluster: ## Run the cluster UI e2e tier against the running stack (FRONTEND_URL, BACKEND_URL)
+	cd frontend && E2E_BASE_URL=$(FRONTEND_URL) E2E_BACKEND_URL=$(BACKEND_URL) pnpm e2e:cluster $(ARGS)
+
 # --- dev convenience ------------------------------------------------------------
 
 dev: ## Print the order to bring the whole stack up locally
@@ -125,6 +134,8 @@ dev: ## Print the order to bring the whole stack up locally
 	@echo "  5. make backend        # (separate terminal) FastAPI on :8000"
 	@echo "  6. make frontend       # (separate terminal, optional) Next.js on :3000"
 	@echo "  7. make e2e-smoke      # exercises the backend API against the cluster"
+	@echo "  8. make ui-e2e         # Playwright fast tier (no cluster needed)"
+	@echo "  9. make ui-e2e-cluster # Playwright cluster tier against :3000 and :8000"
 	@echo ""
 	@echo "Optional, for Services of type LoadBalancer to get a real IP:"
 	@echo "  make lb                # prints the sudo cloud-provider-kind command"
