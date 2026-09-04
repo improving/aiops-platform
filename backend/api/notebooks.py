@@ -55,8 +55,23 @@ async def create_notebook(
         NotebookInstanceSchema: The created notebook instance.
 
     Raises:
-        HTTPException: If there's an error creating the notebook instance.
+        HTTPException: 409 when a notebook with that name exists in the
+            namespace, 500 when the Helm install fails.
     """
+    existing = (
+        db.query(Notebook)
+        .filter(
+            Notebook.name == notebook.name,
+            Notebook.namespace == notebook.namespace,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Notebook '{notebook.name}' already exists",
+        )
+
     notebook_data = filter_notebook_fields(notebook.model_dump())
     db_notebook = Notebook(**notebook_data)
     controller = NotebooksController()

@@ -128,3 +128,34 @@ def test_create_notebook_rejects_invalid_name(name):
     assert "lowercase" in detail[0]["msg"]
     assert str(NOTEBOOK_NAME_MAX_LENGTH) in detail[0]["msg"]
     controller_cls.return_value.install.assert_not_called()
+
+
+def test_create_notebook_rejects_duplicate_name():
+    app = create_app(setup_db=False)
+    client = TestClient(app)
+    with mock.patch("api.notebooks.NotebooksController") as controller_cls:
+        controller_cls.return_value.install = mock.AsyncMock()
+        first = client.post(
+            "/v1alpha1/notebooks", json=_notebook_payload("nb")
+        )
+        assert first.status_code == 200, first.text
+        second = client.post(
+            "/v1alpha1/notebooks", json=_notebook_payload("nb")
+        )
+        # Another namespace is a different notebook.
+        other_ns = client.post(
+            "/v1alpha1/notebooks",
+            json={**_notebook_payload("nb"), "namespace": "other"},
+        )
+        assert second.status_code == 409
+        assert second.json()["detail"] == "Notebook 'nb' already exists"
+        assert other_ns.status_code == 200, other_ns.text
+        assert controller_cls.return_value.install.await_count == 2
+        # The tests share one database, so remove what this test created.
+        controller_cls.return_value.uninstall = mock.AsyncMock()
+        for created in (first, other_ns):
+            deleted = client.delete(
+                f"/v1alpha1/notebooks/{created.json()['id']}"
+            )
+            assert deleted.status_code == 200, deleted.text
+    assert client.get("/v1alpha1/notebooks").json() == []
