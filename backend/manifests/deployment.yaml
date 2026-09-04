@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: aiops-backend
+  name: aiops-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-backend
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: aiops-backend
+    spec:
+      containers:
+      - name: aiops-backend
+        image: ghcr.io/infracloudio/aiops-backend:main
+        imagePullPolicy: Always
+        env:
+        - name: HF_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-api-token
+              key: HF_API_TOKEN
+        - name: NGC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ngc-api-key
+              key: NGC_API_KEY
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: aiops-postgres-postgresql
+              key: postgres-password
+        envFrom:
+        - configMapRef:
+            name: aiops-backend-config
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 1Gi
+      serviceAccountName: aiops-backend-sa
+      nodeSelector:
+        kubernetes.io/hostname: gpu-node-4

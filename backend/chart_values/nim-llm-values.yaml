@@ -1,0 +1,24 @@
+model:
+  ngcAPISecret: "ngc-api-nim-llm"
+  ngcAPIKey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+persistence:
+  enabled: true
+  existingClaim: nim-pvc
+image:
+  repository: nvcr.io/nim/meta/llama3-8b-instruct
+  tag: 1.0.3
+service:
+  type: LoadBalancer
+metrics:
+  enabled: true
+  serviceMonitor:  # for use with the Prometheus Operator and the primary service object
+    enabled: true
+    additionalLabels:
+      release: prometheus
+resources:
+  limits:
+    nvidia.com/gpu: 1
+  requests:
+    nvidia.com/gpu: 1
+nodeSelector:
+  kubernetes.io/hostname: gpu-node-1

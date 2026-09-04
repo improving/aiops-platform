@@ -1,0 +1,99 @@
+config:
+  model: {{ model | default('meta-llama/Meta-Llama-3.1-8B-Instruct') }}
+{% if configs is defined %}
+{% for config in configs %}
+  {{ config.name }}: {{ config.value }}
+{% endfor %}
+{% endif %}
+
+resources:
+  requests:
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+  limits:
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
+
+{% if args is defined or lora_adapters is defined %}
+args:
+{% if args is defined %}
+{% for arg in args %}
+  - {{ arg.name }}
+{% if arg.value is defined and arg.value is not none %}
+  - {{ arg.value }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if lora_adapters is defined %}
+  - "--enable-lora"
+  - "--lora-modules"
+{% for adapter in lora_adapters %}
+  - "{{ adapter }}"
+{% endfor %}
+{% endif %}
+{% endif %}
+
+env:
+  - name: HF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: {{ hf_api_token_secret_name | default('hf-api-token') }}
+        key: {{ hf_api_token_secret_key | default('HF_API_TOKEN') }}
+##  - name: HF_HUB_OFFLINE
+##    value: "{{ hf_hub_offline | default('1') }}"
+##  - name: HF_HUB_CACHE
+##    value: "{{ hf_hub_cache | default('/model') }}"
+  {% if env is defined %}
+  {% for env_var in env %}
+  - name: {{ env_var.name }}
+    value: "{{ env_var.value }}"
+  {% endfor %}
+  {% endif %}
+
+{% if nodeSelector.hostname is defined %}
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
+
+strategy:
+  type: {{ strategy_type | default('Recreate') }}
+
+service:
+  type: {{ service.type | default('LoadBalancer') }}
+  port: {{ service.port | default(8000) }}
+
+serviceMonitor:
+  enabled: {{ service_monitor_enabled | default(true) }}
+  additionalLabels:
+    release: {{ service_monitor_release | default('prometheus') }}
+
+volumes:
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: {{ volumes.hf_cache.claimName | default('hf-cache') }}
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: {{ shm_size_limit | default('1Gi') }}
+
+volumeMounts:
+  - name: hf-cache
+    mountPath: {{ volumeMounts.hf_cache.mountPath | default('/model') }}
+
+livenessProbe:
+  httpGet:
+    path: {{ liveness_probe_path | default('/health') }}
+    port: http
+  initialDelaySeconds: {{ liveness_probe_initial_delay | default(30) }}
+  periodSeconds: {{ liveness_probe_period | default(30) }}
+  timeoutSeconds: {{ liveness_probe_timeout | default(2) }}
+  successThreshold: {{ liveness_probe_success_threshold | default(1) }}
+  failureThreshold: {{ liveness_probe_failure_threshold | default(3) }}
+
+readinessProbe:
+  httpGet:
+    path: {{ readiness_probe_path | default('/health') }}
+    port: http
+  initialDelaySeconds: {{ readiness_probe_initial_delay | default(30) }}
+  periodSeconds: {{ readiness_probe_period | default(15) }}
+  timeoutSeconds: {{ readiness_probe_timeout | default(2) }}
+  successThreshold: {{ readiness_probe_success_threshold | default(1) }}
+  failureThreshold: {{ readiness_probe_failure_threshold | default(4) }}

@@ -1,0 +1,19 @@
+# helm repo add qdrant https://qdrant.github.io/qdrant-helm
+# helm repo update
+# helm upgrade -i qdrant qdrant/qdrant
+
+image:
+  useUnprivilegedImage: true
+
+containerSecurityContext: 
+  runAsUser: 65534
+  runAsGroup: 65534
+
+podSecurityContext:
+  fsGroup: 1000
+
+service:
+  type: LoadBalancer
+
+# Not needed for fresh install
+updateVolumeFsOwnership: false

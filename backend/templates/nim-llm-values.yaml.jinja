@@ -1,0 +1,36 @@
+model:
+  ngcAPISecret: {{ model.ngcAPISecret | default("ngc-api") }}
+
+persistence:
+  enabled: {{ persistence.enabled | default(false) }}
+  existingClaim: {{ persistence.existingClaim | default("nim-pvc") }}
+
+image:
+  repository: {{ image.repository | default("nvcr.io/nim/meta/llama3-8b-instruct") }}
+  tag: {{ image.tag | default("1.0.3") }}
+
+imagePullSecrets:
+  - name: {{ imagePullSecret.name | default("nvcrimagepullsecret") }}
+
+service:
+  type: {{ service.type | default("LoadBalancer") }}
+  port: {{ service.port | default(80) }}
+
+metrics:
+  enabled: {{ metrics.enabled | default(true) }}
+  serviceMonitor:
+    enabled: {{ metrics.serviceMonitor.enabled | default(true) }}
+    additionalLabels:
+      release: {{ metrics.serviceMonitor.additionalLabels.release | default("prometheus") }}
+
+resources:
+  limits:
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
+  requests:
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+
+{% if nodeSelector.hostname is defined %}
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
+

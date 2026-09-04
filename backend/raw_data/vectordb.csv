@@ -1,0 +1,4 @@
+name,description,chart_repo,chart_name,
+Chroma DB,AI-native open-source vector database,https://infracloudio.github.io/charts,chromadb
+Milvus,Milvus is an open-source vector database,https://zilliztech.github.io/milvus-helm,milvus
+Qdrant,Qdrant is an open-source vector database,https://qdrant.github.io/qdrant-helm,qdrant

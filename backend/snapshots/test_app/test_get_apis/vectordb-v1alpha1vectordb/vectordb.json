@@ -1,0 +1,23 @@
+[
+  {
+    "id": "00000000-0000-4000-8134-d6e50000002a",
+    "name": "Chroma DB",
+    "description": "AI-native open-source vector database",
+    "chart_repo": "https://infracloudio.github.io/charts",
+    "chart_name": "chromadb"
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e50000002b",
+    "name": "Milvus",
+    "description": "Milvus is an open-source vector database",
+    "chart_repo": "https://zilliztech.github.io/milvus-helm",
+    "chart_name": "milvus"
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e50000002c",
+    "name": "Qdrant",
+    "description": "Qdrant is an open-source vector database",
+    "chart_repo": "https://qdrant.github.io/qdrant-helm",
+    "chart_name": "qdrant"
+  }
+]

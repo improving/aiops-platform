@@ -1,0 +1,31 @@
+autodependency:
+  enabled: true
+
+global:
+  HUGGINGFACEHUB_API_TOKEN: <HF_API_TOKEN>
+  modelUsePVC: hf-cache
+
+# Guard Model Id
+SAFETY_GUARD_MODEL_ID: "meta-llama/Meta-Llama-Guard-2-8B"
+
+service:
+  type: LoadBalancer
+
+nodeSelector:
+  kubernetes.io/hostname: "gpu-node-1"
+
+tgi:
+  LLM_MODEL_ID: "meta-llama/Meta-Llama-Guard-2-8B"
+  service:
+    type: LoadBalancer
+  nodeSelector:
+    kubernetes.io/hostname: "gpu-node-1"
+
+volumeMounts:
+  - name: hf-cache
+    mountPath: /data
+
+volumes:
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: hf-cache

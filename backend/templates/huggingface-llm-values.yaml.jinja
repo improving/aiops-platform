@@ -1,0 +1,75 @@
+{% if nodeSelector.hostname is defined %}
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}
+
+config:
+  modelID: {{ config.modelID | default("Qwen/Qwen2-7B-Instruct") }}
+
+env:
+  - name: HF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-api-token
+        key: HF_API_TOKEN
+  {% if env is defined %}
+  {% for env_var in env %}
+  - name: {{ env_var.name }}
+    value: "{{ env_var.value }}"
+  {% endfor %}
+  {% endif %}
+{% if env.lora_adapters is defined %}
+  - name: LORA_ADAPTERS
+    value: "{{ env.lora_adapters }}"
+{% endif %}
+
+resources:
+  limits:
+    nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
+  requests:
+    nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+
+strategy:
+  type: {{ strategy.type | default("Recreate") }}
+
+service:
+  type: {{ service.type | default("LoadBalancer") }}
+  port: {{ service.port | default(80) }}
+
+serviceMonitor:
+  enabled: {{ serviceMonitor.enabled | default(true) }}
+  additionalLabels:
+    release: {{ serviceMonitor.additionalLabels.release | default("prometheus") }}
+
+volumeMounts:
+  - name: hf-cache
+    mountPath: {{ volumeMounts.hf_cache.mountPath | default("/root/.cache/huggingface/hub") }}
+
+volumes:
+  - name: hf-cache
+    persistentVolumeClaim:
+      claimName: {{ volumes.hf_cache.claimName | default("hf-cache") }}
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: "{{ volumes.shm.sizeLimit | default('1Gi') }}"
+
+livenessProbe:
+  httpGet:
+    path: {{ livenessProbe.httpGet.path | default("/health") }}
+    port: {{ livenessProbe.httpGet.port | default("http") }}
+  initialDelaySeconds: {{ livenessProbe.initialDelaySeconds | default(30) }}
+  periodSeconds: {{ livenessProbe.periodSeconds | default(30) }}
+  timeoutSeconds: {{ livenessProbe.timeoutSeconds | default(2) }}
+  successThreshold: {{ livenessProbe.successThreshold | default(1) }}
+  failureThreshold: {{ livenessProbe.failureThreshold | default(3) }}
+
+readinessProbe:
+  httpGet:
+    path: {{ readinessProbe.httpGet.path | default("/health") }}
+    port: {{ readinessProbe.httpGet.port | default("http") }}
+  initialDelaySeconds: {{ readinessProbe.initialDelaySeconds | default(30) }}
+  periodSeconds: {{ readinessProbe.periodSeconds | default(15) }}
+  timeoutSeconds: {{ readinessProbe.timeoutSeconds | default(2) }}
+  successThreshold: {{ readinessProbe.successThreshold | default(1) }}
+  failureThreshold: {{ readinessProbe.failureThreshold | default(4) }}

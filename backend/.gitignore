@@ -1,0 +1,4 @@
+*.pyc
+__pycache__/
+aio_venv/
+tmp/
