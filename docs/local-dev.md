@@ -18,6 +18,15 @@ Anything missing can be installed with `brew install <name>` --
 this stack does not install machine-wide tools for you (other than the one
 colima sysctl tweak in `make kind-up`, see below).
 
+## Langflow for the Develop page
+
+The Develop page embeds Langflow.
+`make langflow-up` starts it from the compose profile on <http://localhost:7860> (first pull is about 2 GB),
+and `make frontend` passes `NEXT_PUBLIC_LANGFLOW_URL` so the page embeds it.
+Without it the page shows a "Langflow is not configured" card, which is expected.
+The container runs with `LANGFLOW_AUTO_LOGIN=true`, which is fine locally but not for a shared deployment.
+`make langflow-down` removes it; `make db-down` removes both Postgres and Langflow.
+
 ## Bring the stack up
 
 ```

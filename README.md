@@ -28,6 +28,7 @@ colima start --cpu 4 --memory 8
 make kind-up        # kind cluster "aiops", Kubeflow notebook controller, namespace ai-stack
 make db-up          # Postgres in docker compose on localhost:5432
 make backend        # terminal 1: API on http://localhost:8000
+make langflow-up    # optional: Langflow for the Develop page on http://localhost:7860
 make frontend       # terminal 2: UI on http://localhost:3000
 make e2e-smoke      # terminal 3: creates a Qdrant instance and a Jupyter notebook, then deletes them
 ```

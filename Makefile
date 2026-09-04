@@ -10,6 +10,7 @@ BACKEND_URL        ?= http://localhost:8000
 FRONTEND_URL       ?= http://localhost:3000
 KIND_CONFIG        := infra/local/kind-config.yaml
 COMPOSE_FILE       := infra/local/docker-compose.yml
+LANGFLOW_URL       ?= http://localhost:7860
 NOTEBOOK_CTRL_REF  ?= v1.11.0
 NOTEBOOK_CTRL_NS   := notebook-controller-system
 NOTEBOOK_CTRL_DEPL := notebook-controller-deployment
@@ -80,8 +81,15 @@ kind-down: ## Delete the kind cluster
 db-up: ## Start local Postgres (docker compose)
 	docker compose -f $(COMPOSE_FILE) up -d --wait
 
-db-down: ## Stop and remove local Postgres
-	docker compose -f $(COMPOSE_FILE) down
+db-down: ## Stop and remove local Postgres (and Langflow if running)
+	docker compose -f $(COMPOSE_FILE) --profile langflow down
+
+langflow-up: ## Start Langflow for the Develop page (docker compose profile)
+	docker compose -f $(COMPOSE_FILE) --profile langflow up -d --wait langflow
+	@echo "Langflow: $(LANGFLOW_URL) (the frontend embeds it when NEXT_PUBLIC_LANGFLOW_URL is set; 'make frontend' sets it)"
+
+langflow-down: ## Stop and remove Langflow
+	docker compose -f $(COMPOSE_FILE) --profile langflow rm -sf langflow
 
 # --- LoadBalancer support (optional, needs sudo -- not run by this Makefile) -
 
@@ -106,8 +114,9 @@ backend: ## Run the backend API with uv (needs helm on PATH and a kubeconfig)
 		AIOPS_NAMESPACE=$(NAMESPACE) \
 		uv run uvicorn app:app --reload --port 8000
 
-frontend: ## Run the frontend dev server with pnpm
-	cd frontend && pnpm install --frozen-lockfile && pnpm dev
+frontend: ## Run the frontend dev server with pnpm (embeds Langflow from LANGFLOW_URL)
+	cd frontend && pnpm install --frozen-lockfile && \
+		NEXT_PUBLIC_LANGFLOW_URL=$(LANGFLOW_URL) pnpm dev
 
 # --- smoke test ---------------------------------------------------------------
 
