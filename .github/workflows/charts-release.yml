@@ -1,0 +1,88 @@
+name: Release charts
+
+# Packages charts under charts/ and publishes them to the infracloudio/charts repository:
+# GitHub Releases hold the .tgz files and the gh-pages branch holds index.yaml,
+# so https://infracloudio.github.io/charts keeps working for existing consumers.
+
+on:
+  push:
+    branches: [main]
+    paths: ["charts/**", ".github/workflows/charts-release.yml"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Package only; do not upload releases or update the index
+        type: boolean
+        default: true
+
+env:
+  CHARTS_OWNER: infracloudio
+  CHARTS_REPO: charts
+  CHARTS_URL: https://infracloudio.github.io/charts
+  PACKAGE_PATH: .cr-release-packages
+
+concurrency:
+  group: charts-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.18.4
+
+      - name: Install chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        with:
+          install_only: true
+
+      - name: Add dependency repositories
+        run: |
+          for dir in charts/*/; do
+            helm dependency list "$dir" 2>/dev/null | tail -n +2 | head -n -1 \
+              | awk '{ print "helm repo add " $1 " " $3 }' | while read -r cmd; do $cmd; done
+          done
+
+      - name: Package charts
+        run: |
+          mkdir -p "$PACKAGE_PATH"
+          for dir in charts/*/; do
+            [ -f "$dir/Chart.yaml" ] || continue
+            helm dependency build "$dir"
+            cr package "$dir" --package-path "$PACKAGE_PATH"
+          done
+          ls -l "$PACKAGE_PATH"
+
+      - name: Upload releases to infracloudio/charts
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        env:
+          CR_TOKEN: ${{ secrets.CHARTS_PUBLISH_TOKEN }}
+        run: |
+          cr upload --owner "$CHARTS_OWNER" --git-repo "$CHARTS_REPO" --token "$CR_TOKEN" \
+            --package-path "$PACKAGE_PATH" --skip-existing
+
+      - name: Update index on infracloudio/charts gh-pages
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        env:
+          CR_TOKEN: ${{ secrets.CHARTS_PUBLISH_TOKEN }}
+        run: |
+          git remote add charts "https://github.com/$CHARTS_OWNER/$CHARTS_REPO.git"
+          git fetch charts gh-pages
+          mkdir -p .cr-index
+          cr index --owner "$CHARTS_OWNER" --git-repo "$CHARTS_REPO" --token "$CR_TOKEN" \
+            --charts-repo "$CHARTS_URL" --remote charts --pages-branch gh-pages \
+            --package-path "$PACKAGE_PATH" --index-path .cr-index/index.yaml --push
