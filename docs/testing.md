@@ -161,18 +161,18 @@ Durations are from a local run on Apple silicon; CI is slower.
 
 | Spec (fast tier)              | Covers                                                                                                  | Status                        | Time  |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------- | ----- |
-| `navigation.spec.ts`          | every header link and dropdown item, brand link, active section, no console errors on eight pages       | pass; footer year is `fixme`  | 2 s   |
+| `navigation.spec.ts`          | every header link and dropdown item, brand link, active section, no console errors on eight pages       | pass                          | 2 s   |
 | `home.spec.ts`                | the four cards and their links                                                                          | pass                          | 1 s   |
 | `models-catalog.spec.ts`      | search, category and subcategory filters, combined filters, Import Model dialog, card link              | pass                          | 3 s   |
-| `model-details.spec.ts`       | Details tab content, `?tab=` reflects the tab and survives reload, deep link, Launch Model             | pass; empty-state row `fixme` | 4 s   |
-| `finetune-form.spec.ts`       | sections and defaults, required fields block the submit, backend rejection toast, stubbed create/list/params/delete flow | pass; Logs dialog `fixme` | 3 s |
-| `launch-form.spec.ts`         | the three wizard steps, engine filtering, empty argument name blocks the submit, rejected deploy toast  | pass; toast detail `fixme`    | 3 s   |
-| `vector-db-catalog.spec.ts`   | three cards, Launch dialog, Cancel                                                                       | pass; service type `fixme`    | 1 s   |
-| `notebook-form.spec.ts`       | defaults, VS Code hides framework and GPU, GPU count, empty name, out-of-range storage                  | pass; name format and storage helper text `fixme` | 2 s |
-| `error-pages.spec.ts`         | unknown model, unknown notebook                                                                         | pass; custom 404 page `fixme` | 4 s   |
+| `model-details.spec.ts`       | Details tab content, `?tab=` reflects the tab and survives reload, deep link, Launch Model             | pass                          | 4 s   |
+| `finetune-form.spec.ts`       | sections and defaults, required fields block the submit, backend rejection toast, stubbed create/list/params/delete flow | pass | 3 s |
+| `launch-form.spec.ts`         | the three wizard steps, engine filtering, empty argument name blocks the submit, rejected deploy toast  | pass                          | 3 s   |
+| `vector-db-catalog.spec.ts`   | three cards, Launch dialog, Cancel                                                                       | pass; service type `fixme` (no control in the dialog yet) | 1 s   |
+| `notebook-form.spec.ts`       | defaults, VS Code hides framework and GPU, GPU count, name rules, out-of-range storage, helper text     | pass                          | 2 s   |
+| `error-pages.spec.ts`         | unknown model, unknown notebook, unknown route shows the not-found page                                 | pass                          | 4 s   |
 | `theme.spec.ts`               | system default, Light and Dark persist across reloads, back to System                                   | pass                          | 2 s   |
 | `develop.spec.ts`             | "Langflow is not configured" card                                                                       | pass                          | 1 s   |
-| `mobile.spec.ts`              | no horizontal overflow at 390 px, hamburger menu                                                        | all `fixme`                   | -     |
+| `mobile.spec.ts`              | no horizontal overflow at 390 px, hamburger menu                                                        | pass                          | 2 s   |
 
 | Spec (cluster tier)           | Covers                                                                                                  | Time      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- | --------- |
