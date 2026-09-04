@@ -39,6 +39,20 @@ The API listens on `http://127.0.0.1:8000`;
 | `AIOPS_NAMESPACE`   | `ai-stack`               | Namespace for managed Helm releases and jobs.                |
 | `KUBECONFIG`        | unset                    | Kubeconfig path; falls back to in-cluster config.            |
 
+## Local limitations
+
+- Without a LoadBalancer provider (kind, colima) LoadBalancer services stay
+  `<pending>`, so instance endpoints fall back to the cluster IP.
+  The endpoint is stored once and the scheduler stops polling it,
+  so an ingress IP that appears later is not picked up.
+- Engines that pull from Hugging Face need `HF_API_TOKEN`.
+- Notebook names are DNS-1123 labels of at most 9 characters;
+  the kf-notebooks chart cuts `<name>-<id>-kf-notebooks-<name>` at 41 characters.
+- The Milvus chart has `maintainers[0].url: milvus.io` in its `Chart.yaml`,
+  which pyhelm3 rejects as a URL;
+  the backend drops such informational fields before the install.
+  The chart itself is heavy (etcd, MinIO, Pulsar) and needs a large cluster.
+
 ## Tests and lint
 
 ```bash
