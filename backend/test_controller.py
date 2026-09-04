@@ -5,6 +5,7 @@ import yaml
 from fastapi.testclient import TestClient
 
 from controller import NotebooksController, VectorDBController, get_controller
+from controller.finetune_controller import FinetuneController
 from core import create_app
 from schemas import (
     EngineChartsSchema,
@@ -23,6 +24,46 @@ def test_controller():
     for engine_name in ["huggingface", "nim", "vllm", "opea"]:
         controller = get_controller(engine_name, core_v1_api=mock.Mock())
         assert controller is not None
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected"),
+    [(None, "ai-stack"), ("custom-ns", "custom-ns")],
+)
+def test_controller_namespace_env_override(monkeypatch, env_value, expected):
+    if env_value is None:
+        monkeypatch.delenv("AIOPS_NAMESPACE", raising=False)
+    else:
+        monkeypatch.setenv("AIOPS_NAMESPACE", env_value)
+    assert (
+        get_controller("vllm", core_v1_api=mock.Mock()).namespace == expected
+    )
+    assert VectorDBController(core_v1_api=mock.Mock()).namespace == expected
+    assert FinetuneController().namespace == expected
+    # An explicit argument still wins.
+    explicit = VectorDBController(namespace="given", core_v1_api=mock.Mock())
+    assert explicit.namespace == "given"
+
+
+def test_vectordb_base_context_service_type():
+    controller = VectorDBController(core_v1_api=mock.Mock())
+    vectordb = VectorDBSchema(
+        id=genid.uuid4(), name="qdrant", chart_name="qdrant", chart_repo="r"
+    )
+    default = VectorDBInstanceSchema(vectorDB=vectordb)
+    assert controller._get_base_context(default) == {
+        "service_type": "LoadBalancer"
+    }
+    no_key = VectorDBInstanceSchema(vectorDB=vectordb, configParams={"x": 1})
+    assert controller._get_base_context(no_key) == {
+        "service_type": "LoadBalancer"
+    }
+    explicit = VectorDBInstanceSchema(
+        vectorDB=vectordb, configParams={"serviceType": "ClusterIP"}
+    )
+    assert controller._get_base_context(explicit) == {
+        "service_type": "ClusterIP"
+    }
 
 
 @pytest.mark.asyncio

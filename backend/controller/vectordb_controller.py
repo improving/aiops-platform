@@ -12,13 +12,13 @@ from controller.base_controller import (
 from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.vectordb_instance import VectorDBInstanceSchema
-from utils.kubernetes_utils import get_core_v1_client
+from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
 
 
 class VectorDBController:
     def __init__(
         self,
-        namespace="ai-stack",
+        namespace: str | None = None,
         api_instance: client.CustomObjectsApi = None,
         core_v1_api: client.CoreV1Api = None,
         helm_client: HelmClient = None,
@@ -26,7 +26,7 @@ class VectorDBController:
         self.logger = setup_logger(__name__)
         self.api_instance = api_instance or client.CustomObjectsApi()
         self.core_v1_api = core_v1_api or get_core_v1_client()
-        self.namespace = namespace
+        self.namespace = namespace or get_default_namespace()
         self.helm = helm_client or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
@@ -54,11 +54,11 @@ class VectorDBController:
         return values
 
     def _get_base_context(self, instance: VectorDBInstanceSchema):
-        service_type = "LoadBalancer"  # default service type
-        if instance.configParams and instance.configParams["serviceType"]:
-            service_type = instance.configParams["serviceType"]
+        service_type = None
+        if instance.configParams:
+            service_type = instance.configParams.get("serviceType")
 
-        return {"service_type": service_type}
+        return {"service_type": service_type or "LoadBalancer"}
 
     async def _add_and_update_helm_repo(
         self, instance: VectorDBInstanceSchema

@@ -11,13 +11,13 @@ from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
-from utils.kubernetes_utils import get_core_v1_client
+from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
 
 
 class Controller(ABC):
     def __init__(
         self,
-        namespace: str = "ai-stack",
+        namespace: str | None = None,
         api_instance: client.CustomObjectsApi = None,
         core_v1_api: client.CoreV1Api = None,
         helm_client: HelmClient = None,
@@ -25,7 +25,7 @@ class Controller(ABC):
         self.logger = setup_logger(__name__)
         self.api_instance = api_instance or client.CustomObjectsApi()
         self.core_v1_api = core_v1_api or get_core_v1_client()
-        self.namespace = namespace
+        self.namespace = namespace or get_default_namespace()
         self.helm = helm_client or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 

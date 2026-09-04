@@ -580,6 +580,14 @@ async def create_instance_dashboards(
         )
 
 
+def missing_endpoint_clause():
+    """Filter for instances whose endpoint is NULL or empty."""
+    return or_(
+        DBInferenceInstance.endpoint.is_(None),
+        DBInferenceInstance.endpoint == "",
+    )
+
+
 def update_all_inference_instance_endpoints(db: Session):
     """
     Update all inference instance endpoints.
@@ -589,12 +597,7 @@ def update_all_inference_instance_endpoints(db: Session):
         # Query for instances without populated endpoints
         instances = (
             db.query(DBInferenceInstance)
-            .filter(
-                or_(
-                    DBInferenceInstance.endpoint is None,
-                    DBInferenceInstance.endpoint == "",
-                )
-            )
+            .filter(missing_endpoint_clause())
             .all()
         )
 

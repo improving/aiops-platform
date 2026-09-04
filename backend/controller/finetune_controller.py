@@ -11,6 +11,7 @@ from utils.kubernetes_utils import (
     create_config_map,
     delete_config_map,
     delete_job,
+    get_default_namespace,
     get_job_logs,
     get_job_status,
     submit_job,
@@ -21,7 +22,7 @@ logger = setup_logger(__name__)
 
 class FinetuneController:
     def __init__(self):
-        self.namespace = "ai-stack"
+        self.namespace = get_default_namespace()
         self.HF_API_TOKEN = os.environ.get("HF_API_TOKEN")
         self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 

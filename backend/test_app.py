@@ -3,7 +3,14 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from api.inference_instance import missing_endpoint_clause
 from core import create_app
+
+
+def test_missing_endpoint_clause_compiles_to_is_null():
+    sql = str(missing_endpoint_clause().compile())
+    assert "IS NULL" in sql
+    assert "endpoint = " in sql
 
 
 def test_lifespan_skips_scheduler_in_test_mode():

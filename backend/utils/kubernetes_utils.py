@@ -1,3 +1,5 @@
+import os
+
 from fastapi import HTTPException
 from kubernetes import client, config
 from urllib3.util.retry import Retry
@@ -6,6 +8,13 @@ from logger import setup_logger
 
 # Initialize the logger
 logger = setup_logger(__name__)
+
+DEFAULT_NAMESPACE = "ai-stack"
+
+
+def get_default_namespace() -> str:
+    """Namespace for managed releases; AIOPS_NAMESPACE overrides it."""
+    return os.environ.get("AIOPS_NAMESPACE") or DEFAULT_NAMESPACE
 
 
 def load_kubernetes_config():
