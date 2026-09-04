@@ -100,9 +100,11 @@ the stored endpoint becomes that URL.
 Keeping everything under one parent domain is also what lets the Grafana and Jaeger iframes
 work with `SameSite=Lax` cookies.
 
-This also retires ingress-nginx, which Kubespray installs by default:
-the project was archived and reached end of life on 2026-03-24,
-and Gateway API with Envoy Gateway is the SIG-recommended replacement.
+No ingress controller is in use today: the lab exposes Services through MetalLB and Kubespray's optional
+ingress-nginx add-on was never enabled.
+That add-on's upstream project was archived and reached end of life on 2026-03-24,
+so Gateway API with Envoy Gateway, the SIG-recommended replacement, is the only option worth adopting.
+The platform charts already render an optional `HTTPRoute` (`httpRoute.enabled`) instead of an `Ingress`.
 
 ### 3.2 UI login
 

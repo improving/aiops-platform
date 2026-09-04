@@ -16,7 +16,7 @@ so local development runs without the gateway.
 ## Considered options
 
 - oauth2-proxy per hostname with `auth-url` on an ingress controller: proven, but one instance and cookie secret per host,
-  no per-resource policy, and ingress-nginx, the Kubespray default, was retired in March 2026.
+  no per-resource policy, and the usual controller, ingress-nginx, was retired in March 2026 and is not deployed on the lab.
 - Istio `RequestAuthentication` plus CUSTOM ext-authz: the lab's Istio is owned by the Kubeflow distribution,
   and CUSTOM policies cannot read JWT claims without a second policy layer.
 - Gateway-level OIDC for the UI as well: one mechanism everywhere, but no login when the UI runs on a host port,
