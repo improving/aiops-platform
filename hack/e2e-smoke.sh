@@ -266,11 +266,12 @@ step_notebook_curl() {
   done
   if $ok; then
     local code
-    code=$(curl -sSI -o /tmp/e2e-notebook-head.txt -w "%{http_code}" "http://localhost:18888/notebook/$NAMESPACE/$svc_name/lab" || echo 000)
+    # GET, not HEAD: Jupyter answers 405 to HEAD requests.
+    code=$(curl -sS -o /tmp/e2e-notebook-body.txt -w "%{http_code}" "http://localhost:18888/notebook/$NAMESPACE/$svc_name/lab" || echo 000)
     if [[ "$code" == "200" || "$code" == "302" || "$code" == "303" ]]; then
       pass "curl notebook base path via port-forward" "http_status=$code $(elapsed)"
     else
-      fail "curl notebook base path via port-forward" "http_status=$code headers=$(cat /tmp/e2e-notebook-head.txt 2>/dev/null | tr '\n' ' ')"
+      fail "curl notebook base path via port-forward" "http_status=$code body=$(head -c 200 /tmp/e2e-notebook-body.txt 2>/dev/null | tr '\n' ' ')"
     fi
   else
     fail "curl notebook base path via port-forward" "port-forward never became ready, see /tmp/e2e-pf-notebook.log"
