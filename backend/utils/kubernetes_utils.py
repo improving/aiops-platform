@@ -37,7 +37,8 @@ def get_kubernetes_api_client():
     load_kubernetes_config()
     configuration = client.Configuration.get_default_copy()
     configuration.client_side_validation = False
-    configuration.timeout = 2
+    # kubernetes.client.Configuration has no global timeout; requests take
+    # _request_timeout per call.
     retry = Retry(
         total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504]
     )

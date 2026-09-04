@@ -36,6 +36,13 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["."]
 norecursedirs = ["tmp", ".venv", "snapshots", "templates", "raw_data", "manifests"]
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
+    # Third-party warnings we cannot fix here.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
 
 [tool.ruff]
 # .style.yapf was "based_on_style = pep8", whose column limit is 79.

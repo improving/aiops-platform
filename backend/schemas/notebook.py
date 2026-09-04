@@ -1,7 +1,13 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+)
 
 from utils import genid
 
@@ -50,6 +56,8 @@ class NotebookInstanceSchema(BaseModel):
                 raise ValueError("Invalid framework for type vscode")
         return v
 
-    model_config = ConfigDict(
-        from_attributes=True, json_encoders={datetime: lambda v: v.isoformat()}
-    )
+    @field_serializer("created_at", "updated_at", when_used="json")
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return value.isoformat() if value is not None else None
+
+    model_config = ConfigDict(from_attributes=True)
