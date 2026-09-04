@@ -159,3 +159,23 @@ def test_create_notebook_rejects_duplicate_name():
             )
             assert deleted.status_code == 200, deleted.text
     assert client.get("/v1alpha1/notebooks").json() == []
+
+
+def test_create_vectordb_instance_without_cluster_leaves_no_row(monkeypatch):
+    import api.vectordb_instance as vi
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("no kubeconfig")
+
+    monkeypatch.setattr(vi, "VectorDBController", boom)
+    app = create_app()
+    client = TestClient(app)
+    vectordb = client.get("/v1alpha1/vectordb").json()[0]
+    before = len(client.get("/v1alpha1/vectordb_instances").json())
+    response = client.post(
+        "/v1alpha1/vectordb_instances",
+        json={"vectorDB": {"id": vectordb["id"]}, "configParams": {}},
+    )
+    assert response.status_code == 503
+    assert "Kubernetes is not reachable" in response.json()["detail"]
+    assert len(client.get("/v1alpha1/vectordb_instances").json()) == before

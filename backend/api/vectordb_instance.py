@@ -121,6 +121,16 @@ async def create_vectordb_instance(
             status_code=404, detail="Vector database not found"
         )
 
+    # Build the controller before persisting anything: without a reachable
+    # cluster it raises, and a row without a Helm release would be an orphan.
+    try:
+        controller = VectorDBController()
+    except Exception as e:
+        logger.exception("Kubernetes is not reachable")
+        raise HTTPException(
+            status_code=503, detail=f"Kubernetes is not reachable: {e}"
+        ) from e
+
     dbVectorDBInstance = DBVectorDBInstance(
         vectordb_id=vectordb_instance.vectorDB.id,
         configParams=vectordb_instance.configParams,
@@ -130,7 +140,6 @@ async def create_vectordb_instance(
     db.commit()
     db.refresh(dbVectorDBInstance)
 
-    controller = VectorDBController()
     instanceSchema = VectorDBInstanceSchema(
         id=dbVectorDBInstance.id,
         vectorDB=VectorDBSchema.model_validate(dbVectorDB),
