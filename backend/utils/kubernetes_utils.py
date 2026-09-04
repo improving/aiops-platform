@@ -245,6 +245,12 @@ def get_service_endpoint(namespace, service_name):
             )
         endpoint = f"http://{ip}:{port}"
     except client.exceptions.ApiException as e:
-        logger.exception(f"Error getting service information: {e}")
+        if e.status == 404:
+            # The scheduler polls until the Helm release creates the service.
+            logger.info(
+                "Service %s/%s does not exist yet", namespace, service_name
+            )
+        else:
+            logger.exception(f"Error getting service information: {e}")
 
     return endpoint
