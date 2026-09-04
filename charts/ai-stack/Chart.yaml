@@ -27,31 +27,31 @@ appVersion: ""
 dependencies:
   - name: text-generation-inference
     version: 0.2.0
-    repository: "https://infracloudio.github.io/charts"
+    repository: "file://../text-generation-inference"
     alias: tgi
     condition: tgi.enabled
 
   - name: text-embeddings-inference
     version: 0.2.0
-    repository: "https://infracloudio.github.io/charts"
+    repository: "file://../text-embeddings-inference"
     alias: tei
     condition: tei.enabled
 
   - name: text-embeddings-inference
     version: 0.2.0
-    repository: "https://infracloudio.github.io/charts"
+    repository: "file://../text-embeddings-inference"
     alias: reranker
     condition: reranker.enabled
 
   - name: chromadb
     version: 0.2.0
-    repository: "https://infracloudio.github.io/charts"
+    repository: "file://../chromadb"
     alias: vectordb
     condition: vectordb.enabled
 
   - name: vllm
     version: 0.3.0
-    repository: "https://infracloudio.github.io/charts"
+    repository: "file://../vllm"
     alias: vllm
     condition: vllm.enabled
 
