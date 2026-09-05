@@ -151,6 +151,13 @@ def find_target(db: Session, name: str, user: CurrentUser) -> Target:
     raise _unknown_target(name)
 
 
+def user_key(user: CurrentUser) -> str:
+    """The identity LiteLLM records as the end user of a request:
+    the platform email, or the token subject when there is none
+    (service accounts, the disabled-mode dev user)."""
+    return user.email or user.sub
+
+
 def litellm_client():
     return get_client()
 
@@ -442,6 +449,7 @@ async def _forward(
     litellm = litellm_client()
     if litellm is not None and target.litellm_model_id:
         key = await asyncio.to_thread(_org_key_or_error, db, user)
+        body = {**body, "user": user_key(user)}
         return await _relay_litellm(litellm, path, body, key)
     if not allow_direct:
         raise HTTPException(

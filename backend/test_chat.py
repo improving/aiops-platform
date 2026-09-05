@@ -137,6 +137,7 @@ def test_chat_goes_through_litellm_with_the_org_key(client):
     assert seen["url"] == "https://litellm.test/v1/chat/completions"
     assert seen["auth"] == "Bearer sk-virtual"
     assert seen["body"]["model"] == TARGET
+    assert seen["body"]["user"] == "dev@example.test"
 
 
 def test_chat_falls_back_to_the_instance_without_litellm(client):
@@ -163,6 +164,7 @@ def test_chat_falls_back_to_the_instance_without_litellm(client):
     assert seen["url"] == "https://inf-test.example/v1/chat/completions"
     assert seen["body"]["model"] == "qwen3:0.6b"
     assert seen["key"] == "k3y"
+    assert "user" not in seen["body"]
 
 
 def test_embeddings_and_rerank_need_litellm(client):
@@ -186,8 +188,11 @@ def test_embeddings_and_rerank_need_litellm(client):
 
 
 def test_embeddings_through_litellm(client):
+    seen = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/embeddings"
+        seen["body"] = json.loads(request.content)
         return httpx.Response(
             200, json={"data": [{"embedding": [0.1, 0.2]}], "usage": {}}
         )
@@ -207,6 +212,33 @@ def test_embeddings_through_litellm(client):
         )
     assert response.status_code == 200
     assert response.json()["data"][0]["embedding"] == [0.1, 0.2]
+    assert seen["body"]["user"] == "dev@example.test"
+
+
+def test_rerank_through_litellm_carries_the_user(client):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/rerank"
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "rerank-1", "results": []})
+
+    with (
+        mock.patch("api.chat.find_target", return_value=_target()),
+        mock.patch("api.chat.org_key", return_value="sk-virtual"),
+        mock.patch(
+            "api.chat.litellm_client",
+            return_value=ll.LiteLLMClient(
+                SETTINGS, transport=httpx.MockTransport(handler)
+            ),
+        ),
+    ):
+        response = client.post(
+            "/v1alpha1/rerank",
+            json={"model": TARGET, "query": "q", "documents": ["a"]},
+        )
+    assert response.status_code == 200
+    assert seen["body"]["user"] == "dev@example.test"
 
 
 def test_targets_list_registered_instances(client):
