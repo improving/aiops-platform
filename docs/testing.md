@@ -297,6 +297,7 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `chat.spec.ts`                | the mock target from `AIOPS_CHAT_MOCK`, streamed answer, history survives a reload, clear; `?target=` preselects; empty state links to the catalog | pass | 3 s |
 | `providers.spec.ts`           | add a provider with the two mock models, table and chat targets update, disable hides its models, remove one model, delete, set a budget (in-memory secret store) | pass | 4 s |
 | `registry.spec.ts`            | import `Qwen/Qwen3-0.6B-GGUF` from the fixture as a draft, its Ollama `hf.co/...` option, publish, catalog and wizard show it, deprecate, delete; add manually; add an Ollama tag from the manifest fixture | pass | 5 s |
+| `usage.spec.ts`               | the Usage page on the mock rows: totals, the per-target table, the per-user table, switching the period | pass | 2 s |
 | `vector-db-catalog.spec.ts`   | three cards, Launch dialog, Cancel                                                                       | pass; service type `fixme` (no control in the dialog yet) | 1 s   |
 | `notebook-form.spec.ts`       | defaults, VS Code hides framework and GPU, GPU count, name rules, out-of-range storage, helper text     | pass                          | 2 s   |
 | `error-pages.spec.ts`         | unknown model, unknown notebook, unknown route shows the not-found page                                 | pass                          | 4 s   |

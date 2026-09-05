@@ -318,6 +318,29 @@ the file must equal the export of a database seeded from it.
 The Playwright fast tier and the backend tests never call the sources:
 `AIOPS_CHAT_MOCK=true` makes the importers read the recorded fixtures under `backend/test_fixtures/`.
 
+## Usage and metrics
+
+Every chat, embeddings and rerank request the backend forwards to LiteLLM carries the platform user as the OpenAI `user` field,
+so LiteLLM's spend logs and its Prometheus metrics attribute tokens and spend to the user, the target and the organization's team.
+The Usage page (`/usage`, header link "Usage") reads `GET /v1alpha1/organizations/current/usage?days=30`:
+members see their own rows, admins the whole organization, with totals, a table per target and a table per user and day.
+Requests made before the attribution landed have no user and appear to admins as unattributed.
+
+`make monitoring-up` installs kube-prometheus-stack in namespace `monitoring`
+(Prometheus with a 2-day retention, the operator, kube-state-metrics and Grafana; no alertmanager, no node exporter, small requests
+so one Ollama instance still fits on the 8 GiB VM),
+publishes Grafana at `https://grafana.127.0.0.1.nip.io` through the gateway,
+scrapes LiteLLM's `/metrics/` with a `ServiceMonitor` that carries the master key,
+and installs `charts/infracloud-dashboards`, which now includes the LiteLLM dashboard (uid `aiops-litellm`):
+requests, input and output tokens per second, time to first token, request latency, failed requests, spend and tokens by user,
+filtered by target (`inst-<id8>`, `prov-<id8>/<model>`) and user.
+Grafana here is dev-only: anonymous viewers, embedding allowed, no gateway policy, admin password `admin`.
+`make frontend` sets `NEXT_PUBLIC_GRAFANA_URL`, so an Ollama instance's Dashboards tab embeds those panels
+(the rows come from `backend/raw_data/engine_chart_dashboards.csv`, and every instance's panel URL carries `var-target`);
+with monitoring down the tab shows failing frames instead of the "not configured" card,
+and the browser must trust the local CA (`make trust-ca`) for the frames to load.
+The TGI, TEI and vLLM dashboards keep working on the lab, where those engines expose their own metrics.
+
 ## Backend
 
 `make backend` runs `uv run uvicorn app:app --reload` with the full local env contract:

@@ -171,3 +171,12 @@ Admin UI (role `admin`): a Registry page with list, filters (source, capability,
 - Hugging Face Hub API: <https://huggingface.co/docs/hub/api>
 - OpenRouter models API: <https://openrouter.ai/docs/api-reference/list-available-models>
 - Vercel AI SDK: <https://ai-sdk.dev/docs>
+
+## 8. Addendum: usage and metrics (2026-09-05)
+
+Requests forwarded to LiteLLM carry the platform user, so spend and tokens are attributed per user, target and organization;
+a Usage page reads the aggregated spend logs (members their own, admins the organization);
+and the kind stack gets Prometheus and Grafana (`make monitoring-up`) with a LiteLLM dashboard that the endpoint pages embed
+for every instance, including Ollama and hosted models, which expose no metrics of their own.
+Plan: `docs/superpowers/plans/2026-09-05-usage-and-metrics.md`.
+

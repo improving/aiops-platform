@@ -16,7 +16,7 @@ It is a monorepo assembled from four former repositories with their history (`MI
 | `backend/` | FastAPI control plane (Python 3.13, uv, SQLAlchemy 2, pyhelm3) |
 | `frontend/` | Next.js 16 UI (React 19, Tailwind 4, shadcn/ui, pnpm) plus the Playwright e2e suite |
 | `charts/<name>/` | Helm charts published to <https://infracloudio.github.io/charts> |
-| `infra/` | Bare-metal lab setup and install notes, imported as is; `infra/local/` holds the kind, gateway, Keycloak, Langflow, LiteLLM and compose config |
+| `infra/` | Bare-metal lab setup and install notes, imported as is; `infra/local/` holds the kind, gateway, Keycloak, Langflow, LiteLLM, monitoring and compose config |
 | `hack/` | `e2e-smoke.sh`, the API-level smoke test against the local stack |
 | `docs/` | `local-dev.md`, `testing.md`, migration commit maps |
 
@@ -79,14 +79,18 @@ It is a monorepo assembled from four former repositories with their history (`MI
    and the organization's LiteLLM team carries the monthly budget.
    Without `LITELLM_URL` the chat endpoint falls back to the instance's `inf-<id8>` gateway host with the workload credential,
    and embeddings and rerank answer 503.
-   Conversations live in the browser only.
-   `AIOPS_CHAT_MOCK=true` (honoured only with `TEST_MODE=true`) serves one mock target and canned answers for the Playwright fast tier.
+   Conversations live in the browser only, one per signed-in user and target.
+   Every forwarded request carries the platform user as the OpenAI `user` field, so LiteLLM attributes spend and tokens per user;
+   `GET /v1alpha1/organizations/current/usage` aggregates its spend logs for the Usage page (`/usage`),
+   and `make monitoring-up` scrapes LiteLLM into Prometheus with a Grafana dashboard (`charts/infracloud-dashboards`, uid `aiops-litellm`)
+   that the endpoint pages embed for Ollama instances through `var-target`.
+   `AIOPS_CHAT_MOCK=true` (honoured only with `TEST_MODE=true`) serves one mock target, canned answers and canned usage rows for the Playwright fast tier.
 
 ## Local stack and commands
 
 ```bash
 make prereqs                                                # colima/kind/helm/kubectl/uv/pnpm check
-make kind-up gateway-up ca-export auth-up db-up langflow-up litellm-up  # cluster, gateway+CA, Keycloak, Postgres, Langflow, LiteLLM
+make kind-up gateway-up ca-export auth-up db-up langflow-up litellm-up monitoring-up  # cluster, gateway+CA, Keycloak, Postgres, Langflow, LiteLLM, Prometheus+Grafana
 make backend                                                 # uvicorn on :8000 (needs helm and a kubeconfig)
 make frontend                                                # next dev on :3000 (login goes through Keycloak)
 make e2e-smoke                                               # API smoke: Qdrant + Jupyter notebook create/ready/delete
