@@ -136,7 +136,12 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   `list_hosted_targets` and answers chat with `You said: <last user message>`, embeddings with a 4-float
   vector per input and rerank with the documents reversed, without any instance, for the Playwright fast tier.
   The gateway host uses the local CA, so the process needs `SSL_CERT_FILE` (httpx honours it; `make backend`
-  sets it).
+  sets it). `user_key(user)` (`user.email or user.sub`) is the identity every route forwarded through LiteLLM
+  carries as the OpenAI `user` field (`_forward`, LiteLLM branch only -- the direct passthrough carries no
+  such field); LiteLLM records it as the spend log row's `end_user`. `target_labels(db, user)` maps every
+  `inst-<id8>`/`prov-<id8>/<model>` name the caller's organization can spend on to its display label, for the
+  usage endpoint below -- unlike `list_targets` it never calls the cluster and keeps disabled provider models,
+  which may still carry historical spend.
 - `utils/litellm.py` is the LiteLLM proxy client and the platform's naming rules in it. `litellm_settings()`
   reads `LITELLM_URL`/`LITELLM_MASTER_KEY`; `get_client()` is `None` without both, and every caller treats that
   as "skip the proxy" rather than an error. `_ROUTES` maps `(engine, category)` to the LiteLLM provider prefix,
@@ -158,6 +163,9 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   (`api/providers.py`), and `LiteLLMClient.update_team_budget(team_id, max_budget)` calls `POST /team/update`
   with `{"team_id", "max_budget", "budget_duration": "30d"}` (`max_budget: None` clears the cap — verified
   against a throwaway team on the local proxy: `/team/info` reports `max_budget: null` back after that call).
+  `LiteLLMClient.spend_logs(team_id, start, end)` pages `GET /spend/logs/ui` (`start_date`/`end_date` formatted
+  `YYYY-MM-DD HH:MM:SS` UTC, `page_size=500`, at most 20 pages) and returns `(rows, capped)`; `capped` is true
+  when a page reports `total_is_capped` or the 20-page ceiling is hit before the proxy's own last page.
 - Hosted providers (Phase 2b): `utils/secret_store.py` is the `SecretStore` seam for a provider's API key —
   `KubernetesSecretStore` (the same Secret shape as `utils/credentials.py`, `core_v1` resolved lazily so
   constructing the store never touches the kubeconfig on its own) or `MemorySecretStore` (a module-level dict);
@@ -197,6 +205,20 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   routes answer the same document (`team_id`, `spend`, `max_budget`, `budget_reset_at` from `/team/info`, plus
   `budget_usd` from the row). `AIOPS_CHAT_MOCK=true` skips LiteLLM on both: `PUT` just persists the row, `GET`
   answers a canned `spend`/`budget_reset_at` alongside the real `budget_usd`.
+- Usage: `GET /v1alpha1/organizations/current/usage?days=30` (any member, `days` clamped `1..90`, 422 outside
+  it) reads `LiteLLMClient.spend_logs` for the caller's organization team since `days - 1` days ago at 00:00
+  UTC through now, then aggregates by `(end_user, model_group, day)`. Members keep only their own rows
+  (`end_user == user_key(user)`, matched in `_visible_to`) and never see an unattributed row (empty `end_user`,
+  made before this endpoint's `user` field shipped, or with the master key); admins see every row, including
+  the unattributed ones as `user: null`. Response: `scope` (`"organization"` for an admin, `"user"` for a
+  member), `capped` (from `spend_logs`), `totals` (`requests`, `prompt_tokens`, `completion_tokens`, `spend`),
+  `by_target` (one entry per target, sorted by spend then requests, both descending) and `rows` (one entry per
+  `(user, target, day)`, sorted by day descending, then user, then target — a stable sort by `(user, target)`
+  first, then a stable re-sort by `day` alone, does this without a synthetic descending key on a date string).
+  Every entry's `label` comes from `target_labels`, the raw target name when the row's target is not (or no
+  longer) one of the organization's. `AIOPS_CHAT_MOCK=true` serves three canned rows for `inst-mock` (two for
+  the caller, one for `someone@example.com`) through the same visibility and aggregation code, so the fast
+  tier's dev admin sees three rows and two users. 503 without a LiteLLM client, 502 on `LiteLLMError`.
 - `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check: `utils/hostnames.py`
   `parse_hostname` turns the `Host` (or `X-Forwarded-Host`) into `(kind, id8, suffix)`
   (`nb`, `vdb`, `vdb ... -api`, `inf`; the parent domain from `gateway_settings()`, or the first label without it),
