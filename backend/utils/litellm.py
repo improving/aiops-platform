@@ -11,6 +11,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 import httpx
 from kubernetes.client.exceptions import ApiException
@@ -30,6 +31,10 @@ STREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=10.0)
 ORG_KEY_SECRET_KEY = "key"
 ORG_KEY_CACHE_SECONDS = 300
 _org_key_cache: dict[uuid.UUID, tuple[float, str]] = {}
+
+SPEND_LOGS_PAGE_SIZE = 500
+SPEND_LOGS_MAX_PAGES = 20
+SPEND_LOGS_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # (engine, category) -> (provider prefix, path suffix, LiteLLM mode). The
 # OpenAI-compatible servers need their /v1 base; TEI uses the huggingface
@@ -235,6 +240,41 @@ class LiteLLMClient:
                 "budget_duration": "30d",
             },
         )
+
+    def spend_logs(
+        self, team_id: str, start: datetime, end: datetime
+    ) -> tuple[list[dict], bool]:
+        """Every spend-log row for the team between ``start`` and
+        ``end`` (UTC), paging ``GET /spend/logs/ui`` at
+        SPEND_LOGS_PAGE_SIZE rows per page, up to SPEND_LOGS_MAX_PAGES
+        pages. Returns ``(rows, capped)``; ``capped`` is true when the
+        proxy reports more rows than fit in that many pages."""
+        rows: list[dict] = []
+        capped = False
+        for page in range(1, SPEND_LOGS_MAX_PAGES + 1):
+            payload = self.request(
+                "GET",
+                "/spend/logs/ui",
+                params={
+                    "team_id": team_id,
+                    "start_date": start.strftime(SPEND_LOGS_DATE_FORMAT),
+                    "end_date": end.strftime(SPEND_LOGS_DATE_FORMAT),
+                    "page": page,
+                    "page_size": SPEND_LOGS_PAGE_SIZE,
+                },
+            ).json()
+            data = payload.get("data") or []
+            rows.extend(data)
+            if payload.get("total_is_capped"):
+                capped = True
+            total_pages = payload.get("total_pages") or page
+            if not data or page >= total_pages:
+                break
+        else:
+            # Fell through SPEND_LOGS_MAX_PAGES pages without reaching
+            # the reported last page.
+            capped = True
+        return rows, capped
 
 
 def get_client() -> LiteLLMClient | None:

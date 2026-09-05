@@ -1,15 +1,22 @@
-"""Organization-scoped LiteLLM bookkeeping: spend and the monthly
-budget for hosted providers (Phase 2b)."""
+"""Organization-scoped LiteLLM bookkeeping: spend, the monthly budget
+for hosted providers (Phase 2b) and per-user usage from the spend logs
+(Task 2 of the usage-and-metrics plan)."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from api.chat import chat_mock_enabled
-from auth.current_user import CurrentUser, get_current_user, require_admin
+from api.chat import chat_mock_enabled, target_labels, user_key
+from auth.current_user import (
+    ROLE_ADMIN,
+    CurrentUser,
+    get_current_user,
+    require_admin,
+)
 from db.database import get_db
 from logger import setup_logger
 from models.organization import Organization
@@ -17,6 +24,11 @@ from utils.litellm import LiteLLMError, ensure_org_key, get_client
 
 router = APIRouter()
 logger = setup_logger(__name__)
+
+# The mock target and second user for AIOPS_CHAT_MOCK usage rows, so
+# the fast tier can exercise the Usage page without a LiteLLM proxy.
+MOCK_USAGE_TARGET = "inst-mock"
+MOCK_USAGE_OTHER_USER = "someone@example.com"
 
 # The canned spend document for AIOPS_CHAT_MOCK, so the fast tier can
 # exercise the budget card without a LiteLLM proxy.
@@ -139,3 +151,169 @@ async def update_org_budget(
         info.get("max_budget"),
         info.get("budget_reset_at"),
     )
+
+
+def _row_user(row: dict) -> str | None:
+    """A spend-log row's ``end_user``, normalized: LiteLLM leaves it
+    empty for requests made before per-user attribution shipped, or
+    with the master key."""
+    return row.get("end_user") or None
+
+
+def _row_target(row: dict) -> str:
+    return row.get("model_group") or row.get("model") or ""
+
+
+def _row_day(row: dict) -> str:
+    return (row.get("startTime") or "")[:10]
+
+
+def _visible_to(user: CurrentUser):
+    def visible(row: dict) -> bool:
+        if user.role == ROLE_ADMIN:
+            return True
+        return _row_user(row) == user_key(user)
+
+    return visible
+
+
+def _new_bucket(target: str, label: str, **extra) -> dict:
+    return {
+        "target": target,
+        "label": label,
+        "requests": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "spend": 0.0,
+        **extra,
+    }
+
+
+def _add_row(bucket: dict, row: dict) -> None:
+    bucket["requests"] += 1
+    bucket["prompt_tokens"] += row.get("prompt_tokens") or 0
+    bucket["completion_tokens"] += row.get("completion_tokens") or 0
+    bucket["spend"] += row.get("spend") or 0.0
+
+
+def _aggregate_usage(
+    rows: list[dict], labels: dict[str, str]
+) -> tuple[dict, list[dict], list[dict]]:
+    """Aggregate visible spend-log rows by ``(end_user, model_group,
+    day)`` for the per-user-and-day table, and by target for the
+    by-target table; return ``(totals, by_target, rows)``."""
+    totals = _new_bucket("", "")
+    by_target: dict[str, dict] = {}
+    by_key: dict[tuple, dict] = {}
+
+    for row in rows:
+        user = _row_user(row)
+        target = _row_target(row)
+        day = _row_day(row)
+        label = labels.get(target, target)
+
+        _add_row(totals, row)
+        _add_row(by_target.setdefault(target, _new_bucket(target, label)), row)
+        _add_row(
+            by_key.setdefault(
+                (user, target, day),
+                _new_bucket(target, label, user=user, day=day),
+            ),
+            row,
+        )
+
+    del totals["target"]
+    del totals["label"]
+
+    targets = sorted(
+        by_target.values(), key=lambda e: (-e["spend"], -e["requests"])
+    )
+    # Stable sorts compose: order by (user, target) first, then bring
+    # the most recent day to the front without disturbing that order
+    # among rows that share a day.
+    entries = sorted(
+        by_key.values(), key=lambda e: (e["user"] or "", e["target"])
+    )
+    entries.sort(key=lambda e: e["day"], reverse=True)
+    return totals, targets, entries
+
+
+def _mock_usage_rows(user: CurrentUser, now: datetime) -> list[dict]:
+    me = user_key(user)
+    today = now.strftime("%Y-%m-%dT00:00:00Z")
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+    return [
+        {
+            "model_group": MOCK_USAGE_TARGET,
+            "end_user": me,
+            "startTime": today,
+            "prompt_tokens": 12,
+            "completion_tokens": 24,
+            "spend": 0.01,
+        },
+        {
+            "model_group": MOCK_USAGE_TARGET,
+            "end_user": me,
+            "startTime": yesterday,
+            "prompt_tokens": 8,
+            "completion_tokens": 16,
+            "spend": 0.02,
+        },
+        {
+            "model_group": MOCK_USAGE_TARGET,
+            "end_user": MOCK_USAGE_OTHER_USER,
+            "startTime": today,
+            "prompt_tokens": 20,
+            "completion_tokens": 40,
+            "spend": 0.03,
+        },
+    ]
+
+
+@router.get("/v1alpha1/organizations/current/usage")
+async def current_org_usage(
+    days: int = Query(30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
+    org = _current_org(db, user)
+    now = datetime.now(UTC)
+    since = (now - timedelta(days=days - 1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    scope = "organization" if user.role == ROLE_ADMIN else "user"
+
+    if chat_mock_enabled():
+        rows, capped = _mock_usage_rows(user, now), False
+    else:
+        litellm = get_client()
+        if litellm is None:
+            raise HTTPException(
+                status_code=503, detail="LiteLLM is not configured"
+            )
+        try:
+            await asyncio.to_thread(ensure_org_key, db, org)
+            rows, capped = await asyncio.to_thread(
+                litellm.spend_logs, org.litellm_team_id, since, now
+            )
+        except LiteLLMError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except ApiException as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Cannot read the organization key: {e.reason}",
+            )
+
+    visible = list(filter(_visible_to(user), rows))
+    labels = target_labels(db, user)
+    totals, by_target, entries = _aggregate_usage(visible, labels)
+    return {
+        "days": days,
+        "since": since.isoformat(),
+        "until": now.isoformat(),
+        "scope": scope,
+        "capped": capped,
+        "totals": totals,
+        "by_target": by_target,
+        "rows": entries,
+    }

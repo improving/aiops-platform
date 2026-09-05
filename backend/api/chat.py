@@ -240,6 +240,30 @@ def list_hosted_targets(db: Session, user: CurrentUser) -> list[dict]:
     return targets
 
 
+def target_labels(db: Session, user: CurrentUser) -> dict[str, str]:
+    """Every target name the caller's organization has ever been able
+    to spend on, mapped to its display label, for the usage endpoint.
+    Unlike ``list_targets`` this never calls the cluster (no readiness
+    check) and keeps disabled provider models, which may still carry
+    historical spend."""
+    labels: dict[str, str] = {}
+    instances = (
+        db.query(DBInferenceInstance)
+        .filter(org_scope(DBInferenceInstance, user))
+        .all()
+    )
+    for row in instances:
+        name = row.litellm_model_name or instance_model_name(row.id)
+        labels[name] = f"{row.model.name} · {row.engine.name}"
+    providers = db.query(Provider).filter(org_scope(Provider, user)).all()
+    for provider in providers:
+        for model in provider.models:
+            labels[model.litellm_model_name] = (
+                f"{model.display_name} · {provider.name}"
+            )
+    return labels
+
+
 def list_targets(db: Session, user: CurrentUser) -> list[dict]:
     """Every chat/embedding/rerank target of the caller's organization:
     deployed instances, then hosted provider models."""

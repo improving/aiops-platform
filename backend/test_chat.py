@@ -6,9 +6,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from api.chat import Target
+from api.chat import Target, target_labels
+from auth.current_user import CurrentUser
 from core import create_app
 from db.database import get_db_direct
+from models.engines import DBEngine
+from models.inference_instance import DBInferenceInstance
+from models.models import DBModel
 from models.organization import Organization
 from models.provider import Provider, ProviderModel
 from test_auth import (  # noqa: F401 (fixtures)
@@ -322,6 +326,51 @@ def test_hosted_target_without_litellm_answers_503(client):
         )
     assert response.status_code == 503
     assert "Hosted models need LiteLLM" in response.json()["detail"]
+
+
+def _admin_user(org_id) -> CurrentUser:
+    return CurrentUser(
+        id=uuid.uuid4(),
+        sub="dev",
+        email="dev@example.test",
+        name="Dev",
+        org_id=org_id,
+        role="admin",
+        is_service=False,
+    )
+
+
+def test_target_labels_covers_instances_and_hosted_models(client):
+    provider_id, litellm_name = _add_hosted_model()
+
+    db = get_db_direct()
+    try:
+        org = (
+            db.query(Organization)
+            .filter(Organization.slug == "default")
+            .first()
+        )
+        model = db.query(DBModel).first()
+        engine = db.query(DBEngine).first()
+        instance = DBInferenceInstance(
+            model_id=model.id,
+            engine_id=engine.id,
+            org_id=org.id,
+            litellm_model_name="inst-abcdef12",
+        )
+        db.add(instance)
+        db.commit()
+        model_name, engine_name = model.name, engine.name
+        provider_name = (
+            db.query(Provider).filter(Provider.id == provider_id).first().name
+        )
+
+        labels = target_labels(db, _admin_user(org.id))
+    finally:
+        db.close()
+
+    assert labels["inst-abcdef12"] == f"{model_name} · {engine_name}"
+    assert labels[litellm_name] == f"GPT-4o mini · {provider_name}"
 
 
 def test_org_spend_endpoint(client, monkeypatch):

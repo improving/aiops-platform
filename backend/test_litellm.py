@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime
 from unittest import mock
 
 import httpx
@@ -258,6 +259,84 @@ def test_update_team_budget():
         "max_budget": None,
         "budget_duration": "30d",
     }
+
+
+def test_spend_logs_pages_until_the_last_page():
+    seen_pages = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        seen_pages.append(page)
+        assert request.url.params["team_id"] == "t-1"
+        assert request.url.params["start_date"] == "2026-09-01 00:00:00"
+        assert request.url.params["end_date"] == "2026-09-07 00:00:00"
+        assert request.url.params["page_size"] == "500"
+        if page == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [{"request_id": "r1"}],
+                    "total_pages": 2,
+                    "total_is_capped": False,
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": [{"request_id": "r2"}],
+                "total_pages": 2,
+                "total_is_capped": False,
+            },
+        )
+
+    client = _client(handler)
+    rows, capped = client.spend_logs(
+        "t-1",
+        datetime(2026, 9, 1),
+        datetime(2026, 9, 7),
+    )
+    assert seen_pages == [1, 2]
+    assert [r["request_id"] for r in rows] == ["r1", "r2"]
+    assert capped is False
+
+
+def test_spend_logs_stops_at_the_page_cap():
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        return httpx.Response(
+            200,
+            json={
+                "data": [{"request_id": f"r{page}"}],
+                "total_pages": 999,
+                "total_is_capped": False,
+            },
+        )
+
+    client = _client(handler)
+    rows, capped = client.spend_logs(
+        "t-1", datetime(2026, 9, 1), datetime(2026, 9, 7)
+    )
+    assert len(rows) == ll.SPEND_LOGS_MAX_PAGES
+    assert capped is True
+
+
+def test_spend_logs_reports_total_is_capped():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": [{"request_id": "r1"}],
+                "total_pages": 1,
+                "total_is_capped": True,
+            },
+        )
+
+    client = _client(handler)
+    rows, capped = client.spend_logs(
+        "t-1", datetime(2026, 9, 1), datetime(2026, 9, 7)
+    )
+    assert len(rows) == 1
+    assert capped is True
 
 
 def test_errors_raise_litellm_error():
