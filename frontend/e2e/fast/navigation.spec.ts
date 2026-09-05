@@ -13,6 +13,7 @@ const pages = [
   },
   { path: "/develop", heading: "Interactively Develop AI Applications" },
   { path: "/notebooks/new", heading: "Create New Notebook" },
+  { path: "/chat", heading: "Chat" },
 ];
 
 test.describe("header navigation", () => {

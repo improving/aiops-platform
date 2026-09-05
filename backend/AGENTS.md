@@ -32,11 +32,20 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   FastAPI lifespan. `init_db` first runs the Alembic migrations (`db/migrate.py` `upgrade_to_head`,
   `alembic/versions/`) on the app engine; a database that predates Alembic is stamped `0001` first.
 - `api/*.py` are the routers (`/v1alpha1/...`): `models`, `engines`, `hosts`, `inference_instance`,
-  `vectordb` and `vectordb_instance`, `notebooks`, `model_adapters`, `finetune`, `credentials`, `authz`.
+  `vectordb` and `vectordb_instance`, `notebooks`, `model_adapters`, `finetune`, `credentials`, `authz`, `chat`.
   Create endpoints persist a row, then call a controller; on install failure they delete the row again.
+  `inference_instance` requires `HF_API_TOKEN` for every engine except those in `NO_HF_TOKEN_ENGINES` (Ollama).
 - `controller/`: `base_controller.Controller` is the Helm workflow (fetch chart, render values, install, upgrade,
-  uninstall) subclassed per inference engine (`hf`, `vllm`, `nim`, `opea`); `vectordb_controller` and
+  uninstall) subclassed per inference engine (`hf`, `vllm`, `nim`, `opea`, `ollama`); `vectordb_controller` and
   `notebooks_controller` are standalone but follow the same shape; `finetune_controller` submits Kubernetes Jobs.
+  `local_chart_path(chart_name)` honours `AIOPS_CHARTS_DIR`: when `<dir>/<chart_name>/Chart.yaml` exists the
+  chart is installed from that directory instead of `chart_repo` (the vector DB and notebook controllers do not
+  read it yet).
+  `OllamaController.get_service_name` returns the bare release name, because the chart's standard fullname helper
+  drops the chart suffix when the release (`ollama-<id8>`) already contains it; the template only renders
+  `models.pull`, `service`, `resources`, `env` and `nodeSelector` (no GPU resources).
+  Engines carry a `cpu` flag (`raw_data/engines.csv`, migration `0004`) that the launch wizard uses to make the
+  accelerator step optional.
   `base_controller.get_chart` strips informational `Chart.yaml` fields that pyhelm3's pydantic models reject
   (the Milvus chart), and the install/uninstall helpers skip release-status parsing for the same reason.
 - `templates/*.yaml.jinja` render the Helm values; the context comes from the instance schema plus engine defaults
@@ -102,6 +111,16 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   `test_app.py` and `test_controller.py` cover the router and the rendered values/policy names.
 - `test_auth.py` signs tokens with a generated RSA key and patches `PyJWKClient.fetch_data`;
   the tests share one SQLite file, so every test removes the rows it creates.
+- `api/chat.py` `POST /v1alpha1/chat/completions` is the OpenAI-compatible passthrough the UI's `/api/chat`
+  route handler calls: the target comes from the `X-AIOps-Instance` header (400 without it, 404 unknown,
+  `authorize_read` for the policy, 503 while the instance has no endpoint), the body is forwarded unchanged to
+  `<instance.endpoint>/v1/chat/completions` with the workload credential in `x-api-key`
+  (`find_credential` + `read_credential_value`), and the SSE stream is relayed when the body has `"stream": true`
+  (upstream 4xx/5xx are forwarded with their text as `detail`, an unreachable upstream is a 502).
+  `resolve_target` and `upstream_client` are module-level seams; `test_chat.py` patches them with an
+  `httpx.MockTransport`. `AIOPS_CHAT_MOCK=true` (only with `TEST_MODE=true`) answers `You said: <last user
+  message>` without any instance, for the Playwright fast tier. The gateway host uses the local CA, so the
+  process needs `SSL_CERT_FILE` (httpx honours it; `make backend` sets it).
 - `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check: `utils/hostnames.py`
   `parse_hostname` turns the `Host` (or `X-Forwarded-Host`) into `(kind, id8, suffix)`
   (`nb`, `vdb`, `vdb ... -api`, `inf`; the parent domain from `gateway_settings()`, or the first label without it),

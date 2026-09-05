@@ -4,11 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  RocketIcon,
-  ClipboardCopyIcon,
-  OpenInNewWindowIcon,
-} from "@radix-ui/react-icons";
+import { RocketIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
 import {
   Select,
   SelectContent,
@@ -194,10 +190,7 @@ export default function InferenceEndpoints() {
                           endpoint.ready ? "text-green-500" : "text-red-500"
                         }
                       >
-                        <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
-                        <a href={`${endpoint.endpoint}/docs`} target="_blank">
-                          {endpoint.endpoint || "N/A"}
-                        </a>
+                        {endpoint.endpoint || "N/A"}
                       </span>
                       <Button
                         variant="outline"

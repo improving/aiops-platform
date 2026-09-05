@@ -42,6 +42,10 @@ from utils.kubernetes_utils import (
 # The kind tag for utils/credentials.py: one API key per inference instance.
 CREDENTIAL_KIND = "inf"
 
+# Engines that pull their models themselves, without a Hugging Face token
+# (every other engine's chart reads the hf-api-token Secret).
+NO_HF_TOKEN_ENGINES = {"ollama"}
+
 router = APIRouter()
 
 # Initialize the logger
@@ -272,7 +276,7 @@ async def create_inference_instance(
         if engine.name == "nim" and not NGC_API_KEY:
             logger.error("NGC API key not set")
             raise HTTPException(status_code=400, detail="NGC API key not set")
-        if not HF_API_TOKEN:
+        if engine.name.lower() not in NO_HF_TOKEN_ENGINES and not HF_API_TOKEN:
             logger.error("HuggingFace API token not set")
             raise HTTPException(
                 status_code=400, detail="HuggingFace API token not set."
@@ -310,7 +314,17 @@ async def create_inference_instance(
             f"Full instance:\n{pprint.pformat(full_instance.model_dump(), indent=4, width=120)}"
         )
 
-        controller = get_controller(engine.name)
+        try:
+            controller = get_controller(engine.name)
+        except Exception as e:
+            db.delete(db_instance)
+            db.delete(db_config)
+            db.commit()
+            logger.exception(f"Failed to build the controller: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to build the controller: {str(e)}",
+            )
 
         try:
             credential_value = generate_secret(seed=str(db_instance.id))
@@ -740,7 +754,9 @@ def update_instance_endpoints(instanceId: uuid.UUID, db: Session):
     if gateway_settings() is not None:
         # The hostname is deterministic, so the endpoint is set as soon as
         # the gateway is configured, without waiting for the Service.
-        instance.endpoint = instance_url("inf", instance.id)
+        # No trailing slash: the UI and SDK clients append paths such as
+        # /v1/chat/completions to this value.
+        instance.endpoint = instance_url("inf", instance.id, path="")
         db.commit()
         return
 

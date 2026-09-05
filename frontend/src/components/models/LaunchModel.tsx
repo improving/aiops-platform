@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { enginesForModel, cpuOnly } from "@/lib/engines";
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -105,25 +106,11 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     if (model && engines.length > 0) {
-      const filtered = engines.filter((engine) => {
-        switch (model.category) {
-          case "llm":
-            return engine.llm_support;
-          case "embedding":
-            return engine.embedding_support;
-          case "reranker":
-            return engine.reranking_support;
-          case "prompt_guard":
-            return engine.prompt_guard_support;
-          case "vector_db":
-            return engine.vector_db_support;
-          default:
-            return false;
-        }
-      });
-      setFilteredEngines(filtered);
+      setFilteredEngines(enginesForModel(model, engines));
     }
   }, [model, engines]);
+
+  const needsHost = !cpuOnly(filteredEngines);
 
   useEffect(() => {
     if (formData.engineId) {
@@ -265,7 +252,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   };
 
   const handleTabChange = (value: string) => {
-    if (value !== "accelerators" && !formData.hostId) {
+    if (value !== "accelerators" && !formData.hostId && needsHost) {
       toast({
         title: "Host Selection Required",
         description:
@@ -294,7 +281,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
   const handleNext = () => {
     if (activeTab === "accelerators") {
-      if (!formData.hostId) {
+      if (!formData.hostId && needsHost) {
         toast({
           title: "Host Selection Required",
           description: "Please select a host or click Skip to auto-select.",
@@ -327,12 +314,15 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="accelerators">Accelerators</TabsTrigger>
-          <TabsTrigger value="deployConfig" disabled={!formData.hostId}>
+          <TabsTrigger
+            value="deployConfig"
+            disabled={!formData.hostId && needsHost}
+          >
             Deploy Config
           </TabsTrigger>
           <TabsTrigger
             value="envVars"
-            disabled={!formData.hostId || !formData.engineId}
+            disabled={(!formData.hostId && needsHost) || !formData.engineId}
           >
             CLI Args and Env Variables
           </TabsTrigger>
@@ -341,70 +331,78 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
           <DisplayCard
             title="Select Accelerator"
             content={
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {hosts.map((host) => (
-                  <DisplayCard
-                    key={host.hostname}
-                    icon={<DesktopIcon className="mr-2 h-4 w-4" />}
-                    className={`cursor-pointer transition duration-300 ease-in-out ${
-                      formData.hostId === host.hostname
-                        ? "ring-2 ring-blue-500"
-                        : "hover:shadow-xl"
-                    }`}
-                    onClick={() =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        hostId: host.hostname,
-                      }))
-                    }
-                    title={
-                      host.gpu_model && host.gpu_model !== "N/A"
-                        ? host.gpu_model
-                        : "No GPU detected"
-                    }
-                    content={
-                      <>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                            Host: {host.hostname || "N/A"}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {host.cpu_cores > 0 && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                              {host.cpu_cores} CPU Cores
+              <>
+                {!needsHost && (
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    This model runs on CPU. Pick a host to pin it to a node, or
+                    click Next to let the scheduler choose.
+                  </p>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {hosts.map((host) => (
+                    <DisplayCard
+                      key={host.hostname}
+                      icon={<DesktopIcon className="mr-2 h-4 w-4" />}
+                      className={`cursor-pointer transition duration-300 ease-in-out ${
+                        formData.hostId === host.hostname
+                          ? "ring-2 ring-blue-500"
+                          : "hover:shadow-xl"
+                      }`}
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          hostId: host.hostname,
+                        }))
+                      }
+                      title={
+                        host.gpu_model && host.gpu_model !== "N/A"
+                          ? host.gpu_model
+                          : "No GPU detected"
+                      }
+                      content={
+                        <>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                              Host: {host.hostname || "N/A"}
                             </span>
-                          )}
-                          {host.cpu_cores > 0 && (
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                              CPU: {host.cpu_vendor} -{" "}
-                              {(host.cpu_memory / 1024).toFixed(1)} GB Memory
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {host.gpu_count > 0 && (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
-                              {host.gpu_count} GPU
-                            </span>
-                          )}
-                          {host.gpu_replicas > 1 && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                              {`${host.gpu_replicas - host.gpu_usage} / ${host.gpu_replicas} slice-free`}
-                            </span>
-                          )}
-                          {host.gpu_memory > 0 && (
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                              {(host.gpu_memory / 1024).toFixed(1)} GB GPU
-                              Memory
-                            </span>
-                          )}
-                        </div>
-                      </>
-                    }
-                  />
-                ))}
-              </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {host.cpu_cores > 0 && (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                                {host.cpu_cores} CPU Cores
+                              </span>
+                            )}
+                            {host.cpu_cores > 0 && (
+                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                                CPU: {host.cpu_vendor} -{" "}
+                                {(host.cpu_memory / 1024).toFixed(1)} GB Memory
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {host.gpu_count > 0 && (
+                              <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
+                                {host.gpu_count} GPU
+                              </span>
+                            )}
+                            {host.gpu_replicas > 1 && (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                                {`${host.gpu_replicas - host.gpu_usage} / ${host.gpu_replicas} slice-free`}
+                              </span>
+                            )}
+                            {host.gpu_memory > 0 && (
+                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                                {(host.gpu_memory / 1024).toFixed(1)} GB GPU
+                                Memory
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      }
+                    />
+                  ))}
+                </div>
+              </>
             }
             footer={
               <div className="flex justify-between space-x-4">

@@ -100,8 +100,18 @@ export type EngineRecord = {
   id: string;
   name: string;
   llm_support: boolean;
+  cpu: boolean;
   default_args: { name: string; defaultValue: string }[];
   default_config: { name: string; defaultValue: string }[];
+};
+
+export type InferenceInstanceRecord = {
+  id: string;
+  ready: boolean;
+  status: string | null;
+  endpoint: string | null;
+  model: { id: string; name: string; modelId: string };
+  engine: { id: string; name: string };
 };
 
 /** OIDC settings for the client-credentials grant the `api` fixture uses. */
@@ -314,6 +324,46 @@ export class BackendApi {
           message: `vector DB instance ${id} did not become ready`,
           timeout: timeoutMs,
           intervals: [5_000],
+        }
+      )
+      .toBe(true);
+    return last!;
+  }
+
+  async inferenceInstances(): Promise<InferenceInstanceRecord[]> {
+    const res = await this.send("GET", "/inferenceInstance");
+    expect(res.ok(), `GET /inferenceInstance -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async inferenceInstance(id: string): Promise<InferenceInstanceRecord | null> {
+    const res = await this.send("GET", `/inferenceInstance/${id}`);
+    if (res.status() === 404) return null;
+    expect(res.ok()).toBeTruthy();
+    return res.json();
+  }
+
+  async deleteInferenceInstance(id: string): Promise<void> {
+    const res = await this.send("DELETE", `/inferenceInstance/${id}`);
+    expect([200, 204, 404]).toContain(res.status());
+  }
+
+  /** Poll until the inference instance is ready and has an endpoint. */
+  async waitForInferenceReady(
+    id: string,
+    timeoutMs = 12 * 60_000
+  ): Promise<InferenceInstanceRecord> {
+    let last: InferenceInstanceRecord | null = null;
+    await expect
+      .poll(
+        async () => {
+          last = await this.inferenceInstance(id);
+          return !!last?.ready && !!last?.endpoint;
+        },
+        {
+          message: `inference instance ${id} did not become ready`,
+          timeout: timeoutMs,
+          intervals: [10_000],
         }
       )
       .toBe(true);

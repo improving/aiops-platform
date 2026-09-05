@@ -52,8 +52,12 @@ export class AppShell {
   async goto(path = "/") {
     await this.page.goto(path);
     // Pages fetch their data on mount and re-render; wait for that to settle
-    // so a click right after goto is not swallowed by the re-render.
-    await this.page.waitForLoadState("networkidle");
+    // so a click right after goto is not swallowed by the re-render, but
+    // never fail a test on it: on a loaded machine the catalog pages keep
+    // fetching images and are never idle.
+    await this.page
+      .waitForLoadState("networkidle", { timeout: 10_000 })
+      .catch(() => {});
   }
 
   /**

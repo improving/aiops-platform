@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repository is
 
 A control plane that onboards AI infrastructure and deploys AI services on Kubernetes through Helm:
-inference engines (Hugging Face TGI/TEI, vLLM, NVIDIA NIM, OPEA), vector databases (ChromaDB, Milvus, Qdrant),
-Kubeflow notebooks, LoRA adapters and fine-tune jobs.
+inference engines (Ollama on CPU, Hugging Face TGI/TEI, vLLM, NVIDIA NIM, OPEA), vector databases (ChromaDB, Milvus, Qdrant),
+Kubeflow notebooks, LoRA adapters and fine-tune jobs, plus a chat page that streams answers from a deployed model.
 It is a monorepo assembled from four former repositories with their history (`MIGRATION.md`).
 
 | Directory | Contents |
@@ -35,7 +35,10 @@ It is a monorepo assembled from four former repositories with their history (`MI
    Kubernetes Service (LoadBalancer ingress, else cluster IP), or from the gateway hostname when
    `AIOPS_PARENT_DOMAIN` is set (see point 7). The UI polls the API every 5 s while work is pending.
 5. Notebooks are `kind: Notebook` custom resources, so the cluster needs the standalone Kubeflow notebook controller
-   (`make kind-up` installs it). GPU engines are catalog-only on a laptop.
+   (`make kind-up` installs it). GPU engines are catalog-only on a laptop;
+   Ollama (`backend/controller/ollama_controller.py`, `charts/ollama`, engine flag `cpu`) is the one engine that runs on kind.
+   `AIOPS_CHARTS_DIR` (set by `make backend` to `charts/`) makes the controllers install a chart from the checkout
+   when `charts/<chart_name>/Chart.yaml` exists, so a chart can be tried before it is published.
 6. **Identity: Keycloak is the only identity provider.**
    The UI signs users in with Auth.js against the realm `aiops` (OIDC code flow with PKCE)
    and keeps the access token in its session;
@@ -58,6 +61,14 @@ It is a monorepo assembled from four former repositories with their history (`MI
    both kinds of policy, plus the `HTTPRoute`s themselves, are created by `backend/utils/gateway.py`
    and are no-ops without `AIOPS_PARENT_DOMAIN` set,
    so a plain `uv run uvicorn` behaves exactly as before the gateway existed.
+8. **Chat goes through the control plane, never straight to a model.**
+   The `/chat` page uses the Vercel AI SDK against the UI's own route handler `frontend/src/app/api/chat/route.ts`,
+   which calls `POST /v1alpha1/chat/completions` (`backend/api/chat.py`) with the session's bearer token
+   and the target instance in `X-AIOps-Instance`;
+   the backend checks the read policy, then forwards the OpenAI-compatible body to the instance's `inf-<id8>` gateway host
+   with the instance's workload credential and streams the SSE answer back.
+   Conversations live in the browser only.
+   `AIOPS_CHAT_MOCK=true` (honoured only with `TEST_MODE=true`) answers with a canned echo for the Playwright fast tier.
 
 ## Local stack and commands
 

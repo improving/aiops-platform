@@ -232,6 +232,7 @@ backend: ## Run the backend API with uv (needs helm on PATH and a kubeconfig)
 		AIOPS_PARENT_DOMAIN=127.0.0.1.nip.io \
 		AIOPS_GATEWAY_NAME=aiops \
 		AIOPS_GATEWAY_NAMESPACE=envoy-gateway-system \
+		AIOPS_CHARTS_DIR=$(PWD)/charts \
 		SSL_CERT_FILE=$(PWD)/infra/local/ca/ca.crt \
 		REQUESTS_CA_BUNDLE=$(PWD)/infra/local/ca/ca.crt \
 		uv run uvicorn app:app --reload --port 8000
@@ -250,7 +251,7 @@ frontend: ## Run the frontend dev server with pnpm (Keycloak login; AUTH_MODE=di
 
 # --- smoke test ---------------------------------------------------------------
 
-e2e-smoke: ## Run the end-to-end smoke test against a running backend (pass ARGS="--skip-notebook" to skip the notebook part)
+e2e-smoke: ## Run the end-to-end smoke test against a running backend (ARGS="--skip-notebook --skip-ollama" skips those parts)
 	BACKEND_URL=$(BACKEND_URL) AUTH_MODE=$(AUTH_MODE) OIDC_ISSUER=$(OIDC_ISSUER) CA_CERT=$(CA_CRT) \
 		AUTOMATION_CLIENT_ID=$(AUTOMATION_CLIENT_ID) AUTOMATION_CLIENT_SECRET=$(AUTOMATION_CLIENT_SECRET) \
 		./hack/e2e-smoke.sh $(ARGS)

@@ -10,7 +10,10 @@
 #     there is no gateway)
 #   - create a Jupyter notebook instance, wait for it to be Running, curl its
 #     base path through a port-forward (skip with --skip-notebook)
-#   - delete both instances and wait for their Helm releases to disappear
+#   - launch qwen3:0.6b on the Ollama engine, wait for it to be Ready and ask
+#     for one chat completion through /v1alpha1/chat/completions (skip with
+#     --skip-ollama; the first run pulls the Ollama image and the model)
+#   - delete every instance it created
 #
 # Requires: curl, jq, kubectl. Run via `make e2e-smoke` or directly.
 set -euo pipefail
@@ -31,10 +34,12 @@ OIDC_ISSUER="${OIDC_ISSUER:-https://auth.127.0.0.1.nip.io/realms/aiops}"
 AUTOMATION_CLIENT_ID="${AUTOMATION_CLIENT_ID:-aiops-automation}"
 AUTOMATION_CLIENT_SECRET="${AUTOMATION_CLIENT_SECRET:-dev-automation-secret}"
 SKIP_NOTEBOOK=false
+SKIP_OLLAMA=false
 
 for arg in "$@"; do
   case "$arg" in
     --skip-notebook) SKIP_NOTEBOOK=true ;;
+    --skip-ollama) SKIP_OLLAMA=true ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -51,10 +56,14 @@ done
 FAILURES=0
 VECTORDB_INSTANCE_ID=""
 NOTEBOOK_INSTANCE_ID=""
+INFERENCE_INSTANCE_ID=""
 PF_PID=""
 TOKEN=""
 API_BODY_FILE=/tmp/e2e-api-body.json
 API_STATUS=""
+# One extra request header for the next api_call (the chat step selects its
+# instance with X-AIOps-Instance); empty means none.
+API_EXTRA_HEADER=""
 
 pass() { printf "PASS  %-55s %s\n" "$1" "${2:-}"; }
 fail() { printf "FAIL  %-55s %s\n" "$1" "${2:-}"; FAILURES=$((FAILURES + 1)); }
@@ -91,6 +100,7 @@ api_call() {
   local method="$1" path="$2" data="${3:-}"
   local args=(-sS -o "$API_BODY_FILE" -w "%{http_code}" -X "$method")
   [[ -n "$TOKEN" ]] && args+=(-H "Authorization: Bearer $TOKEN")
+  [[ -n "$API_EXTRA_HEADER" ]] && args+=(-H "$API_EXTRA_HEADER")
   [[ -n "$data" ]] && args+=(-H "Content-Type: application/json" -d "$data")
   API_STATUS=$(curl "${args[@]}" "$BACKEND_URL$path") || API_STATUS="000"
 }
@@ -126,6 +136,10 @@ cleanup() {
   if [[ -n "$NOTEBOOK_INSTANCE_ID" ]]; then
     info "cleanup: deleting notebook instance $NOTEBOOK_INSTANCE_ID"
     api_delete "/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID" || true
+  fi
+  if [[ -n "$INFERENCE_INSTANCE_ID" ]]; then
+    info "cleanup: deleting inference instance $INFERENCE_INSTANCE_ID"
+    api_delete "/v1alpha1/inferenceInstance/$INFERENCE_INSTANCE_ID" || true
   fi
 }
 trap cleanup EXIT
@@ -439,10 +453,78 @@ step_delete_notebook() {
   fi
 }
 
+# --- Ollama: launch qwen3:0.6b and ask one question ---------------------------
+
+step_create_ollama() {
+  local model_id engine_id
+  api_get "/v1alpha1/models"
+  model_id=$(jq -r '.[] | select(.modelId == "qwen3:0.6b") | .id' "$API_BODY_FILE" | head -1)
+  api_get "/v1alpha1/engines"
+  engine_id=$(jq -r '.[] | select(.name == "Ollama") | .id' "$API_BODY_FILE" | head -1)
+  if [[ -z "$model_id" || -z "$engine_id" || "$model_id" == "null" || "$engine_id" == "null" ]]; then
+    fail "resolve qwen3:0.6b and the Ollama engine" "model=$model_id engine=$engine_id"
+    return
+  fi
+  info "qwen3:0.6b catalog id: $model_id, Ollama engine id: $engine_id"
+
+  api_post "/v1alpha1/inferenceInstance" \
+    "{\"model\":{\"id\":\"$model_id\"},\"engine\":{\"id\":\"$engine_id\"},\"config\":{}}"
+  if [[ "$API_STATUS" != "201" ]]; then
+    fail "POST /v1alpha1/inferenceInstance (Ollama)" "http_status=$API_STATUS body=$(cat "$API_BODY_FILE")"
+    return
+  fi
+  INFERENCE_INSTANCE_ID=$(jq -r '.id' "$API_BODY_FILE")
+  pass "POST /v1alpha1/inferenceInstance (Ollama qwen3:0.6b)" "id=$INFERENCE_INSTANCE_ID $(elapsed)"
+}
+
+step_wait_ollama_ready() {
+  [[ -z "$INFERENCE_INSTANCE_ID" ]] && { fail "wait for Ollama instance Ready" "no instance id (create failed)"; return; }
+  # The first run pulls the 2.6 GiB Ollama image and the model.
+  local deadline=$(( $(date +%s) + 900 ))
+  local endpoint="" ready="false"
+  while [[ $(date +%s) -lt $deadline ]]; do
+    api_get "/v1alpha1/inferenceInstance/$INFERENCE_INSTANCE_ID"
+    endpoint=$(jq -r '.endpoint // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+    ready=$(jq -r '.ready // false' "$API_BODY_FILE" 2>/dev/null || echo "false")
+    if [[ -n "$endpoint" && "$ready" == "true" ]]; then
+      pass "Ollama instance Ready" "endpoint=$endpoint $(elapsed)"
+      return
+    fi
+    sleep 10
+  done
+  fail "wait for Ollama instance Ready" "timed out after 15m (endpoint=$endpoint ready=$ready)"
+}
+
+step_chat_completion() {
+  [[ -z "$INFERENCE_INSTANCE_ID" ]] && { fail "POST /v1alpha1/chat/completions" "no instance id"; return; }
+  API_EXTRA_HEADER="X-AIOps-Instance: $INFERENCE_INSTANCE_ID"
+  api_post "/v1alpha1/chat/completions" \
+    '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Reply with the single word pong."}],"stream":false}'
+  API_EXTRA_HEADER=""
+  local content
+  content=$(jq -r '.choices[0].message.content // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+  if [[ "$API_STATUS" == "200" && -n "$content" ]]; then
+    pass "POST /v1alpha1/chat/completions" "answer=$(echo "$content" | head -c 60 | tr '\n' ' ') $(elapsed)"
+  else
+    fail "POST /v1alpha1/chat/completions" "http_status=$API_STATUS body=$(head -c 300 "$API_BODY_FILE")"
+  fi
+}
+
+step_delete_ollama() {
+  [[ -z "$INFERENCE_INSTANCE_ID" ]] && return
+  api_delete "/v1alpha1/inferenceInstance/$INFERENCE_INSTANCE_ID"
+  if [[ "$API_STATUS" == "200" ]]; then
+    pass "DELETE /v1alpha1/inferenceInstance/$INFERENCE_INSTANCE_ID" "$(elapsed)"
+    INFERENCE_INSTANCE_ID=""
+  else
+    fail "DELETE /v1alpha1/inferenceInstance/$INFERENCE_INSTANCE_ID" "http_status=$API_STATUS"
+  fi
+}
+
 # --- run ---------------------------------------------------------------------
 
 echo "== aiops-platform e2e smoke test =="
-echo "BACKEND_URL=$BACKEND_URL NAMESPACE=$NAMESPACE AUTH_MODE=$AUTH_MODE SKIP_NOTEBOOK=$SKIP_NOTEBOOK"
+echo "BACKEND_URL=$BACKEND_URL NAMESPACE=$NAMESPACE AUTH_MODE=$AUTH_MODE SKIP_NOTEBOOK=$SKIP_NOTEBOOK SKIP_OLLAMA=$SKIP_OLLAMA"
 echo ""
 
 if [[ "$AUTH_MODE" != "disabled" ]]; then
@@ -467,6 +549,15 @@ if ! $SKIP_NOTEBOOK; then
   step_delete_notebook
 else
   echo "SKIP  notebook steps (--skip-notebook)"
+fi
+
+if ! $SKIP_OLLAMA; then
+  step_create_ollama
+  step_wait_ollama_ready
+  step_chat_completion
+  step_delete_ollama
+else
+  echo "SKIP  ollama steps (--skip-ollama)"
 fi
 
 echo ""

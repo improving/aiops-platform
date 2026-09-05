@@ -114,6 +114,7 @@ export default defineConfig<E2EOptions>({
             TEST_MODE: "true",
             AUTH_MODE: "disabled",
             KUBECONFIG: NO_KUBECONFIG,
+            AIOPS_CHAT_MOCK: "true",
           },
           // A fresh SQLite per run is the point of TEST_MODE; never reuse.
           reuseExistingServer: false,

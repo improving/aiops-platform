@@ -1,6 +1,8 @@
 # Small models on kind, chat, providers and a managed model registry
 
-Status: proposed, for review.
+Status: accepted (PR #3).
+Phase 1 is implemented on `feat/models-chat` (plan: `docs/superpowers/plans/2026-09-05-models-chat-phase1.md`);
+Phases 2 and 3 get their own plans and pull requests.
 Decisions extracted from this document live in `docs/adr/0005` to `0007`.
 Facts were checked on 2026-09-05; items marked *unverified* come from documentation, not from a test on this stack.
 

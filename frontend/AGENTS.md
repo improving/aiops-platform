@@ -36,6 +36,21 @@ pnpm e2e:ui                               # Playwright UI mode
   `toast(parseApiError(error))`.
 - Lists that wait on Kubernetes (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`, notebook details) refresh
   through `src/hooks/usePolling.ts` every 5 s while any item is non-terminal; refreshes are silent (no spinner, no toast).
+- `src/lib/engines.ts` decides which engines a catalog entry can launch on: `enginesForModel` keeps the engines that
+  support the model's category and offers Ollama only for Ollama tags (`qwen3:0.6b`: a `:` and no `/`), never for
+  Hugging Face ids; `cpuOnly` makes the launch wizard's accelerator step optional (Next without a host) when every
+  candidate engine has `cpu: true`. This rule is a Phase 1 stopgap that the registry's serving options replace.
+- `src/lib/backend.ts` `backendUrl()` is the one place that resolves the backend URL on the server
+  (`AIOPS_BACKEND_URL`, else the inlined `NEXT_PUBLIC_AIOPS_BACKEND_URL`); `src/proxy.ts` and the chat route use it.
+- Chat: `src/app/api/chat/route.ts` is a Node route handler on the Vercel AI SDK
+  (`createOpenAICompatible` pointed at `<backend>/v1alpha1`, `streamText`, `toUIMessageStream`,
+  `createUIMessageStreamResponse`). The body is `{ messages, instanceId, model, system, temperature }`; the handler
+  reads the session itself (`auth()`, 401 without one unless `AUTH_MODE=disabled`), forwards the bearer and
+  `X-AIOps-Instance` to `POST /v1alpha1/chat/completions`, and is excluded from the proxy matcher so it answers
+  JSON instead of a login redirect. `src/components/chat/ChatPanel.tsx` (`/chat`, `?instance=<id>` preselects) uses
+  `useChat` with a `DefaultChatTransport` whose `prepareSendMessagesRequest` adds the target, keeps one
+  conversation per instance in `localStorage` (`aiops.chat.<instanceId>`), and lists only instances that are
+  `ready` with an `endpoint`. The endpoint details page links to it with a "Chat" button.
 - Forms use react-hook-form with zod (`@hookform/resolvers`). Gate submit buttons on reported errors, not on
   `formState.isValid`, which does not turn true reliably with coerced number fields. The notebook name rule
   mirrors the backend: DNS-1123 label, max 32 characters.
@@ -63,7 +78,8 @@ pnpm e2e:ui                               # Playwright UI mode
   move it into a server action (Auth.js issue #13388 on Next 16). Sign-out is `signOut({ redirect: false })` followed by
   a navigation to `session.endSessionUrl` so the Keycloak SSO session ends too.
 - The Playwright fast tier runs with `AUTH_MODE=disabled` and `NEXT_PUBLIC_AUTH_MODE=disabled`
-  (set in `playwright.config.ts`), so specs must not depend on the user menu.
+  (set in `playwright.config.ts`), so specs must not depend on the user menu; its managed backend also has
+  `AIOPS_CHAT_MOCK=true`, so `chat.spec.ts` gets a canned streamed echo through the real route handler.
 - The `cluster` tier logs in for real:
   the `setup` project (`e2e/auth.setup.ts`) signs alice, bob and admin into Keycloak through its own login form
   and saves each session to `playwright/.auth/<user>.json` (git-ignored);

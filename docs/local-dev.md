@@ -272,7 +272,11 @@ completed as a normal top-level navigation.
 `DATABASE_*` (the Postgres above), `AIOPS_NAMESPACE`, `AUTH_MODE` (default `oidc`) and `OIDC_ISSUER`,
 the gateway env contract from "Gateway and TLS" above
 (`AIOPS_PARENT_DOMAIN=127.0.0.1.nip.io`, `AIOPS_GATEWAY_NAME=aiops`, `AIOPS_GATEWAY_NAMESPACE=envoy-gateway-system`),
-and `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` pointed at the local CA so it can reach Keycloak's JWKS endpoint.
+and `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` pointed at the local CA so it can reach Keycloak's JWKS endpoint
+(and, for `/v1alpha1/chat/completions`, the gateway host of an inference instance).
+It also sets `AIOPS_CHARTS_DIR=$(PWD)/charts`:
+a chart that exists there (`charts/<chart_name>/Chart.yaml`) is installed from the checkout
+instead of the published index, so a chart change can be tried before it is released.
 Without `AIOPS_PARENT_DOMAIN` set (a plain `uv run uvicorn`),
 no `HTTPRoute`s or `SecurityPolicy`s are created for deployed instances
 and their endpoint falls back to the `ClusterIP` --
@@ -293,6 +297,46 @@ and any of the three dev users can sign in (see "Dev users and clients" under Ke
 `AUTH_MODE=disabled` skips the login redirect and the bearer header entirely
 and is meant only for the fast Playwright tier.
 
+## Chat with a small model on Ollama
+
+Ollama is an inference engine like the others, but it runs on CPU,
+so it is the one engine that works on the kind stack.
+The catalog carries three Apache 2.0 Ollama tags
+(`qwen3:0.6b`, `qwen2.5:1.5b-instruct`, `smollm2:1.7b`; `backend/raw_data/models.csv`);
+launching one from the catalog offers only the Ollama engine,
+and the accelerator step can be skipped with Next (no GPU host needed).
+The first launch pulls the Ollama image (about 2.6 GiB) and the model (0.5 to 1.8 GiB) onto the kind node,
+so the instance takes 5 to 10 minutes to become Ready the first time;
+the chart's `postStart` hook pulls the model before the pod reports Ready.
+The instance gets the usual `inf-<id8>` gateway host with an API key.
+That host answers `401 Client authentication failed.` to a browser,
+because only requests with the key in `x-api-key` pass the gateway,
+and Ollama has no `/docs` page either:
+use the Chat page, or an OpenAI-compatible client pointed at `<endpoint>/v1` with the key.
+
+`/chat` (the "Chat" header link, or the "Chat" button on an endpoint page) talks to a Ready instance:
+the browser posts to the UI's own `/api/chat` route handler (Vercel AI SDK),
+which calls the backend's `POST /v1alpha1/chat/completions` with the session's bearer token
+and the `X-AIOps-Instance` header;
+the backend forwards the OpenAI-compatible request to the instance's gateway host with its workload credential
+and streams the answer back.
+Conversations stay in the browser (`localStorage`, one per instance) and are never stored server-side.
+
+To talk to an instance from a terminal, use the same endpoint with the automation token
+(`hack/e2e-smoke.sh` does exactly this):
+
+```bash
+curl -sN localhost:8000/v1alpha1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" -H "X-AIOps-Instance: <instance id>" \
+  -H 'content-type: application/json' \
+  -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"hello"}],"stream":true}'
+```
+
+Memory: the chart requests 1 CPU and 2 GiB and limits memory to 4 GiB
+(`backend/templates/ollama-llm-values.yaml.jinja`, `charts/ollama/values.yaml`);
+one small model fits next to Keycloak, the gateway and Langflow on the 8 GiB colima VM.
+Check with `kubectl top nodes` while a model answers.
+
 ## Tests
 
 `docs/testing.md` covers both Playwright tiers in full:
@@ -300,6 +344,8 @@ and is meant only for the fast Playwright tier.
 logged in as alice by default) -- and how to add a scenario.
 `make e2e-smoke` is the API-level smoke test;
 see "How deployed instances become reachable" below for what it checks.
+It also launches `qwen3:0.6b` on Ollama, waits for Ready and asks for one chat completion
+(`ARGS="--skip-ollama"` skips that part, `--skip-notebook` the notebook part).
 
 ## How deployed instances become reachable
 
@@ -571,6 +617,13 @@ notebook-controller install -- and confirm with:
 ```
 kubectl get crd notebooks.kubeflow.org
 ```
+
+### The dev server answers "Page not found" for a new route
+
+A `next dev` that was started before a new `src/app/<route>/page.tsx` existed
+(for example after a `git checkout` or a cherry-pick that added the file)
+can keep answering 404 for that route while every existing page still works.
+Restart `make frontend`; the built UI of the fast Playwright tier is not affected.
 
 ### Seeing what's actually running
 

@@ -131,6 +131,11 @@ Both make targets accept `ARGS`, for example `make ui-e2e ARGS="--grep theme"`.
 | `AUTOMATION_CLIENT_SECRET` | `dev-automation-secret`                      | client-credentials secret; a literal dev value, never a real secret |
 | `E2E_LANGFLOW_URL`  | `https://langflow.127.0.0.1.nip.io`                  | the iframe `src` `auth-login.spec.ts` expects on `/develop` (the frontend's `NEXT_PUBLIC_LANGFLOW_URL`) |
 
+The managed backend of the fast tier also runs with `AIOPS_CHAT_MOCK=true`
+(honoured by `backend/api/chat.py` only together with `TEST_MODE=true`):
+`POST /v1alpha1/chat/completions` then streams `You said: <last user message>` without any instance,
+so `chat.spec.ts` exercises the real `/api/chat` route handler and the AI SDK stream with only the instance list stubbed.
+
 `playwright.config.ts` picks the effective auth mode per project:
 `E2E_AUTH_MODE` if set, else `AUTH_MODE` if it names `oidc` or `disabled`,
 else the project's own default — `disabled` for `fast`, `oidc` for `cluster`.
@@ -166,7 +171,8 @@ frontend/
   Playwright reads an array whose second element is an object — a RegExp included — as a `[value, options]` fixture tuple
   and silently keeps only the first entry.
 - `api` is a `BackendApi` bound to `E2E_BACKEND_URL`.
-  It lists and deletes notebooks, vector DB instances and fine-tune jobs, and polls with `waitForNotebookStatus` and `waitForVectorDBReady`.
+  It lists and deletes notebooks, vector DB instances, inference instances and fine-tune jobs,
+  and polls with `waitForNotebookStatus`, `waitForVectorDBReady` and `waitForInferenceReady`.
   On the cluster project it attaches a bearer token (see "Authentication") and retries once, with a fresh token, on a 401 —
   the access token is short-lived and a poll can outlive it.
 - `asUser(name)` returns a `BrowserContext` signed in as `"alice" | "bob" | "admin"`, restored from the saved storage state.
@@ -284,7 +290,8 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `models-catalog.spec.ts`      | search, category and subcategory filters, combined filters, Import Model dialog, card link              | pass                          | 3 s   |
 | `model-details.spec.ts`       | Details tab content, `?tab=` reflects the tab and survives reload, deep link, Launch Model             | pass                          | 4 s   |
 | `finetune-form.spec.ts`       | sections and defaults, required fields block the submit, backend rejection toast, stubbed create/list/params/delete flow | pass | 3 s |
-| `launch-form.spec.ts`         | the three wizard steps, engine filtering, empty argument name blocks the submit, rejected deploy toast  | pass                          | 3 s   |
+| `launch-form.spec.ts`         | the three wizard steps, engine filtering, empty argument name blocks the submit, rejected deploy toast; an Ollama tag offers only Ollama and needs no host, a Hugging Face id never offers Ollama | pass | 4 s |
+| `chat.spec.ts`                | pick a target, streamed answer from the mock backend, history survives a reload, clear; `?instance=` preselects; empty state links to the catalog | pass | 3 s |
 | `vector-db-catalog.spec.ts`   | three cards, Launch dialog, Cancel                                                                       | pass; service type `fixme` (no control in the dialog yet) | 1 s   |
 | `notebook-form.spec.ts`       | defaults, VS Code hides framework and GPU, GPU count, name rules, out-of-range storage, helper text     | pass                          | 2 s   |
 | `error-pages.spec.ts`         | unknown model, unknown notebook, unknown route shows the not-found page                                 | pass                          | 4 s   |
@@ -300,6 +307,7 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `auth-login.spec.ts`          | fresh context: `/` redirects to `/login`, Keycloak login as alice, user menu shows name and email, `/develop` embeds Langflow from the gateway host, sign out lands on `/login` | 2 s |
 | `notebook-access.spec.ts`     | alice creates a Jupyter notebook, opens its gateway URL and sees JupyterLab; bob gets 403 on the same URL, does not see it in `/notebooks` and gets 403 from the API; alice deletes it | 42 s |
 | `vector-db-credential.spec.ts`| alice deploys Qdrant, "Show credential" shows the key once, the `-api` host answers 401 without the key and 200 with it, second click says "already revealed", delete from the UI | 41 s |
+| `chat-lifecycle.spec.ts`      | launch `qwen3:0.6b` on Ollama from the wizard (no host), Ready with an `inf-` endpoint, "Chat" on the endpoint page, one streamed answer on `/chat`, delete, Helm release gone | 3 to 10 min (image and model pull on the first run) |
 
 The cluster times assume the images are already on the kind node.
 The first pull of a notebook or Qdrant image adds minutes; the tests wait up to 6 minutes for a notebook and 5 for a vector DB.

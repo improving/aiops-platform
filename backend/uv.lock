@@ -100,6 +100,7 @@ dependencies = [
     { name = "alembic" },
     { name = "apscheduler" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "kubernetes" },
     { name = "psycopg2-binary" },
@@ -114,7 +115,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-snapshot" },
@@ -126,6 +126,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.19,<2" },
     { name = "apscheduler", specifier = ">=3.11.3,<4" },
     { name = "fastapi", specifier = ">=0.141.1,<0.142" },
+    { name = "httpx", specifier = ">=0.28.1,<0.29" },
     { name = "jinja2", specifier = ">=3.1.6,<4" },
     { name = "kubernetes", specifier = ">=36.0.3,<37" },
     { name = "psycopg2-binary", specifier = ">=2.9.12,<3" },
@@ -140,7 +141,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1,<0.29" },
     { name = "pytest", specifier = ">=9.1.1,<10" },
     { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
     { name = "pytest-snapshot", specifier = ">=0.9.0,<1" },

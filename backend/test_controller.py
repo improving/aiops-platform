@@ -28,7 +28,7 @@ from utils import credentials, genid
 
 
 def test_controller():
-    for engine_name in ["huggingface", "nim", "vllm", "opea"]:
+    for engine_name in ["huggingface", "nim", "vllm", "opea", "ollama"]:
         controller = get_controller(engine_name, core_v1_api=mock.Mock())
         assert controller is not None
 
@@ -121,7 +121,7 @@ async def test_model_controller_helm_values(snapshot):  # pylint: disable=R0914
         },
     }
     for engine_name, engine_schema in engine_schemas_map.items():
-        if engine_name == "opea":
+        if engine_name in ("opea", "ollama"):
             continue
         controller = get_controller(engine_name, core_v1_api=mock.Mock())
         assert controller is not None
@@ -979,3 +979,87 @@ async def test_create_inference_instance_credential_enables_the_apikey_policy(
         helm._command.uninstall = mock.AsyncMock()
         deleted = client_.delete(f"/v1alpha1/inferenceInstance/{instance_id}")
         assert deleted.status_code == 200, deleted.text
+
+
+def test_local_chart_path_requires_the_env_and_a_chart_yaml(
+    monkeypatch, tmp_path
+):
+    from controller.base_controller import local_chart_path
+
+    monkeypatch.delenv("AIOPS_CHARTS_DIR", raising=False)
+    assert local_chart_path("ollama") is None
+
+    monkeypatch.setenv("AIOPS_CHARTS_DIR", str(tmp_path))
+    assert local_chart_path("ollama") is None
+
+    (tmp_path / "ollama").mkdir()
+    (tmp_path / "ollama" / "Chart.yaml").write_text("name: ollama\n")
+    assert local_chart_path("ollama") == tmp_path / "ollama"
+
+
+@pytest.mark.asyncio
+async def test_controller_prefers_the_local_chart(monkeypatch, tmp_path):
+    (tmp_path / "ollama").mkdir()
+    (tmp_path / "ollama" / "Chart.yaml").write_text("name: ollama\n")
+    monkeypatch.setenv("AIOPS_CHARTS_DIR", str(tmp_path))
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    seen = {}
+
+    async def fake_get_chart(helm, chart_name, *, repo=None, version=None):
+        seen.update(chart_name=chart_name, repo=repo)
+        return "chart"
+
+    monkeypatch.setattr("controller.base_controller.get_chart", fake_get_chart)
+    engine_chart = EngineChartsSchema(
+        id=genid.uuid4(),
+        engine="ollama",
+        chart_type="llm",
+        chart_repo="https://infracloudio.github.io/charts",
+        chart_name="ollama",
+    )
+    instance = mock.Mock()
+    assert (
+        await controller._add_and_update_helm_repo(instance, engine_chart)
+        == "chart"
+    )
+    assert seen == {"chart_name": str(tmp_path / "ollama"), "repo": None}
+
+
+@pytest.mark.asyncio
+async def test_ollama_controller_helm_values(snapshot):
+    controller = get_controller("ollama", core_v1_api=mock.Mock())
+    engine = EngineSchema(
+        id=genid.uuid4(), name="Ollama", llm_support=True, cpu=True
+    )
+    model = ModelSchema(
+        id=genid.uuid4(),
+        name="Qwen3 0.6B",
+        modelId="qwen3:0.6b",
+        category="llm",
+    )
+    instance = InferenceInstanceSchema(
+        id=genid.uuid4(),
+        model=model,
+        engine=engine,
+        host=None,
+        config=InferenceInstanceConfigParamsSchema(
+            id=genid.uuid4(), env_vars={"OLLAMA_NUM_PARALLEL": "1"}
+        ),
+    )
+    engine_chart = EngineChartsSchema(
+        id=genid.uuid4(),
+        engine="ollama",
+        chart_type="llm",
+        chart_repo="https://infracloudio.github.io/charts",
+        chart_name="ollama",
+    )
+    values = await controller.prepare_helm_values(instance, engine_chart)
+    assert values["models"]["pull"] == ["qwen3:0.6b"]
+    assert values["service"] == {"type": "ClusterIP", "port": 80}
+    assert "nvidia.com/gpu" not in yaml.dump(values)
+    assert {"name": "OLLAMA_NUM_PARALLEL", "value": "1"} in values["env"]
+    # The chart's fullname helper collapses to the release name because
+    # the release "ollama-<id>" contains the chart name.
+    release = controller._get_release_name(instance)
+    assert controller.get_service_name(instance, engine_chart) == release
+    snapshot.assert_match(yaml.dump(values), "ollama-values.yaml")

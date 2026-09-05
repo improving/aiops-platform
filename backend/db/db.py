@@ -180,6 +180,7 @@ def load_engines(db: Session):
                     reranking_support=bool(row["reranking_support"]),
                     prompt_guard_support=bool(row["prompt_guard_support"]),
                     vector_db_support=bool(row["vector_db_support"]),
+                    cpu=bool(row.get("cpu")),
                 )
                 logger.info(f"adding engine name: {_engine.name}")
                 db.add(_engine)
@@ -193,6 +194,7 @@ def load_engines(db: Session):
                     row["prompt_guard_support"]
                 )
                 _engine.vector_db_support = bool(row["vector_db_support"])
+                _engine.cpu = bool(row.get("cpu"))
     db.commit()
 
 

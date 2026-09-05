@@ -60,6 +60,7 @@ interface Engine {
   reranking_support: boolean;
   prompt_guard_support: boolean;
   vector_db_support: boolean;
+  cpu: boolean;
   default_config: EngineDefaultConfigEnvVars[];
   default_args: EngineDefaultConfigArgs[];
 }

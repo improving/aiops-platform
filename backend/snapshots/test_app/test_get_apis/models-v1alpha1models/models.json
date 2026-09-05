@@ -158,5 +158,35 @@
     "subcategory": "text generation",
     "size": 16106127360,
     "countAdapters": 0
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000012",
+    "name": "Qwen3 0.6B",
+    "modelId": "qwen3:0.6b",
+    "description": "Qwen3 0.6B chat model served by Ollama on CPU (Apache 2.0)",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 523000000,
+    "countAdapters": 0
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000013",
+    "name": "Qwen2.5 1.5B Instruct",
+    "modelId": "qwen2.5:1.5b-instruct",
+    "description": "Qwen2.5 1.5B instruct model served by Ollama on CPU (Apache 2.0)",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 986000000,
+    "countAdapters": 0
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000014",
+    "name": "SmolLM2 1.7B Instruct",
+    "modelId": "smollm2:1.7b",
+    "description": "SmolLM2 1.7B instruct model served by Ollama on CPU (Apache 2.0)",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 1800000000,
+    "countAdapters": 0
   }
 ]

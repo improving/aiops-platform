@@ -87,7 +87,11 @@ test.describe("launch wizard", () => {
   }) => {
     const model = await firstLlm(api);
     const engines = await api.engines();
-    const llmEngines = engines.filter((e) => e.llm_support).map((e) => e.name);
+    // Ollama is llm_support too, but it only serves its own registry tags
+    // (the "CPU engines" tests below), never a Hugging Face id.
+    const llmEngines = engines
+      .filter((e) => e.llm_support && e.name !== "Ollama")
+      .map((e) => e.name);
 
     const launch = new LaunchModelPage(page);
     await openLaunch(page, launch, model.id);
@@ -159,5 +163,50 @@ test.describe("launch wizard", () => {
     await launch.nextButton.click();
     await launch.createButton.click();
     await expect(launch.toast("HuggingFace API token not set")).toBeVisible();
+  });
+});
+
+test.describe("CPU engines", () => {
+  test("an Ollama tag offers only Ollama and needs no host", async ({
+    page,
+    api,
+  }) => {
+    const models = await api.models();
+    const ollamaModel = models.find(
+      (m) => m.modelId.includes(":") && !m.modelId.includes("/")
+    );
+    expect(
+      ollamaModel,
+      "the catalog should contain an Ollama tag"
+    ).toBeTruthy();
+
+    const launch = new LaunchModelPage(page);
+    await openLaunch(page, launch, ollamaModel!.id);
+
+    // The accelerator step is optional: the tabs are enabled and Next
+    // moves on without a host.
+    await expect(launch.tab("Deploy Config")).toBeEnabled();
+    await expect(launch.cpuHint).toBeVisible();
+    await launch.nextButton.click();
+    await expect(launch.tab("Deploy Config")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    await launch.engineSelect.click();
+    await expect(launch.engineOptions()).toHaveText(["Ollama"]);
+    await page.keyboard.press("Escape");
+  });
+
+  test("a Hugging Face id does not offer Ollama", async ({ page, api }) => {
+    const model = await firstLlm(api);
+    const launch = new LaunchModelPage(page);
+    await openLaunch(page, launch, model.id);
+    await launch.skipButton.click();
+    await launch.engineSelect.click();
+    const options = await launch.engineOptions().allTextContents();
+    await page.keyboard.press("Escape");
+    expect(options).not.toContain("Ollama");
+    expect(options).toContain("vLLM");
   });
 });

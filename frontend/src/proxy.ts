@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { NextFetchEvent } from "next/server";
 import { auth } from "@/auth";
-import { BACKEND_URL } from "./constants";
+import { backendUrl } from "@/lib/backend";
 import type { Session } from "next-auth";
 
-// AIOPS_BACKEND_URL is read on the server at request time, so a container
-// can point at a different backend without a rebuild. NEXT_PUBLIC_* values
-// are inlined at build time and only serve as the fallback.
-function backendUrl(): string {
-  return process.env.AIOPS_BACKEND_URL || BACKEND_URL;
-}
-
-// Everything except Next.js internals and the Auth.js routes; the handler
-// decides per path what happens.
+// Everything except Next.js internals, the Auth.js routes and /api/chat:
+// /api/chat is a route handler that checks the session itself and must
+// answer JSON, never a redirect to /login.
 export const config = {
-  matcher: ["/((?!_next/|api/auth/|favicon\\.ico).*)"],
+  matcher: ["/((?!_next/|api/auth/|api/chat|favicon\\.ico).*)"],
 };
 
 const API_PREFIX = "/api/v1alpha1";

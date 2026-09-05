@@ -16,6 +16,7 @@ import { UserMenu } from "./UserMenu";
 import { AUTH_DISABLED } from "@/constants";
 import { cn } from "@/lib/utils";
 import {
+  ChatBubbleIcon,
   CodeIcon,
   CubeIcon,
   LayersIcon,
@@ -43,6 +44,11 @@ const menuItems = [
         description: "Manage and monitor your deployed model instances",
       },
     ],
+  },
+  {
+    label: "Chat",
+    icon: <ChatBubbleIcon className="mr-2 h-4 w-4" />,
+    href: "/chat",
   },
   {
     label: "Vector Databases",

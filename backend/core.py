@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from api import finetune
 from api.authz import router as authz_router
+from api.chat import router as chat_router
 from api.credentials import router as credentials_router
 from api.engines import router as engines_router
 from api.hosts import router as hosts_router
@@ -123,6 +124,7 @@ def create_app(setup_db: bool = True):
     _app.include_router(finetune.router, tags=["finetune"])
     _app.include_router(authz_router, tags=["authz"])
     _app.include_router(credentials_router, tags=["credentials"])
+    _app.include_router(chat_router, tags=["chat"])
 
     @_app.post("/reload-data", tags=["utility"])
     async def reload_data_endpoint(

@@ -29,6 +29,7 @@ class EngineSchema(BaseModel):
     reranking_support: bool | None = False
     prompt_guard_support: bool | None = False
     vector_db_support: bool | None = False
+    cpu: bool | None = False
     default_config: list[EngineDefaultConfigEnvVars] | None = None
     default_args: list[EngineDefaultConfigArgs] | None = None
 

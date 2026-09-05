@@ -1,13 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  ChevronDownIcon,
-  ClipboardCopyIcon,
-  OpenInNewWindowIcon,
-} from "@radix-ui/react-icons";
+import { ChevronDownIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
@@ -227,13 +224,7 @@ export default function InferenceEndpointDetailsPage({
                         : "text-red-500"
                     }
                   >
-                    <OpenInNewWindowIcon className="w-4 h-4 inline-block" />
-                    <a
-                      href={`${inferenceInstance.endpoint}/docs`}
-                      target="_blank"
-                    >
-                      {inferenceInstance.endpoint || "N/A"}
-                    </a>
+                    {inferenceInstance.endpoint || "N/A"}
                   </span>
                   <Button
                     variant="outline"
@@ -247,9 +238,26 @@ export default function InferenceEndpointDetailsPage({
                   ></Button>
                 </span>
               </div>
+              {inferenceInstance.endpoint && (
+                <div className="grid grid-cols-2 items-start gap-4">
+                  <Label>Access</Label>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      The endpoint is protected at the gateway: every request
+                      needs the API key in the <code>x-api-key</code> header, so
+                      it does not open in a browser. Use the Chat button, or an
+                      OpenAI-compatible client pointed at{" "}
+                      <code>{`${inferenceInstance.endpoint}/v1`}</code>.
+                    </p>
+                    <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                      {`curl ${inferenceInstance.endpoint}/v1/models -H "x-api-key: <api key>"`}
+                    </pre>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>API Key</Label>
-                <span>
+                <span className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -258,6 +266,13 @@ export default function InferenceEndpointDetailsPage({
                   >
                     Show API key
                   </Button>
+                  {inferenceInstance.ready && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/chat?instance=${inferenceInstance.id}`}>
+                        Chat
+                      </Link>
+                    </Button>
+                  )}
                 </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">

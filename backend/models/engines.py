@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, String
+from sqlalchemy import Boolean, Column, ForeignKey, String, false
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -49,6 +49,11 @@ class DBEngine(Base):
     reranking_support = Column(Boolean, nullable=False)
     prompt_guard_support = Column(Boolean, nullable=False)
     vector_db_support = Column(Boolean, nullable=False)
+    # True for engines that run without a GPU (Ollama); the launch wizard
+    # makes the accelerator step optional for them.
+    cpu = Column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
     default_config = relationship("DBEngineDefaultConfig")
     default_args = relationship("DBEngineDefaultArgs")

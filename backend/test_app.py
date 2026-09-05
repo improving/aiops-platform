@@ -275,3 +275,55 @@ def test_create_vectordb_instance_store_failure_leaves_no_row(vectordb_env):
     controller.install.assert_not_awaited()
     calls.delete_credential.assert_called_once()
     assert len(client.get("/v1alpha1/vectordb_instances").json()) == before
+
+
+def test_engines_expose_the_cpu_flag():
+    app = create_app()
+    client = TestClient(app)
+    engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
+    assert engines["Ollama"]["cpu"] is True
+    assert engines["Ollama"]["llm_support"] is True
+    assert engines["vLLM"]["cpu"] is False
+
+
+def test_catalog_contains_the_ollama_demo_models():
+    app = create_app()
+    client = TestClient(app)
+    model_ids = {m["modelId"] for m in client.get("/v1alpha1/models").json()}
+    assert {
+        "qwen3:0.6b",
+        "qwen2.5:1.5b-instruct",
+        "smollm2:1.7b",
+    } <= model_ids
+
+
+def test_create_inference_instance_needs_no_hf_token_for_ollama(monkeypatch):
+    import api.inference_instance as ii
+
+    # Stop before the controller touches a cluster (the pattern of
+    # test_create_vectordb_instance_without_cluster_leaves_no_row).
+    def boom(*args, **kwargs):
+        raise RuntimeError("no kubeconfig")
+
+    monkeypatch.setattr(ii, "get_controller", boom)
+    monkeypatch.delenv("HF_API_TOKEN", raising=False)
+    app = create_app()
+    client = TestClient(app)
+    engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
+    models = {m["modelId"]: m for m in client.get("/v1alpha1/models").json()}
+    before = len(client.get("/v1alpha1/inferenceInstance").json())
+    body = {
+        "model": {"id": models["qwen3:0.6b"]["id"]},
+        "engine": {"id": engines["Ollama"]["id"]},
+        "config": {},
+    }
+    response = client.post("/v1alpha1/inferenceInstance", json=body)
+    # Past the token gate: the patched controller fails instead.
+    assert response.status_code == 500
+    assert "HuggingFace" not in response.json()["detail"]
+    assert len(client.get("/v1alpha1/inferenceInstance").json()) == before
+
+    body["engine"] = {"id": engines["vLLM"]["id"]}
+    response = client.post("/v1alpha1/inferenceInstance", json=body)
+    assert response.status_code == 400
+    assert "HuggingFace API token" in response.json()["detail"]

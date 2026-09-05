@@ -1,0 +1,15 @@
+env:
+- name: OLLAMA_NUM_PARALLEL
+  value: '1'
+models:
+  pull:
+  - qwen3:0.6b
+resources:
+  limits:
+    memory: 4Gi
+  requests:
+    cpu: '1'
+    memory: 2Gi
+service:
+  port: 80
+  type: ClusterIP

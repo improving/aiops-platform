@@ -1,4 +1,6 @@
+import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -28,6 +30,22 @@ REQUIRED_CHART_METADATA_KEYS = frozenset({"apiVersion", "name", "version"})
 
 # Inference engines only ever expose one port through their chart's Service.
 INFERENCE_GATEWAY_PORT = 80
+
+# A directory of chart sources (the monorepo's charts/) that wins over the
+# published repository, so a chart can be tried before it is released.
+CHARTS_DIR_ENV = "AIOPS_CHARTS_DIR"
+
+
+def local_chart_path(chart_name: str) -> Path | None:
+    """``<AIOPS_CHARTS_DIR>/<chart_name>`` when the env var is set and the
+    directory holds a ``Chart.yaml``; ``None`` otherwise."""
+    charts_dir = os.environ.get(CHARTS_DIR_ENV)
+    if not charts_dir:
+        return None
+    path = Path(charts_dir) / chart_name
+    if (path / "Chart.yaml").is_file():
+        return path
+    return None
 
 
 class ChartMetadataError(Exception):
@@ -206,6 +224,12 @@ class Controller(ABC):
     ):
         repo_url = engineChart.chart_repo
         chart_name = engineChart.chart_name
+
+        local = local_chart_path(chart_name)
+        if local is not None:
+            chart = await get_chart(self.helm, str(local))
+            self.logger.info(f"using local chart source: {local}")
+            return chart
 
         chart = await get_chart(
             self.helm,

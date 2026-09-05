@@ -16,6 +16,7 @@ export class LaunchModelPage extends AppShell {
   readonly addArgumentButton: Locator;
   readonly addEnvVarButton: Locator;
   readonly createButton: Locator;
+  readonly cpuHint: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -35,6 +36,7 @@ export class LaunchModelPage extends AppShell {
     this.createButton = page.getByRole("button", {
       name: "Create Inference Endpoint",
     });
+    this.cpuHint = page.getByText("runs on CPU");
   }
 
   async open(modelId: string) {
@@ -55,5 +57,10 @@ export class LaunchModelPage extends AppShell {
     return this.page
       .locator("div.flex", { has: this.argNames.last() })
       .getByRole("button", { name: "Delete" });
+  }
+
+  /** The options of the open engine select (click `engineSelect` first). */
+  engineOptions(): Locator {
+    return this.page.getByRole("option");
   }
 }
