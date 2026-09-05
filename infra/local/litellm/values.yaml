@@ -31,6 +31,10 @@ proxy_config:
         api_key: unused
   litellm_settings:
     callbacks: ["prometheus"]
+    # Label the metrics with the platform user the backend sends as `user`.
+    enable_end_user_cost_tracking_prometheus_only: true
+    # Drop OpenAI params a provider rejects (the huggingface route and `user`).
+    drop_params: true
   general_settings:
     store_model_in_db: true
 resources:

@@ -196,6 +196,7 @@ langflow-up: ## Serve Langflow behind the gateway (kind), OIDC-protected, at LAN
 	@echo "Langflow: $(LANGFLOW_URL) (the frontend embeds it when NEXT_PUBLIC_LANGFLOW_URL is set; 'make frontend' sets it)"
 
 LITELLM_URL ?= https://litellm.127.0.0.1.nip.io
+GRAFANA_URL ?= https://grafana.127.0.0.1.nip.io
 LITELLM_MASTER_KEY ?= sk-dev-litellm-master
 
 litellm-up: ## Run the LiteLLM proxy on kind against the compose Postgres, behind the gateway at LITELLM_URL (idempotent)
@@ -218,6 +219,23 @@ litellm-up: ## Run the LiteLLM proxy on kind against the compose Postgres, behin
 	kubectl apply -f infra/local/litellm/gateway.yaml
 	kubectl -n litellm rollout status deployment/litellm --timeout=600s
 	@echo "LiteLLM: $(LITELLM_URL) (master key $(LITELLM_MASTER_KEY); 'make backend' passes both to the API)"
+
+monitoring-up: ## Run Prometheus and Grafana on kind (kube-prometheus-stack), scrape LiteLLM, install the dashboards; Grafana at GRAFANA_URL
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
+	helm repo update prometheus-community >/dev/null
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack --version 89.2.2 \
+		-n monitoring --create-namespace -f infra/local/monitoring/values.yaml --timeout 15m
+	kubectl apply -f infra/local/monitoring/gateway.yaml
+	kubectl apply -f infra/local/monitoring/litellm-servicemonitor.yaml
+	helm upgrade --install infracloud-dashboards charts/infracloud-dashboards -n monitoring --set grafana.namespace=monitoring
+	kubectl -n monitoring rollout status deployment/monitoring-grafana --timeout=600s
+	@echo "Grafana: $(GRAFANA_URL) (anonymous viewer, admin/admin; 'make frontend' passes NEXT_PUBLIC_GRAFANA_URL)"
+
+monitoring-down: ## Remove Prometheus, Grafana, the dashboards and the Grafana route (the namespace is kept)
+	kubectl delete -f infra/local/monitoring/gateway.yaml --ignore-not-found
+	kubectl delete -f infra/local/monitoring/litellm-servicemonitor.yaml --ignore-not-found
+	helm -n monitoring uninstall infracloud-dashboards --ignore-not-found
+	helm -n monitoring uninstall monitoring --ignore-not-found
 
 litellm-down: ## Remove the LiteLLM release and its route (the litellm database and the salt Secret are kept)
 	kubectl delete -f infra/local/litellm/gateway.yaml --ignore-not-found
@@ -287,6 +305,7 @@ backend: $(CA_BUNDLE) ## Run the backend API with uv (needs helm on PATH and a k
 frontend: ## Run the frontend dev server with pnpm (Keycloak login; AUTH_MODE=disabled turns it off)
 	cd frontend && pnpm install --frozen-lockfile && \
 		NEXT_PUBLIC_LANGFLOW_URL=$(LANGFLOW_URL) \
+		NEXT_PUBLIC_GRAFANA_URL=$(GRAFANA_URL) \
 		AUTH_MODE=$(AUTH_MODE) \
 		NEXT_PUBLIC_AUTH_MODE=$(AUTH_MODE) \
 		AUTH_SECRET=$(AUTH_SECRET) \
@@ -325,6 +344,7 @@ dev: ## Print the order to bring the whole stack up locally
 	@echo "  7. make db-up           # postgres on :5432"
 	@echo "  8. make langflow-up     # optional, Langflow behind the gateway"
 	@echo "  9. make litellm-up      # optional, LiteLLM provider layer (chat targets, embeddings, rerank, metrics)"
+	@echo " 10. make monitoring-up   # optional, Prometheus + Grafana with the LiteLLM dashboard"
 	@echo "  9. make backend         # (separate terminal) FastAPI on :8000 with OIDC"
 	@echo " 10. make frontend        # (separate terminal) Next.js on :3000, Keycloak login"
 	@echo " 11. make e2e-smoke       # API smoke with an automation token"
@@ -332,6 +352,6 @@ dev: ## Print the order to bring the whole stack up locally
 	@echo " 13. make ui-e2e-cluster  # Playwright cluster tier, logged in as alice"
 	@echo ""
 	@echo "Tear down:"
-	@echo "  make db-down litellm-down langflow-down auth-down gateway-down kind-down"
+	@echo "  make db-down monitoring-down litellm-down langflow-down auth-down gateway-down kind-down"
 
 .DEFAULT_GOAL := help

@@ -1,0 +1,50 @@
+# kube-prometheus-stack for the local stack (make monitoring-up).
+# Chart: prometheus-community/kube-prometheus-stack 89.2.2.
+# Sized to fit next to one Ollama instance on the 8 GiB colima VM.
+alertmanager:
+  enabled: false
+nodeExporter:
+  enabled: false
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 50Mi
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 50Mi
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    # Scrape every ServiceMonitor and PodMonitor in the cluster, not only
+    # the ones carrying the release label.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 200Mi
+      limits:
+        memory: 1Gi
+grafana:
+  # Dev-only: anonymous viewers and embedding, so the UI can show panels
+  # in iframes without a login; the lab keeps its own Grafana.
+  adminPassword: admin
+  grafana.ini:
+    server:
+      root_url: https://grafana.127.0.0.1.nip.io
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+    security:
+      allow_embedding: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL

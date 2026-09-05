@@ -1,0 +1,25 @@
+# Scrape LiteLLM's /metrics/ (trailing slash; /metrics is a redirect) with
+# the master key, which the proxy requires on that endpoint.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: litellm
+  namespace: litellm
+  labels:
+    app.kubernetes.io/name: litellm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: litellm
+  namespaceSelector:
+    matchNames:
+      - litellm
+  endpoints:
+    - port: http
+      path: /metrics/
+      interval: 30s
+      authorization:
+        type: Bearer
+        credentials:
+          name: litellm-master
+          key: masterkey
