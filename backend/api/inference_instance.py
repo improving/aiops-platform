@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import pprint
@@ -38,6 +39,14 @@ from utils.kubernetes_utils import (
     get_pod_status_and_readiness,
     get_service_endpoint,
 )
+from utils.litellm import (
+    LiteLLMError,
+    instance_litellm_params,
+    instance_model_name,
+)
+from utils.litellm import (
+    get_client as get_litellm_client,
+)
 
 # The kind tag for utils/credentials.py: one API key per inference instance.
 CREDENTIAL_KIND = "inf"
@@ -54,6 +63,52 @@ logger = setup_logger(__name__)
 # Grafana's organization id, the same for every dashboard. Not the
 # tenancy org_id column on the instance rows.
 GRAFANA_ORG_ID = "1"
+
+
+def register_instance(
+    db, db_instance, full_instance, engine_chart, controller, api_key
+):
+    """Best effort: a LiteLLM outage never fails a launch."""
+    litellm = get_litellm_client()
+    if litellm is None or engine_chart is None:
+        return
+    route = instance_litellm_params(
+        full_instance.engine.name,
+        full_instance.model.category,
+        full_instance.model.modelId,
+        controller.service_url(full_instance, engine_chart),
+        api_key,
+    )
+    if route is None:
+        logger.info(
+            f"no LiteLLM route for "
+            f"{full_instance.engine.name}/{full_instance.model.category}"
+        )
+        return
+    params, info = route
+    info["aiops_instance_id"] = str(db_instance.id)
+    name = instance_model_name(db_instance.id)
+    try:
+        model_id = litellm.register_model(name, params, info)
+    except LiteLLMError as e:
+        logger.error(f"LiteLLM registration failed for {name}: {e}")
+        return
+    db_instance.litellm_model_name = name
+    db_instance.litellm_model_id = model_id
+    db.commit()
+
+
+def unregister_instance(db_instance):
+    litellm = get_litellm_client()
+    if litellm is None or not db_instance.litellm_model_id:
+        return
+    try:
+        litellm.delete_model(db_instance.litellm_model_id)
+    except LiteLLMError as e:
+        logger.error(
+            f"LiteLLM unregistration failed for "
+            f"{db_instance.litellm_model_name}: {e}"
+        )
 
 
 @router.get(
@@ -365,6 +420,17 @@ async def create_inference_instance(
                 detail=f"Failed to install Helm chart: {str(e)}",
             )
 
+        await asyncio.to_thread(
+            register_instance,
+            db,
+            db_instance,
+            full_instance,
+            engine_chart,
+            controller,
+            credential_value,
+        )
+        full_instance = InferenceInstanceSchema.model_validate(db_instance)
+
         await create_instance_dashboards(full_instance, engine_chart, db)
 
         return full_instance
@@ -574,6 +640,8 @@ async def delete_inference_instance(
 
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
         controller = get_controller(full_instance.engine.name)
+
+        await asyncio.to_thread(unregister_instance, db_instance)
 
         try:
             await controller.uninstall(full_instance)

@@ -59,10 +59,14 @@ test.describe("chat with a small model on Ollama", { tag: "@cluster" }, () => {
     const ready = await api.waitForInferenceReady(id, READY_TIMEOUT);
     expect(ready.endpoint).toMatch(/^https:\/\/inf-/);
 
+    const target = (await api.chatTargets()).find((t) => t.instance_id === id);
+    expect(target, "the instance is a chat target").toBeTruthy();
+    expect(target!.via).toBe("litellm");
+
     const details = new InferenceEndpointPage(page);
     await details.open(id);
     await details.chatButton.click();
-    await expect(page).toHaveURL(new RegExp(`/chat\\?instance=${id}$`));
+    await expect(page).toHaveURL(new RegExp(`/chat\\?target=${target!.name}$`));
 
     const chat = new ChatPage(page);
     await expect(chat.targetSelect).toContainText(model!.name);

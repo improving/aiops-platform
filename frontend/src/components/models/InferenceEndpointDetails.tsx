@@ -268,7 +268,12 @@ export default function InferenceEndpointDetailsPage({
                   </Button>
                   {inferenceInstance.ready && (
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/chat?instance=${inferenceInstance.id}`}>
+                      <Link
+                        href={`/chat?target=${
+                          inferenceInstance.litellm_model_name ??
+                          `inst-${inferenceInstance.id.replace(/-/g, "").slice(-8)}`
+                        }`}
+                      >
                         Chat
                       </Link>
                     </Button>

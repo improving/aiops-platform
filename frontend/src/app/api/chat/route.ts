@@ -15,7 +15,6 @@ export const maxDuration = 300;
 
 type ChatBody = {
   messages: UIMessage[];
-  instanceId?: string;
   model?: string;
   system?: string;
   temperature?: number;
@@ -35,26 +34,21 @@ async function accessToken(): Promise<string | undefined> {
 
 /**
  * Turns the AI SDK UI message stream into the backend's OpenAI-compatible
- * chat endpoint. The instance is a header so the model field stays the
- * engine's own name (an Ollama tag); the session's bearer goes along the
- * same way `src/proxy.ts` attaches it to `/api/v1alpha1/*`.
+ * chat endpoint. `model` is the chat target name (`inst-<id8>`, from
+ * `GET /v1alpha1/chat/targets`); the session's bearer goes along the same
+ * way `src/proxy.ts` attaches it to `/api/v1alpha1/*`.
  */
 export async function POST(req: Request) {
   const body = (await req.json()) as ChatBody;
-  if (!body.instanceId || !body.model) {
-    return Response.json(
-      { detail: "instanceId and model are required" },
-      { status: 400 }
-    );
+  if (!body.model) {
+    return Response.json({ detail: "model is required" }, { status: 400 });
   }
   const token = await accessToken();
   if (!token && !authDisabled()) {
     return Response.json({ detail: "Not signed in" }, { status: 401 });
   }
 
-  const headers: Record<string, string> = {
-    "X-AIOps-Instance": body.instanceId,
-  };
+  const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const provider = createOpenAICompatible({

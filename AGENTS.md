@@ -16,7 +16,7 @@ It is a monorepo assembled from four former repositories with their history (`MI
 | `backend/` | FastAPI control plane (Python 3.13, uv, SQLAlchemy 2, pyhelm3) |
 | `frontend/` | Next.js 16 UI (React 19, Tailwind 4, shadcn/ui, pnpm) plus the Playwright e2e suite |
 | `charts/<name>/` | Helm charts published to <https://infracloudio.github.io/charts> |
-| `infra/` | Bare-metal lab setup and install notes, imported as is; `infra/local/` holds the kind and compose config |
+| `infra/` | Bare-metal lab setup and install notes, imported as is; `infra/local/` holds the kind, gateway, Keycloak, Langflow, LiteLLM and compose config |
 | `hack/` | `e2e-smoke.sh`, the API-level smoke test against the local stack |
 | `docs/` | `local-dev.md`, `testing.md`, migration commit maps |
 
@@ -61,20 +61,28 @@ It is a monorepo assembled from four former repositories with their history (`MI
    both kinds of policy, plus the `HTTPRoute`s themselves, are created by `backend/utils/gateway.py`
    and are no-ops without `AIOPS_PARENT_DOMAIN` set,
    so a plain `uv run uvicorn` behaves exactly as before the gateway existed.
-8. **Chat goes through the control plane, never straight to a model.**
-   The `/chat` page uses the Vercel AI SDK against the UI's own route handler `frontend/src/app/api/chat/route.ts`,
-   which calls `POST /v1alpha1/chat/completions` (`backend/api/chat.py`) with the session's bearer token
-   and the target instance in `X-AIOps-Instance`;
-   the backend checks the read policy, then forwards the OpenAI-compatible body to the instance's `inf-<id8>` gateway host
-   with the instance's workload credential and streams the SSE answer back.
+8. **Chat, embeddings and rerank go through the control plane and LiteLLM, never straight to a model.**
+   Every deployed inference instance is registered in the LiteLLM proxy (`backend/utils/litellm.py`, namespace `litellm`,
+   `make litellm-up`) as model `inst-<id8>` with its in-cluster Service URL and workload credential;
+   each organization gets a LiteLLM team and one virtual key in a Secret.
+   The `/chat` page uses the Vercel AI SDK against the UI's route handler `frontend/src/app/api/chat/route.ts`,
+   which calls `POST /v1alpha1/chat/completions` (`backend/api/chat.py`) with the session's bearer token and `model: inst-<id8>`;
+   the backend checks the read policy and forwards to LiteLLM with the organization's key
+   (`GET /v1alpha1/chat/targets` lists what a user may talk to, deployed instances and hosted provider models alike;
+   `POST /v1alpha1/embeddings` and `/rerank` follow the same rule).
+   Hosted providers (`backend/api/providers.py`, page `/providers`) are per organization and admin-managed:
+   the key lives in a Secret, the picked models are registered as `prov-<id8>/<model>`,
+   and the organization's LiteLLM team carries the monthly budget.
+   Without `LITELLM_URL` the chat endpoint falls back to the instance's `inf-<id8>` gateway host with the workload credential,
+   and embeddings and rerank answer 503.
    Conversations live in the browser only.
-   `AIOPS_CHAT_MOCK=true` (honoured only with `TEST_MODE=true`) answers with a canned echo for the Playwright fast tier.
+   `AIOPS_CHAT_MOCK=true` (honoured only with `TEST_MODE=true`) serves one mock target and canned answers for the Playwright fast tier.
 
 ## Local stack and commands
 
 ```bash
 make prereqs                                                # colima/kind/helm/kubectl/uv/pnpm check
-make kind-up gateway-up ca-export auth-up db-up langflow-up  # cluster, gateway+CA, Keycloak, Postgres, Langflow
+make kind-up gateway-up ca-export auth-up db-up langflow-up litellm-up  # cluster, gateway+CA, Keycloak, Postgres, Langflow, LiteLLM
 make backend                                                 # uvicorn on :8000 (needs helm and a kubeconfig)
 make frontend                                                # next dev on :3000 (login goes through Keycloak)
 make e2e-smoke                                               # API smoke: Qdrant + Jupyter notebook create/ready/delete

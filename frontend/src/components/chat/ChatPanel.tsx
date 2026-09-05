@@ -12,33 +12,35 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { modelService } from "@/services/modelService";
-import type { InferenceInstance } from "@/types/models";
+import type { ChatTarget } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 
 const STORAGE_PREFIX = "aiops.chat.";
 
-function loadMessages(instanceId: string): UIMessage[] {
+function loadMessages(target: string): UIMessage[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_PREFIX + instanceId);
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + target);
     return raw ? (JSON.parse(raw) as UIMessage[]) : [];
   } catch {
     return [];
   }
 }
 
-function saveMessages(instanceId: string, messages: UIMessage[]) {
+function saveMessages(target: string, messages: UIMessage[]) {
   try {
     if (messages.length === 0) {
-      window.localStorage.removeItem(STORAGE_PREFIX + instanceId);
+      window.localStorage.removeItem(STORAGE_PREFIX + target);
     } else {
       window.localStorage.setItem(
-        STORAGE_PREFIX + instanceId,
+        STORAGE_PREFIX + target,
         JSON.stringify(messages)
       );
     }
@@ -54,60 +56,84 @@ function messageText(message: UIMessage): string {
     .join("");
 }
 
+/** Reasoning models (qwen3, o-series) stream their thinking first. */
+function messageReasoning(message: UIMessage): string {
+  return message.parts
+    .filter((part) => part.type === "reasoning")
+    .map((part) => part.text)
+    .join("");
+}
+
 export default function ChatPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const [instances, setInstances] = useState<InferenceInstance[]>([]);
+  const [allTargets, setAllTargets] = useState<ChatTarget[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [instanceId, setInstanceId] = useState(
-    searchParams.get("instance") ?? ""
-  );
+  const [target, setTarget] = useState(searchParams.get("target") ?? "");
   const [system, setSystem] = useState("");
-  const [temperature, setTemperature] = useState(0.7);
+  // Empty means the model's default: some hosted models reject any
+  // other value, so nothing is sent unless the user sets one.
+  const [temperature, setTemperature] = useState("");
   const [input, setInput] = useState("");
 
   useEffect(() => {
     modelService
-      .getInferenceInstances()
-      .then((list) => setInstances(list.filter((i) => i.ready && i.endpoint)))
+      .getChatTargets()
+      .then(setAllTargets)
       .catch((error) => toast(parseApiError(error)))
       .finally(() => setLoaded(true));
   }, [toast]);
 
-  const instance = instances.find((i) => i.id === instanceId);
-  const model = instance?.model.modelId ?? "";
+  const targets = useMemo(
+    () => allTargets.filter((t) => t.capability === "chat" && t.ready),
+    [allTargets]
+  );
+  const deployedTargets = useMemo(
+    () => targets.filter((t) => !t.provider_id),
+    [targets]
+  );
+  const hostedTargets = useMemo(
+    () => targets.filter((t) => !!t.provider_id),
+    [targets]
+  );
+  const selected = targets.find((t) => t.name === target);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
         prepareSendMessagesRequest: ({ messages }) => ({
-          body: { messages, instanceId, model, system, temperature },
+          body: {
+            messages,
+            model: target,
+            system,
+            temperature: temperature === "" ? undefined : Number(temperature),
+          },
         }),
       }),
-    [instanceId, model, system, temperature]
+    [target, system, temperature]
   );
 
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
-    id: instanceId || "no-instance",
+    id: target || "no-target",
     transport,
   });
 
-  // History per instance, in this browser only (design section 3.4).
+  // History per target, in this browser only (design section 3.4).
   useEffect(() => {
-    if (instanceId) setMessages(loadMessages(instanceId));
-  }, [instanceId, setMessages]);
+    if (target) setMessages(loadMessages(target));
+  }, [target, setMessages]);
   useEffect(() => {
-    if (instanceId && status === "ready") saveMessages(instanceId, messages);
-  }, [instanceId, messages, status]);
+    if (target && status === "ready") saveMessages(target, messages);
+  }, [target, messages, status]);
 
   const busy = status === "submitted" || status === "streaming";
-  const canSend = !!instance && !busy && input.trim().length > 0;
+  const canSend = !!selected && !busy && input.trim().length > 0;
 
   const selectTarget = (value: string) => {
-    setInstanceId(value);
-    router.replace(`/chat?instance=${value}`);
+    setTarget(value);
+    router.replace(`/chat?target=${value}`);
   };
 
   const submit = (event: React.FormEvent) => {
@@ -119,10 +145,10 @@ export default function ChatPanel() {
 
   const clear = () => {
     setMessages([]);
-    if (instanceId) saveMessages(instanceId, []);
+    if (target) saveMessages(target, []);
   };
 
-  if (loaded && instances.length === 0) {
+  if (loaded && targets.length === 0) {
     return (
       <p className="text-muted-foreground">
         No running inference instance. Launch one from the{" "}
@@ -139,16 +165,31 @@ export default function ChatPanel() {
       <aside className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="chat-target">Target</Label>
-          <Select value={instanceId} onValueChange={selectTarget}>
+          <Select value={target} onValueChange={selectTarget}>
             <SelectTrigger id="chat-target" aria-label="Target">
               <SelectValue placeholder="Pick an instance" />
             </SelectTrigger>
             <SelectContent>
-              {instances.map((i) => (
-                <SelectItem key={i.id} value={i.id}>
-                  {i.model.name} · {i.engine.name}
-                </SelectItem>
-              ))}
+              {deployedTargets.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Deployed</SelectLabel>
+                  {deployedTargets.map((t) => (
+                    <SelectItem key={t.name} value={t.name}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {hostedTargets.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Hosted</SelectLabel>
+                  {hostedTargets.map((t) => (
+                    <SelectItem key={t.name} value={t.name}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -170,7 +211,8 @@ export default function ChatPanel() {
             max={2}
             step={0.1}
             value={temperature}
-            onChange={(e) => setTemperature(Number(e.target.value))}
+            placeholder="model default"
+            onChange={(e) => setTemperature(e.target.value)}
           />
         </div>
         <Button
@@ -201,6 +243,14 @@ export default function ChatPanel() {
                   : "mr-auto max-w-[80%] whitespace-pre-wrap rounded-lg bg-muted px-3 py-2"
               }
             >
+              {messageReasoning(message) && (
+                <details className="mb-1 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">Thinking</summary>
+                  <div className="mt-1 whitespace-pre-wrap">
+                    {messageReasoning(message)}
+                  </div>
+                </details>
+              )}
               {messageText(message)}
             </div>
           ))}
@@ -220,7 +270,7 @@ export default function ChatPanel() {
                 }
               }}
               rows={2}
-              placeholder={instance ? "Ask something" : "Pick a target first"}
+              placeholder={selected ? "Ask something" : "Pick a target first"}
             />
           </div>
           {busy ? (

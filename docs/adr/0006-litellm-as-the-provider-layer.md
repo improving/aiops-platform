@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-05
 ---
 
@@ -24,3 +24,15 @@ and streams from LiteLLM.
 - One more component with a Postgres schema (keys and spend) next to the platform database.
 - The browser only ever talks to the platform API; LiteLLM and provider keys are cluster-internal.
 - Phase 1 may pass through to Ollama directly with the same API shape; the endpoint does not change when LiteLLM arrives.
+
+## Consequences observed (2026-09-05, Phase 2a on kind)
+
+- The open-source proxy image (v1.99.1) serves Prometheus metrics at `/metrics/` labelled by key alias, team and model,
+  so per-organization usage needs no enterprise licence.
+- Inside the cluster LiteLLM calls the instance Service directly and bypasses the gateway's API-key policy;
+  the workload credential travels as a bearer, which vLLM validates and Ollama, TGI and TEI ignore.
+- The arm64 kind node cannot run the amd64-only TEI image, so TEI embeddings and rerank are proven on the lab;
+  on kind the embeddings proof uses an Ollama embedding model.
+- NVIDIA NIM's reranker is not Cohere-style and has no LiteLLM route yet; OPEA guardrails are not chat targets.
+- Hosted providers are rows per organization with the key in a Secret; LiteLLM keeps a copy encrypted with the salt,
+  which is why the salt Secret of `make litellm-up` is created once and never rotated.

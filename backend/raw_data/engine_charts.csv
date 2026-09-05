@@ -8,3 +8,4 @@ e9795fd9799c497590896fb53e41dc38,HuggingFace,llm,https://infracloudio.github.io/
 3dcd1b5b97574775a11eedfa7708bfc3,vLLM,llm,https://infracloudio.github.io/charts,vllm,
 471c3143ee1e43beb95a96c839bf30af,OPEA,prompt_guard,https://infracloudio.github.io/charts,guardrails-usvc,
 0a1b2c3d4e5f60718293a4b5c6d7e8f9,Ollama,llm,https://infracloudio.github.io/charts,ollama,
+1b2c3d4e5f60718293a4b5c6d7e8f9a0,Ollama,embedding,https://infracloudio.github.io/charts,ollama,

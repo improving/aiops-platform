@@ -46,5 +46,6 @@ class InferenceInstanceSchema(BaseModel):
     metricsEndpoint: str | None = None
     ready: bool | None = False
     status: str | None = None
+    litellm_model_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

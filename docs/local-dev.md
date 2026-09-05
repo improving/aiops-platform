@@ -266,14 +266,52 @@ plain link next to or instead of the iframe, "Open Langflow" pointing at
 `LANGFLOW_URL` in a new tab, so the login (and Langflow itself) can be
 completed as a normal top-level navigation.
 
+## LiteLLM
+
+`make litellm-up` runs the LiteLLM proxy (official Helm chart, `infra/local/litellm/values.yaml`) in namespace `litellm`,
+against a `litellm` database on the compose Postgres (the target creates it; pods reach the host as `192.168.5.2`),
+and publishes it through the gateway at `https://litellm.127.0.0.1.nip.io` with no gateway policy:
+LiteLLM authenticates every call with its master key (`sk-dev-litellm-master`, a dev-only literal) or a virtual key.
+The target is idempotent; the `litellm-env` Secret with the salt key is created once and never rewritten,
+because the salt encrypts the provider keys LiteLLM stores.
+`make backend` passes `LITELLM_URL` and `LITELLM_MASTER_KEY` to the API;
+without them every LiteLLM call in the backend is a no-op, the way `AIOPS_PARENT_DOMAIN` gates the gateway.
+
+What the platform does with it:
+every deployed inference instance is registered as LiteLLM model `inst-<id8>` with its in-cluster Service URL and workload credential,
+each organization gets a LiteLLM team and one virtual key (Secret `org-<id8>-litellm-key` in the platform namespace),
+and `POST /v1alpha1/chat/completions`, `/embeddings` and `/rerank` forward to LiteLLM with that key,
+so spend and the Prometheus metrics at `/metrics/` (trailing slash; master key) are labelled per organization.
+`infra/local/litellm/README.md` lists the Secrets and the useful calls.
+
+## Hosted providers
+
+An organization admin adds a hosted provider on `/providers` (OpenAI, Anthropic, Google Gemini, Groq, OpenRouter):
+kind, a name, an optional base URL and the API key.
+The key goes into the Secret `prov-<id8>-credentials` in the platform namespace (never into the database or a response),
+"Discover models" lists what the key can reach (`POST /v1alpha1/providers/discover`),
+and every picked model is registered in LiteLLM as `prov-<id8>/<model>` with that key,
+so it appears as a hosted chat target next to the deployed instances.
+Context length and prices come from LiteLLM's public prices file (`backend/utils/model_prices.py`).
+The same page shows the organization's spend and lets an admin set a monthly budget
+(`PUT /v1alpha1/organizations/current/budget`, a LiteLLM team budget; empty means no cap).
+The fast Playwright tier exercises the page with a mock discovery and an in-memory secret store
+(`AIOPS_CHAT_MOCK=true`, `AIOPS_SECRET_STORE=memory`, both honoured only with `TEST_MODE=true`);
+a real hosted chat runs only when `E2E_OPENAI_API_KEY` is set in the shell for `hosted-chat.spec.ts`
+(the key is never written to a file).
+
 ## Backend
 
 `make backend` runs `uv run uvicorn app:app --reload` with the full local env contract:
 `DATABASE_*` (the Postgres above), `AIOPS_NAMESPACE`, `AUTH_MODE` (default `oidc`) and `OIDC_ISSUER`,
 the gateway env contract from "Gateway and TLS" above
 (`AIOPS_PARENT_DOMAIN=127.0.0.1.nip.io`, `AIOPS_GATEWAY_NAME=aiops`, `AIOPS_GATEWAY_NAMESPACE=envoy-gateway-system`),
-and `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` pointed at the local CA so it can reach Keycloak's JWKS endpoint
-(and, for `/v1alpha1/chat/completions`, the gateway host of an inference instance).
+and `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` pointed at `infra/local/ca/bundle.crt`,
+which `make backend` builds from certifi's public roots plus the local CA,
+so the process reaches Keycloak's JWKS endpoint and the gateway hosts as well as public hosts
+(provider discovery at api.openai.com, the Hugging Face Hub, chart repositories).
+Calls to public hosts in the code also pass certifi explicitly (`backend/utils/tls.py`),
+so a plain `SSL_CERT_FILE=infra/local/ca/ca.crt` still works for them.
 It also sets `AIOPS_CHARTS_DIR=$(PWD)/charts`:
 a chart that exists there (`charts/<chart_name>/Chart.yaml`) is installed from the checkout
 instead of the published index, so a chart change can be tried before it is released.
@@ -317,8 +355,9 @@ use the Chat page, or an OpenAI-compatible client pointed at `<endpoint>/v1` wit
 `/chat` (the "Chat" header link, or the "Chat" button on an endpoint page) talks to a Ready instance:
 the browser posts to the UI's own `/api/chat` route handler (Vercel AI SDK),
 which calls the backend's `POST /v1alpha1/chat/completions` with the session's bearer token
-and the `X-AIOps-Instance` header;
-the backend forwards the OpenAI-compatible request to the instance's gateway host with its workload credential
+and `model` set to the target name (`inst-<id8>`, from `GET /v1alpha1/chat/targets`);
+the backend forwards the OpenAI-compatible request to LiteLLM with the organization's virtual key
+(or, without LiteLLM, to the instance's gateway host with its workload credential)
 and streams the answer back.
 Conversations stay in the browser (`localStorage`, one per instance) and are never stored server-side.
 
@@ -327,15 +366,19 @@ To talk to an instance from a terminal, use the same endpoint with the automatio
 
 ```bash
 curl -sN localhost:8000/v1alpha1/chat/completions \
-  -H "Authorization: Bearer $TOKEN" -H "X-AIOps-Instance: <instance id>" \
-  -H 'content-type: application/json' \
-  -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"hello"}],"stream":true}'
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"model":"inst-<id8>","messages":[{"role":"user","content":"hello"}],"stream":true}'
+curl -s localhost:8000/v1alpha1/embeddings \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"model":"inst-<id8 of an embedding instance>","input":["hello world"]}'
 ```
 
 Memory: the chart requests 1 CPU and 2 GiB and limits memory to 4 GiB
 (`backend/templates/ollama-llm-values.yaml.jinja`, `charts/ollama/values.yaml`);
-one small model fits next to Keycloak, the gateway and Langflow on the 8 GiB colima VM.
-Check with `kubectl top nodes` while a model answers.
+one small model fits next to Keycloak, the gateway, Langflow and LiteLLM on the 8 GiB colima VM,
+and a second Ollama instance stays `Pending` with "Insufficient memory" until the first is deleted
+(the smoke test and the cluster tier therefore launch instances one after the other).
+Check with `kubectl describe node aiops-control-plane` ("Allocated resources") or `docker stats aiops-control-plane`.
 
 ## Tests
 

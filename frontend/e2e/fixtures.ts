@@ -112,6 +112,49 @@ export type InferenceInstanceRecord = {
   endpoint: string | null;
   model: { id: string; name: string; modelId: string };
   engine: { id: string; name: string };
+  litellm_model_name?: string | null;
+};
+
+/** GET /v1alpha1/chat/targets: what the caller may chat, embed or rerank
+ * against (backend/api/chat.py list_targets). */
+export type ChatTargetRecord = {
+  name: string;
+  label: string;
+  capability: string;
+  instance_id: string | null;
+  provider_id: string | null;
+  model: string;
+  engine: string;
+  ready: boolean;
+  via: string;
+};
+
+// GET /v1alpha1/providers (backend/api/providers.py): a hosted provider,
+// without its API key.
+export type ProviderRecord = {
+  id: string;
+  kind: string;
+  name: string;
+  base_url: string | null;
+  enabled: boolean;
+  has_key: boolean;
+  models: {
+    id: string;
+    model: string;
+    display_name: string;
+    litellm_model_name: string;
+    capability: string;
+    enabled: boolean;
+  }[];
+};
+
+// GET/PUT /v1alpha1/organizations/current/{spend,budget}.
+export type OrgSpendRecord = {
+  team_id: string | null;
+  spend: number;
+  max_budget: number | null;
+  budget_reset_at: string | null;
+  budget_usd: number | null;
 };
 
 /** OIDC settings for the client-credentials grant the `api` fixture uses. */
@@ -184,28 +227,28 @@ export class BackendApi {
     return this.token ? { Authorization: `Bearer ${this.token}` } : {};
   }
 
-  /** GET/DELETE with the bearer header, retried once after a 401. */
+  /** GET/DELETE/POST/PUT with the bearer header, retried once after a 401. */
   private async send(
-    method: "GET" | "DELETE",
-    path: string
+    method: "GET" | "DELETE" | "POST" | "PUT",
+    path: string,
+    body?: object
   ): Promise<APIResponse> {
-    let res =
-      method === "GET"
-        ? await this.request.get(this.url(path), {
-            headers: await this.authHeaders(),
-          })
-        : await this.request.delete(this.url(path), {
-            headers: await this.authHeaders(),
-          });
+    const call = async (headers: Record<string, string>) => {
+      if (method === "GET")
+        return this.request.get(this.url(path), { headers });
+      if (method === "DELETE")
+        return this.request.delete(this.url(path), { headers });
+      if (method === "PUT")
+        return this.request.put(this.url(path), { headers, data: body });
+      return this.request.post(this.url(path), { headers, data: body });
+    };
+    let res = await call(await this.authHeaders());
     if (res.status() === 401 && this.authMode !== "disabled") {
       const token = await this.refreshToken();
       const headers: Record<string, string> = token
         ? { Authorization: `Bearer ${token}` }
         : {};
-      res =
-        method === "GET"
-          ? await this.request.get(this.url(path), { headers })
-          : await this.request.delete(this.url(path), { headers });
+      res = await call(headers);
     }
     return res;
   }
@@ -343,9 +386,54 @@ export class BackendApi {
     return res.json();
   }
 
+  async createInferenceInstance(
+    body: object
+  ): Promise<InferenceInstanceRecord> {
+    const res = await this.send("POST", "/inferenceInstance", body);
+    expect(
+      res.status(),
+      `POST /inferenceInstance -> ${res.status()} ${await res.text()}`
+    ).toBe(201);
+    return res.json();
+  }
+
   async deleteInferenceInstance(id: string): Promise<void> {
     const res = await this.send("DELETE", `/inferenceInstance/${id}`);
     expect([200, 204, 404]).toContain(res.status());
+  }
+
+  async chatTargets(): Promise<ChatTargetRecord[]> {
+    const res = await this.send("GET", "/chat/targets");
+    expect(res.ok(), `GET /chat/targets -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async providers(): Promise<ProviderRecord[]> {
+    const res = await this.send("GET", "/providers");
+    expect(res.ok(), `GET /providers -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async deleteProvider(id: string): Promise<void> {
+    const res = await this.send("DELETE", `/providers/${id}`);
+    expect([200, 204, 404]).toContain(res.status());
+  }
+
+  async orgSpend(): Promise<OrgSpendRecord> {
+    const res = await this.send("GET", "/organizations/current/spend");
+    expect(
+      res.ok(),
+      `GET /organizations/current/spend -> ${res.status()}`
+    ).toBeTruthy();
+    return res.json();
+  }
+
+  async embeddings(model: string, input: string[]): Promise<number[][]> {
+    const res = await this.send("POST", "/embeddings", { model, input });
+    expect(res.ok(), `POST /embeddings -> ${res.status()}`).toBeTruthy();
+    return (await res.json()).data.map(
+      (d: { embedding: number[] }) => d.embedding
+    );
   }
 
   /** Poll until the inference instance is ready and has an endpoint. */

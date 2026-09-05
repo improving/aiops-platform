@@ -19,6 +19,7 @@ import {
   ChatBubbleIcon,
   CodeIcon,
   CubeIcon,
+  IdCardIcon,
   LayersIcon,
   Pencil2Icon,
 } from "@radix-ui/react-icons";
@@ -49,6 +50,11 @@ const menuItems = [
     label: "Chat",
     icon: <ChatBubbleIcon className="mr-2 h-4 w-4" />,
     href: "/chat",
+  },
+  {
+    label: "Providers",
+    icon: <IdCardIcon className="mr-2 h-4 w-4" />,
+    href: "/providers",
   },
   {
     label: "Vector Databases",

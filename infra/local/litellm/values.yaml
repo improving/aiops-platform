@@ -1,0 +1,41 @@
+# LiteLLM proxy for the local stack (make litellm-up).
+# Chart: oci://ghcr.io/berriai/litellm-helm 1.99.0, proxy image v1.99.1.
+image:
+  tag: v1.99.1
+  pullPolicy: IfNotPresent
+replicaCount: 1
+masterkeySecretName: litellm-master
+masterkeySecretKey: masterkey
+db:
+  # The compose Postgres on the host, database "litellm"; make litellm-up
+  # creates it and sets db.endpoint to the host IP as the kind node sees it.
+  deployStandalone: false
+  useExisting: true
+  database: litellm
+  secret:
+    name: litellm-db
+    usernameKey: username
+    passwordKey: password
+environmentSecrets:
+  # LITELLM_SALT_KEY (generated once per cluster, never rotated: it
+  # encrypts stored provider keys), STORE_MODEL_IN_DB, DISABLE_ADMIN_UI.
+  - litellm-env
+proxy_config:
+  model_list:
+    # The chart refuses to start with an empty list; the platform
+    # registers real models through the API (STORE_MODEL_IN_DB).
+    - model_name: _placeholder
+      litellm_params:
+        model: openai/placeholder
+        api_base: http://localhost:1/v1
+        api_key: unused
+  litellm_settings:
+    callbacks: ["prometheus"]
+  general_settings:
+    store_model_in_db: true
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi

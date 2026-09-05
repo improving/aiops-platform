@@ -9,6 +9,66 @@ interface InferenceInstance {
   ready: boolean;
   status: string;
   config: InferenceInstanceConfig;
+  litellm_model_name?: string | null;
+}
+
+// GET /v1alpha1/chat/targets: what the caller may chat, embed or rerank
+// against (backend/api/chat.py list_targets).
+interface ChatTarget {
+  name: string;
+  label: string;
+  capability: "chat" | "embedding" | "rerank";
+  instance_id: string | null;
+  provider_id: string | null;
+  model: string;
+  engine: string;
+  ready: boolean;
+  via: "litellm" | "direct" | "mock";
+}
+
+// Hosted providers (Phase 2b, backend/api/providers.py): an organization
+// admin adds a provider with an API key and exposes some of its models.
+interface ProviderModel {
+  id: string;
+  model: string;
+  display_name: string;
+  litellm_model_name: string;
+  capability: "chat" | "embedding";
+  context_length: number | null;
+  input_cost_per_token: number | null;
+  output_cost_per_token: number | null;
+  enabled: boolean;
+}
+
+interface Provider {
+  id: string;
+  kind: string;
+  name: string;
+  base_url: string | null;
+  enabled: boolean;
+  // The key is never echoed back, only whether one is on file.
+  has_key: boolean;
+  models: ProviderModel[];
+}
+
+// POST /v1alpha1/providers/discover and /providers/{id}/discover: a
+// provider's models, enriched with price fields from the local catalog.
+interface DiscoveredModel {
+  id: string;
+  display_name: string;
+  context_length: number | null;
+  capability: string;
+  input_cost_per_token: number | null;
+  output_cost_per_token: number | null;
+}
+
+// GET/PUT /v1alpha1/organizations/current/{spend,budget}.
+interface OrgSpend {
+  team_id: string | null;
+  spend: number;
+  max_budget: number | null;
+  budget_reset_at: string | null;
+  budget_usd: number | null;
 }
 
 interface InferenceInstanceConfig {
@@ -156,6 +216,11 @@ interface FineTuneJob {
 
 export type {
   Credential,
+  ChatTarget,
+  Provider,
+  ProviderModel,
+  DiscoveredModel,
+  OrgSpend,
   InferenceInstance,
   InferenceInstanceDashboard,
   Engine,

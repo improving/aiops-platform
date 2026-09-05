@@ -195,6 +195,34 @@ langflow-up: ## Serve Langflow behind the gateway (kind), OIDC-protected, at LAN
 	kubectl -n $(NAMESPACE) wait --for=condition=Available deployment/langflow --timeout=300s
 	@echo "Langflow: $(LANGFLOW_URL) (the frontend embeds it when NEXT_PUBLIC_LANGFLOW_URL is set; 'make frontend' sets it)"
 
+LITELLM_URL ?= https://litellm.127.0.0.1.nip.io
+LITELLM_MASTER_KEY ?= sk-dev-litellm-master
+
+litellm-up: ## Run the LiteLLM proxy on kind against the compose Postgres, behind the gateway at LITELLM_URL (idempotent)
+	docker compose -f $(COMPOSE_FILE) exec -T postgres psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='litellm'" | grep -q 1 || \
+		docker compose -f $(COMPOSE_FILE) exec -T postgres psql -U postgres -c 'CREATE DATABASE litellm'
+	kubectl create namespace litellm --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n litellm create secret generic litellm-master --from-literal=masterkey=$(LITELLM_MASTER_KEY) --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n litellm create secret generic litellm-db --from-literal=username=postgres --from-literal=password=postgres --dry-run=client -o yaml | kubectl apply -f -
+	@# The salt key encrypts stored provider keys and must never change once set: create it only when absent (and never echo it).
+	@kubectl -n litellm get secret litellm-env >/dev/null 2>&1 || \
+		kubectl -n litellm create secret generic litellm-env \
+			--from-literal=LITELLM_SALT_KEY=sk-salt-$$(openssl rand -hex 16) \
+			--from-literal=STORE_MODEL_IN_DB=True --from-literal=DISABLE_ADMIN_UI=True
+	@# The compose Postgres as the kind node sees the host (192.168.5.2 under colima); same lookup as gateway-up, HOST_IP overrides.
+	@host_ip="$(HOST_IP)"; \
+	if [ -z "$$host_ip" ]; then host_ip=$$(docker exec $(CLUSTER_NAME)-control-plane getent hosts host.docker.internal | awk '{print $$1}'); fi; \
+	if [ -z "$$host_ip" ]; then echo "could not resolve host.docker.internal from the kind node; run 'make litellm-up HOST_IP=<ip>'"; exit 1; fi; \
+	echo "LiteLLM database host: $$host_ip"; \
+	helm upgrade --install litellm oci://ghcr.io/berriai/litellm-helm --version 1.99.0 -n litellm -f infra/local/litellm/values.yaml --set db.endpoint=$$host_ip --timeout 10m
+	kubectl apply -f infra/local/litellm/gateway.yaml
+	kubectl -n litellm rollout status deployment/litellm --timeout=600s
+	@echo "LiteLLM: $(LITELLM_URL) (master key $(LITELLM_MASTER_KEY); 'make backend' passes both to the API)"
+
+litellm-down: ## Remove the LiteLLM release and its route (the litellm database and the salt Secret are kept)
+	kubectl delete -f infra/local/litellm/gateway.yaml --ignore-not-found
+	helm -n litellm uninstall litellm --ignore-not-found
+
 langflow-down: ## Remove the Langflow Deployment/Service/HTTPRoute/SecurityPolicy (the PVC is kept)
 	kubectl -n $(NAMESPACE) delete deployment/langflow service/langflow httproute/langflow securitypolicy/langflow-oidc --ignore-not-found
 
@@ -220,7 +248,15 @@ db-migrate: ## Apply the Alembic migrations to the local Postgres
 		DATABASE_PASSWORD=postgres \
 		uv run alembic upgrade head
 
-backend: ## Run the backend API with uv (needs helm on PATH and a kubeconfig)
+# The backend trusts the local CA (gateway hosts) and the public roots
+# (Hugging Face, OpenAI, chart repositories) through one bundle built from
+# certifi's cacert.pem plus infra/local/ca/ca.crt.
+CA_BUNDLE := $(CA_DIR)/bundle.crt
+
+$(CA_BUNDLE): $(CA_CRT)
+	cd backend && cat "$$(uv run python -c 'import certifi; print(certifi.where())')" ../$(CA_CRT) > ../$(CA_BUNDLE)
+
+backend: $(CA_BUNDLE) ## Run the backend API with uv (needs helm on PATH and a kubeconfig)
 	cd backend && \
 		DATABASE_URL=postgresql://localhost:5432 \
 		DATABASE_NAME=postgres \
@@ -233,8 +269,10 @@ backend: ## Run the backend API with uv (needs helm on PATH and a kubeconfig)
 		AIOPS_GATEWAY_NAME=aiops \
 		AIOPS_GATEWAY_NAMESPACE=envoy-gateway-system \
 		AIOPS_CHARTS_DIR=$(PWD)/charts \
-		SSL_CERT_FILE=$(PWD)/infra/local/ca/ca.crt \
-		REQUESTS_CA_BUNDLE=$(PWD)/infra/local/ca/ca.crt \
+		LITELLM_URL=$(LITELLM_URL) \
+		LITELLM_MASTER_KEY=$(LITELLM_MASTER_KEY) \
+		SSL_CERT_FILE=$(PWD)/$(CA_BUNDLE) \
+		REQUESTS_CA_BUNDLE=$(PWD)/$(CA_BUNDLE) \
 		uv run uvicorn app:app --reload --port 8000
 
 frontend: ## Run the frontend dev server with pnpm (Keycloak login; AUTH_MODE=disabled turns it off)
@@ -277,6 +315,7 @@ dev: ## Print the order to bring the whole stack up locally
 	@echo "  6. make auth-up         # Keycloak with the dev realm (alice/bob/admin)"
 	@echo "  7. make db-up           # postgres on :5432"
 	@echo "  8. make langflow-up     # optional, Langflow behind the gateway"
+	@echo "  9. make litellm-up      # optional, LiteLLM provider layer (chat targets, embeddings, rerank, metrics)"
 	@echo "  9. make backend         # (separate terminal) FastAPI on :8000 with OIDC"
 	@echo " 10. make frontend        # (separate terminal) Next.js on :3000, Keycloak login"
 	@echo " 11. make e2e-smoke       # API smoke with an automation token"
@@ -284,6 +323,6 @@ dev: ## Print the order to bring the whole stack up locally
 	@echo " 13. make ui-e2e-cluster  # Playwright cluster tier, logged in as alice"
 	@echo ""
 	@echo "Tear down:"
-	@echo "  make db-down langflow-down auth-down gateway-down kind-down"
+	@echo "  make db-down litellm-down langflow-down auth-down gateway-down kind-down"
 
 .DEFAULT_GOAL := help

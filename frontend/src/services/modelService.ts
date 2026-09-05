@@ -4,6 +4,7 @@ import {
   InferenceInstance,
   InferenceInstanceDashboard,
   Adapter,
+  ChatTarget,
   Credential,
   FineTuneJob,
   Engine,
@@ -69,6 +70,11 @@ export const modelService = {
     const response = await api.get<InferenceInstance[]>(
       "/api/v1alpha1/inferenceInstance"
     );
+    return response.data;
+  },
+
+  getChatTargets: async () => {
+    const response = await api.get<ChatTarget[]>("/api/v1alpha1/chat/targets");
     return response.data;
   },
 

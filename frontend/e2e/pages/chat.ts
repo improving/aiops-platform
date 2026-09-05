@@ -31,8 +31,8 @@ export class ChatPage extends AppShell {
     this.emptyState = page.getByText("No running inference instance");
   }
 
-  async open(instanceId?: string) {
-    await this.goto(instanceId ? `/chat?instance=${instanceId}` : "/chat");
+  async open(target?: string) {
+    await this.goto(target ? `/chat?target=${target}` : "/chat");
   }
 
   async selectTarget(label: string | RegExp) {

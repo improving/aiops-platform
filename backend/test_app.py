@@ -327,3 +327,107 @@ def test_create_inference_instance_needs_no_hf_token_for_ollama(monkeypatch):
     response = client.post("/v1alpha1/inferenceInstance", json=body)
     assert response.status_code == 400
     assert "HuggingFace API token" in response.json()["detail"]
+
+
+def test_ollama_serves_embeddings_too():
+    app = create_app()
+    client = TestClient(app)
+    engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
+    assert engines["Ollama"]["embedding_support"] is True
+    models = {m["modelId"]: m for m in client.get("/v1alpha1/models").json()}
+    assert models["all-minilm:33m"]["category"] == "embedding"
+
+
+@pytest.fixture
+def inference_env(monkeypatch):
+    """A mocked controller, credential store and LiteLLM client around
+    the inference instance routes."""
+    import api.inference_instance as ii
+
+    controller = mock.Mock()
+    controller.namespace = "ai-stack"
+    controller.get_service_name.return_value = "ollama-abcdef12"
+    controller.service_url.return_value = (
+        "http://ollama-abcdef12.ai-stack.svc:80"
+    )
+
+    async def install(*args, **kwargs):
+        return None
+
+    async def uninstall(*args, **kwargs):
+        return None
+
+    controller.install = install
+    controller.uninstall = uninstall
+    monkeypatch.setattr(ii, "get_controller", lambda *a, **k: controller)
+    monkeypatch.setattr(ii, "store_credential", mock.Mock())
+    monkeypatch.setattr(ii, "delete_credential", mock.Mock())
+    litellm = mock.Mock()
+    litellm.register_model.return_value = "mid-42"
+    monkeypatch.setattr(ii, "get_litellm_client", lambda: litellm)
+    return controller, litellm
+
+
+def _ollama_body(client):
+    engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
+    models = {m["modelId"]: m for m in client.get("/v1alpha1/models").json()}
+    return {
+        "model": {"id": models["qwen3:0.6b"]["id"]},
+        "engine": {"id": engines["Ollama"]["id"]},
+        "config": {},
+    }
+
+
+def test_create_registers_the_instance_in_litellm(inference_env):
+    controller, litellm = inference_env
+    app = create_app()
+    client = TestClient(app)
+    response = client.post(
+        "/v1alpha1/inferenceInstance", json=_ollama_body(client)
+    )
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert (
+        created["litellm_model_name"]
+        == f"inst-{created['id'].replace('-', '')[-8:]}"
+    )
+    name, params, info = litellm.register_model.call_args.args
+    assert name == created["litellm_model_name"]
+    assert params["model"] == "openai/qwen3:0.6b"
+    assert params["api_base"] == "http://ollama-abcdef12.ai-stack.svc:80/v1"
+    assert params["api_key"]  # the workload credential
+    assert info == {"mode": "chat", "aiops_instance_id": created["id"]}
+
+    deleted = client.delete(f"/v1alpha1/inferenceInstance/{created['id']}")
+    assert deleted.status_code == 200
+    litellm.delete_model.assert_called_once_with("mid-42")
+
+
+def test_create_survives_a_litellm_outage(inference_env):
+    controller, litellm = inference_env
+    from utils.litellm import LiteLLMError
+
+    litellm.register_model.side_effect = LiteLLMError("down")
+    app = create_app()
+    client = TestClient(app)
+    response = client.post(
+        "/v1alpha1/inferenceInstance", json=_ollama_body(client)
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["litellm_model_name"] is None
+    client.delete(f"/v1alpha1/inferenceInstance/{response.json()['id']}")
+    litellm.delete_model.assert_not_called()
+
+
+def test_create_without_litellm_configured(inference_env, monkeypatch):
+    import api.inference_instance as ii
+
+    monkeypatch.setattr(ii, "get_litellm_client", lambda: None)
+    app = create_app()
+    client = TestClient(app)
+    response = client.post(
+        "/v1alpha1/inferenceInstance", json=_ollama_body(client)
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["litellm_model_name"] is None
+    client.delete(f"/v1alpha1/inferenceInstance/{response.json()['id']}")

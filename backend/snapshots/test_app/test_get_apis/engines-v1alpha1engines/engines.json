@@ -102,7 +102,7 @@
     "id": "7c1f0d2e-6b3a-4f5c-9e8d-1a2b3c4d5e6f",
     "name": "Ollama",
     "llm_support": true,
-    "embedding_support": false,
+    "embedding_support": true,
     "reranking_support": false,
     "prompt_guard_support": false,
     "vector_db_support": false,

@@ -42,15 +42,32 @@ pnpm e2e:ui                               # Playwright UI mode
   candidate engine has `cpu: true`. This rule is a Phase 1 stopgap that the registry's serving options replace.
 - `src/lib/backend.ts` `backendUrl()` is the one place that resolves the backend URL on the server
   (`AIOPS_BACKEND_URL`, else the inlined `NEXT_PUBLIC_AIOPS_BACKEND_URL`); `src/proxy.ts` and the chat route use it.
-- Chat: `src/app/api/chat/route.ts` is a Node route handler on the Vercel AI SDK
-  (`createOpenAICompatible` pointed at `<backend>/v1alpha1`, `streamText`, `toUIMessageStream`,
-  `createUIMessageStreamResponse`). The body is `{ messages, instanceId, model, system, temperature }`; the handler
-  reads the session itself (`auth()`, 401 without one unless `AUTH_MODE=disabled`), forwards the bearer and
-  `X-AIOps-Instance` to `POST /v1alpha1/chat/completions`, and is excluded from the proxy matcher so it answers
-  JSON instead of a login redirect. `src/components/chat/ChatPanel.tsx` (`/chat`, `?instance=<id>` preselects) uses
-  `useChat` with a `DefaultChatTransport` whose `prepareSendMessagesRequest` adds the target, keeps one
-  conversation per instance in `localStorage` (`aiops.chat.<instanceId>`), and lists only instances that are
-  `ready` with an `endpoint`. The endpoint details page links to it with a "Chat" button.
+- Chat: `modelService.getChatTargets()` calls `GET /api/v1alpha1/chat/targets`, which lists what the caller may
+  chat, embed or rerank against (`ChatTarget`: `name` is `inst-<id8>`, `capability`, `ready`, `via`).
+  `src/app/api/chat/route.ts` is a Node route handler on the Vercel AI SDK (`createOpenAICompatible` pointed at
+  `<backend>/v1alpha1`, `streamText`, `toUIMessageStream`, `createUIMessageStreamResponse`). The body is
+  `{ messages, model, system, temperature }`, `model` being the target name; the handler reads the session itself
+  (`auth()`, 401 without one unless `AUTH_MODE=disabled`), forwards the bearer to
+  `POST /v1alpha1/chat/completions`, and is excluded from the proxy matcher so it answers JSON instead of a login
+  redirect. `src/components/chat/ChatPanel.tsx` (`/chat`, `?target=<name>` preselects) fetches the targets, keeps
+  those with `capability === "chat"` and `ready`, uses `useChat` with a `DefaultChatTransport` whose
+  `prepareSendMessagesRequest` sends the target name as `model`, and keeps one conversation per target in
+  `localStorage` (`aiops.chat.<target name>`). The endpoint details page links to it with a "Chat" button using
+  `inferenceInstance.litellm_model_name` (falling back to `inst-<id8>` derived from the instance id).
+  Since Phase 2b, `ChatTarget.provider_id` (`null` for instances and the mock target) tells the two apart;
+  `ChatPanel.tsx` splits the target `Select` into two `SelectGroup`s, "Deployed" and "Hosted".
+- Hosted providers (Phase 2b): `/providers` (`ProvidersPage.tsx`, `src/services/providerService.ts`) lists an
+  organization's hosted providers (`GET /v1alpha1/providers`) with an expandable model table per provider
+  (display name, model id, capability, context, per-token prices) and a `BudgetCard` for the LiteLLM team budget
+  (`GET`/`PUT /v1alpha1/organizations/current/{spend,budget}`). `AddProviderDialog.tsx` calls the preflight
+  `POST /v1alpha1/providers/discover` before the row exists, then `POST /v1alpha1/providers` with the picked
+  model ids and their discovered display names. Every write (add, enable toggle, discover-and-add, remove a
+  model, delete) is admin-only; `src/lib/roles.ts` `isAdmin(session)` is the one place that decides whether the
+  page renders those controls (`AUTH_MODE=disabled` -> true, else `session.roles` needs `"admin"`) -- a UI hint
+  only, like `session.roles` itself, since the backend enforces `require_admin` regardless.
+  The "Monthly budget (USD)" field is a plain `type="text"` input (not `type="number"`), so it keeps the
+  `textbox` accessible role the fast tier targets; the same is true of nothing else here, but keep it in mind
+  when adding a numeric field a Playwright spec will locate by role.
 - Forms use react-hook-form with zod (`@hookform/resolvers`). Gate submit buttons on reported errors, not on
   `formState.isValid`, which does not turn true reliably with coerced number fields. The notebook name rule
   mirrors the backend: DNS-1123 label, max 32 characters.

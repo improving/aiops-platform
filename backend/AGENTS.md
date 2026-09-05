@@ -32,7 +32,8 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   FastAPI lifespan. `init_db` first runs the Alembic migrations (`db/migrate.py` `upgrade_to_head`,
   `alembic/versions/`) on the app engine; a database that predates Alembic is stamped `0001` first.
 - `api/*.py` are the routers (`/v1alpha1/...`): `models`, `engines`, `hosts`, `inference_instance`,
-  `vectordb` and `vectordb_instance`, `notebooks`, `model_adapters`, `finetune`, `credentials`, `authz`, `chat`.
+  `vectordb` and `vectordb_instance`, `notebooks`, `model_adapters`, `finetune`, `credentials`, `authz`, `chat`,
+  `organizations`.
   Create endpoints persist a row, then call a controller; on install failure they delete the row again.
   `inference_instance` requires `HF_API_TOKEN` for every engine except those in `NO_HF_TOKEN_ENGINES` (Ollama).
 - `controller/`: `base_controller.Controller` is the Helm workflow (fetch chart, render values, install, upgrade,
@@ -111,20 +112,95 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   `test_app.py` and `test_controller.py` cover the router and the rendered values/policy names.
 - `test_auth.py` signs tokens with a generated RSA key and patches `PyJWKClient.fetch_data`;
   the tests share one SQLite file, so every test removes the rows it creates.
-- `api/chat.py` `POST /v1alpha1/chat/completions` is the OpenAI-compatible passthrough the UI's `/api/chat`
-  route handler calls: the target comes from the `X-AIOps-Instance` header (400 without it, 404 unknown,
-  `authorize_read` for the policy, 503 while the instance has no endpoint), the body is forwarded unchanged to
-  `<instance.endpoint>/v1/chat/completions` with the workload credential in `x-api-key`
-  (`find_credential` + `read_credential_value`), and the SSE stream is relayed when the body has `"stream": true`
-  (upstream 4xx/5xx are forwarded with their text as `detail`, an unreachable upstream is a 502).
-  `resolve_target` and `upstream_client` are module-level seams; `test_chat.py` patches them with an
-  `httpx.MockTransport`. `AIOPS_CHAT_MOCK=true` (only with `TEST_MODE=true`) answers `You said: <last user
-  message>` without any instance, for the Playwright fast tier. The gateway host uses the local CA, so the
-  process needs `SSL_CERT_FILE` (httpx honours it; `make backend` sets it).
+- `api/chat.py` serves `GET /v1alpha1/chat/targets` and `POST /v1alpha1/chat/completions`, `/v1alpha1/embeddings`
+  and `/v1alpha1/rerank`. A target is a deployed instance (`inst-<id8>`) or, since Phase 2b, a hosted provider
+  model (`prov-<id8>/<model>`, `<model>` may itself contain `/` — OpenRouter ids do — so only the first `/`
+  after the id8 is a separator); `find_target` resolves either into a `Target` dataclass (`kind`, `org_id`,
+  `litellm_model_id`, `endpoint`, `upstream_model`, `api_key_lookup`) after `authorize_read` on the underlying
+  row (`utils/ids.find_by_id8` on `DBInferenceInstance` or `models.provider.Provider`). `list_targets` is
+  `list_instance_targets` (the caller's organization's registered instances, plus, without LiteLLM, ready `llm`
+  instances with an endpoint, `via: "litellm"` or `"direct"`) followed by `list_hosted_targets` (every enabled
+  model of every enabled provider in the caller's organization, `via: "litellm"` always, since hosted models
+  have no direct route); every target entry carries both `instance_id` and `provider_id`, one of them `null`.
+  When the target is registered in LiteLLM (`litellm_model_id` set) every route forwards to the proxy with the
+  organization's virtual key (`org_key` → `utils.litellm.ensure_org_key`, `_relay_litellm`); otherwise chat
+  falls back to the Phase 1 direct passthrough to `<target.endpoint>/v1/chat/completions` with the workload
+  credential in `x-api-key` (`_relay_direct`, `target.api_key_lookup()`) — a hosted target has no `endpoint`
+  and answers 503 "Hosted models need LiteLLM" — and embeddings/rerank answer 503 without LiteLLM regardless of
+  target, since there is no direct route for them either. Both relays stream the SSE answer when the body has
+  `"stream": true` (upstream 4xx/5xx forwarded with their text as `detail`, an unreachable upstream a 502).
+  `find_target`, `litellm_client`, `org_key` and `instance_api_key` are module-level seams; `test_chat.py`
+  patches them (`find_target` with a `Target` built by the test's own `_target()`/`_add_hosted_model()`
+  helpers), and patches `litellm_client`'s `LiteLLMClient` with an `httpx.MockTransport` for the LiteLLM
+  path. `AIOPS_CHAT_MOCK=true` (only with `TEST_MODE=true`) serves one target `inst-mock` plus
+  `list_hosted_targets` and answers chat with `You said: <last user message>`, embeddings with a 4-float
+  vector per input and rerank with the documents reversed, without any instance, for the Playwright fast tier.
+  The gateway host uses the local CA, so the process needs `SSL_CERT_FILE` (httpx honours it; `make backend`
+  sets it).
+- `utils/litellm.py` is the LiteLLM proxy client and the platform's naming rules in it. `litellm_settings()`
+  reads `LITELLM_URL`/`LITELLM_MASTER_KEY`; `get_client()` is `None` without both, and every caller treats that
+  as "skip the proxy" rather than an error. `_ROUTES` maps `(engine, category)` to the LiteLLM provider prefix,
+  path suffix and mode (`instance_litellm_params`); NIM's reranker and OPEA have no route. `LiteLLMClient` wraps
+  `/model/new`, `/model/delete`, `/team/new`, `/team/delete`, `/key/generate`, `/key/delete` and `/team/info`
+  behind a sync `httpx.Client` (`request()` also supports a streamed response the caller must close, and its
+  `response.extensions["aiops_client"]`); every non-2xx or transport error raises `LiteLLMError`.
+  `ensure_org_key(db, org, core_v1=None)` creates the organization's LiteLLM team and one virtual key on first
+  use, stores the key in Secret `org-<id8>-litellm-key` (`utils/credentials.py` `_secret_body`/`_apply_secret`,
+  key `"key"`) and caches it in-process for 300 s (`_org_key_cache`, cleared by tests).
+  `api/inference_instance.py` `register_instance`/`unregister_instance` call `get_client()` and
+  `instance_litellm_params` around `controller.service_url(instance, engine_chart)` (the in-cluster
+  `http://<service>.<namespace>.svc:<port>` URL, `base_controller.Controller.service_url`) to register/delete
+  the instance's LiteLLM model (`inst-<id8>`, `instance_model_name`) right after install and before uninstall;
+  both are wrapped in `asyncio.to_thread` and are best effort — a LiteLLM outage is logged and never fails a
+  launch or a delete. Migration `0005` adds `inference_instances.litellm_model_name`/`litellm_model_id` and
+  `organizations.litellm_team_id`/`litellm_key_secret_name`/`budget_usd`. Since Phase 2b, `hosted_model_name`
+  and `hosted_litellm_params` are the same naming and `/model/new` params for hosted provider models
+  (`api/providers.py`), and `LiteLLMClient.update_team_budget(team_id, max_budget)` calls `POST /team/update`
+  with `{"team_id", "max_budget", "budget_duration": "30d"}` (`max_budget: None` clears the cap — verified
+  against a throwaway team on the local proxy: `/team/info` reports `max_budget: null` back after that call).
+- Hosted providers (Phase 2b): `utils/secret_store.py` is the `SecretStore` seam for a provider's API key —
+  `KubernetesSecretStore` (the same Secret shape as `utils/credentials.py`, `core_v1` resolved lazily so
+  constructing the store never touches the kubeconfig on its own) or `MemorySecretStore` (a module-level dict);
+  `get_secret_store()` returns the memory store only for `AIOPS_SECRET_STORE=memory` with `TEST_MODE=true`
+  (otherwise `RuntimeError`), the Kubernetes store otherwise. `utils/model_prices.py` `load_prices()` caches
+  LiteLLM's public `model_prices_and_context_window.json` in-process (`TEST_MODE` reads
+  `raw_data/model_prices.sample.json` instead of fetching it, and a failed fetch outside `TEST_MODE` logs and
+  returns `{}`); `lookup_price(kind, model)` tries `model`, `<kind>/model` then `openrouter/model`.
+  `utils/providers.py` has `PROVIDER_KINDS` (`openai`, `anthropic`, `gemini`, `groq`, `openrouter`),
+  `provider_secret_name(provider_id)` (`prov-<id8>-credentials`), `discover_models(kind, api_key, base_url)`
+  (calls the provider's own model-listing endpoint, raises `ProviderError` on a rejected key or an unreachable
+  provider) and the local-only `capability_for`/`enrich` (`utils/model_prices.lookup_price`): a model's
+  capability is its price entry's `mode` when that is `chat` or `embedding`, `"chat"` when the model is not in
+  the catalog, and dropped (excluded from discovery) for every other known mode (tts, image, moderation,
+  audio, ...).
+  `api/providers.py` (`/v1alpha1/providers`, `require_admin` on every write, `authorize_read` + `org_scope` on
+  every read) creates a `Provider` row, writes its key to the secret store, then registers each requested
+  model in LiteLLM as `prov-<id8>/<model>` before adding the `ProviderModel` rows and committing — in that
+  order, so a duplicate name (`uq_providers_org_name`, caught as `IntegrityError` on an explicit `db.flush()`
+  before the Secret is even written) is a clean 409, and a `LiteLLMError` during registration deletes the
+  models already registered and the Secret, rolls the transaction back, and answers 502; `PATCH` with a new
+  `api_key` re-registers every model with the new key before deleting the old registrations, so a failure
+  there leaves the old key and registrations untouched; `DELETE` unregisters best effort (like
+  `unregister_instance`) and always deletes the Secret and rows. `POST /discover` (no row yet) and
+  `POST /{id}/discover` (reads the stored key back from the secret store) return `discover_models` merged with
+  local price fields; `AIOPS_CHAT_MOCK=true` short-circuits both to two canned models (`mock-chat-1` chat,
+  `mock-embed-1` embedding) and registration to `litellm_model_id="mock"`, for the Playwright fast tier.
+  Responses never carry the key, only `has_key: true`.
+  Migration `0006` (`down_revision = "0005"`) adds `providers` and `provider_models`
+  (`provider_models.provider_id` cascades in the ORM relationship and the FK, `ondelete="CASCADE"`, since
+  SQLite does not enforce FK cascades on its own).
+  `api/chat.py` and `api/organizations.py` are the two callers outside `api/providers.py`: see their own bullets.
+- `api/organizations.py` `GET /v1alpha1/organizations/current/spend` (any member) and
+  `PUT /v1alpha1/organizations/current/budget` (`require_admin`, body `{"budget_usd": number | null}`) are the
+  budget half of Phase 2b: `PUT` stores `budget_usd` on the organization row first, then (outside
+  `AIOPS_CHAT_MOCK`) `ensure_org_key`s the LiteLLM team and calls `LiteLLMClient.update_team_budget`; both
+  routes answer the same document (`team_id`, `spend`, `max_budget`, `budget_reset_at` from `/team/info`, plus
+  `budget_usd` from the row). `AIOPS_CHAT_MOCK=true` skips LiteLLM on both: `PUT` just persists the row, `GET`
+  answers a canned `spend`/`budget_reset_at` alongside the real `budget_usd`.
 - `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check: `utils/hostnames.py`
   `parse_hostname` turns the `Host` (or `X-Forwarded-Host`) into `(kind, id8, suffix)`
   (`nb`, `vdb`, `vdb ... -api`, `inf`; the parent domain from `gateway_settings()`, or the first label without it),
-  the row is found with `cast(Model.id, String).like("%<id8>")`, notebooks need `Policy.can_write`
+  the row is found with `utils.ids.find_by_id8` (also used by `api/chat.py`), notebooks need `Policy.can_write`
   and the other kinds `Policy.can_read`. 200 carries `X-Auth-User-Email`, `X-Auth-User-Sub`, `X-Auth-Org`;
   403 reuses `not_owner`; 404 covers unknown and unparsable hosts; one info log line per decision.
   `test_authz.py` imports the token helpers from `test_auth.py`.

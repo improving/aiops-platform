@@ -1,0 +1,27 @@
+models:
+  pull:
+{% for tag in models %}
+    - "{{ tag }}"
+{% endfor %}
+
+service:
+  type: {{ service.type | default('ClusterIP') }}
+  port: {{ service.port | default(80) }}
+
+resources:
+  requests:
+    cpu: "{{ cpu_request | default('1') }}"
+    memory: {{ memory_request | default('2Gi') }}
+  limits:
+    memory: {{ memory_limit | default('4Gi') }}
+
+env:
+{% for env_var in env %}
+  - name: {{ env_var.name }}
+    value: "{{ env_var.value }}"
+{% endfor %}
+
+{% if nodeSelector.hostname is defined %}
+nodeSelector:
+  kubernetes.io/hostname: {{ nodeSelector.hostname }}
+{% endif %}

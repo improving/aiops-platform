@@ -11,8 +11,10 @@
 #   - create a Jupyter notebook instance, wait for it to be Running, curl its
 #     base path through a port-forward (skip with --skip-notebook)
 #   - launch qwen3:0.6b on the Ollama engine, wait for it to be Ready and ask
-#     for one chat completion through /v1alpha1/chat/completions (skip with
-#     --skip-ollama; the first run pulls the Ollama image and the model)
+#     for one chat completion through /v1alpha1/chat/completions, then launch
+#     all-minilm:33m and embed one sentence through /v1alpha1/embeddings
+#     (skip both with --skip-ollama; the first run pulls the Ollama image and
+#     the models; embeddings need LiteLLM, see 'make litellm-up')
 #   - delete every instance it created
 #
 # Requires: curl, jq, kubectl. Run via `make e2e-smoke` or directly.
@@ -61,9 +63,6 @@ PF_PID=""
 TOKEN=""
 API_BODY_FILE=/tmp/e2e-api-body.json
 API_STATUS=""
-# One extra request header for the next api_call (the chat step selects its
-# instance with X-AIOps-Instance); empty means none.
-API_EXTRA_HEADER=""
 
 pass() { printf "PASS  %-55s %s\n" "$1" "${2:-}"; }
 fail() { printf "FAIL  %-55s %s\n" "$1" "${2:-}"; FAILURES=$((FAILURES + 1)); }
@@ -100,7 +99,6 @@ api_call() {
   local method="$1" path="$2" data="${3:-}"
   local args=(-sS -o "$API_BODY_FILE" -w "%{http_code}" -X "$method")
   [[ -n "$TOKEN" ]] && args+=(-H "Authorization: Bearer $TOKEN")
-  [[ -n "$API_EXTRA_HEADER" ]] && args+=(-H "$API_EXTRA_HEADER")
   [[ -n "$data" ]] && args+=(-H "Content-Type: application/json" -d "$data")
   API_STATUS=$(curl "${args[@]}" "$BACKEND_URL$path") || API_STATUS="000"
 }
@@ -495,14 +493,29 @@ step_wait_ollama_ready() {
   fail "wait for Ollama instance Ready" "timed out after 15m (endpoint=$endpoint ready=$ready)"
 }
 
+# The chat target is the instance's LiteLLM name (inst-<id8>, also used
+# without LiteLLM); the backend replaces it with the engine's model id when
+# it forwards directly.
+instance_target() {
+  api_get "/v1alpha1/inferenceInstance/$1"
+  local name
+  name=$(jq -r '.litellm_model_name // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+  [[ -n "$name" ]] && { echo "$name"; return; }
+  local hex="${1//-/}"
+  echo "inst-${hex: -8}"
+}
+
 step_chat_completion() {
   [[ -z "$INFERENCE_INSTANCE_ID" ]] && { fail "POST /v1alpha1/chat/completions" "no instance id"; return; }
-  API_EXTRA_HEADER="X-AIOps-Instance: $INFERENCE_INSTANCE_ID"
+  local target
+  target=$(instance_target "$INFERENCE_INSTANCE_ID")
+  info "chat target: $target"
   api_post "/v1alpha1/chat/completions" \
-    '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Reply with the single word pong."}],"stream":false}'
-  API_EXTRA_HEADER=""
+    "{\"model\":\"$target\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word pong.\"}],\"stream\":false,\"max_tokens\":400}"
+  # qwen3 thinks first; when the budget goes to reasoning, the answer is
+  # in message.reasoning and content stays empty. Either proves the path.
   local content
-  content=$(jq -r '.choices[0].message.content // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+  content=$(jq -r '.choices[0].message.content // .choices[0].message.reasoning // .choices[0].message.reasoning_content // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
   if [[ "$API_STATUS" == "200" && -n "$content" ]]; then
     pass "POST /v1alpha1/chat/completions" "answer=$(echo "$content" | head -c 60 | tr '\n' ' ') $(elapsed)"
   else
@@ -518,6 +531,43 @@ step_delete_ollama() {
     INFERENCE_INSTANCE_ID=""
   else
     fail "DELETE /v1alpha1/inferenceInstance/$INFERENCE_INSTANCE_ID" "http_status=$API_STATUS"
+  fi
+}
+
+# --- Ollama embeddings through LiteLLM ---------------------------------------
+
+step_create_embedding_instance() {
+  local model_id engine_id
+  api_get "/v1alpha1/models"
+  model_id=$(jq -r '.[] | select(.modelId == "all-minilm:33m") | .id' "$API_BODY_FILE" | head -1)
+  api_get "/v1alpha1/engines"
+  engine_id=$(jq -r '.[] | select(.name == "Ollama") | .id' "$API_BODY_FILE" | head -1)
+  if [[ -z "$model_id" || -z "$engine_id" || "$model_id" == "null" || "$engine_id" == "null" ]]; then
+    fail "resolve all-minilm:33m and the Ollama engine" "model=$model_id engine=$engine_id"
+    return
+  fi
+  api_post "/v1alpha1/inferenceInstance" \
+    "{\"model\":{\"id\":\"$model_id\"},\"engine\":{\"id\":\"$engine_id\"},\"config\":{}}"
+  if [[ "$API_STATUS" != "201" ]]; then
+    fail "POST /v1alpha1/inferenceInstance (Ollama embeddings)" "http_status=$API_STATUS body=$(cat "$API_BODY_FILE")"
+    return
+  fi
+  INFERENCE_INSTANCE_ID=$(jq -r '.id' "$API_BODY_FILE")
+  pass "POST /v1alpha1/inferenceInstance (Ollama all-minilm:33m)" "id=$INFERENCE_INSTANCE_ID $(elapsed)"
+}
+
+step_embeddings() {
+  [[ -z "$INFERENCE_INSTANCE_ID" ]] && { fail "POST /v1alpha1/embeddings" "no instance id"; return; }
+  local target dims
+  target=$(instance_target "$INFERENCE_INSTANCE_ID")
+  api_post "/v1alpha1/embeddings" "{\"model\":\"$target\",\"input\":[\"hello world\"]}"
+  dims=$(jq -r '.data[0].embedding | length' "$API_BODY_FILE" 2>/dev/null || echo "0")
+  if [[ "$API_STATUS" == "200" && "$dims" -gt 0 ]]; then
+    pass "POST /v1alpha1/embeddings" "dims=$dims $(elapsed)"
+  elif [[ "$API_STATUS" == "503" ]]; then
+    fail "POST /v1alpha1/embeddings" "503: LiteLLM is not configured (make litellm-up, then restart make backend)"
+  else
+    fail "POST /v1alpha1/embeddings" "http_status=$API_STATUS body=$(head -c 300 "$API_BODY_FILE")"
   fi
 }
 
@@ -555,6 +605,10 @@ if ! $SKIP_OLLAMA; then
   step_create_ollama
   step_wait_ollama_ready
   step_chat_completion
+  step_delete_ollama
+  step_create_embedding_instance
+  step_wait_ollama_ready
+  step_embeddings
   step_delete_ollama
 else
   echo "SKIP  ollama steps (--skip-ollama)"

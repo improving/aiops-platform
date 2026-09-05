@@ -18,3 +18,4 @@ Mistral 7B v0.1,mistralai/Mistral-7B-v0.1,Mistral 7B v0.1 is a large language mo
 Qwen3 0.6B,qwen3:0.6b,Qwen3 0.6B chat model served by Ollama on CPU (Apache 2.0),llm,text generation,523000000,
 Qwen2.5 1.5B Instruct,qwen2.5:1.5b-instruct,Qwen2.5 1.5B instruct model served by Ollama on CPU (Apache 2.0),llm,text generation,986000000,
 SmolLM2 1.7B Instruct,smollm2:1.7b,SmolLM2 1.7B instruct model served by Ollama on CPU (Apache 2.0),llm,text generation,1800000000,
+all-MiniLM L6 v2,all-minilm:33m,Sentence embedding model served by Ollama on CPU (Apache 2.0),embedding,embedding,67000000,

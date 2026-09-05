@@ -74,6 +74,10 @@ class DBInferenceInstance(Base):
     owner_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # The LiteLLM registration (utils/litellm.py); NULL when the proxy is
+    # not configured or the engine has no LiteLLM route.
+    litellm_model_name = Column(String, nullable=True)
+    litellm_model_id = Column(String, nullable=True)
 
     model = relationship("DBModel")
     engine = relationship("DBEngine")

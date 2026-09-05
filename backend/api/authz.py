@@ -12,7 +12,6 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
 from auth.current_user import CurrentUser, get_current_user
@@ -23,6 +22,7 @@ from models.inference_instance import DBInferenceInstance
 from models.notebook import Notebook
 from models.vectordb_instance import DBVectorDBInstance
 from utils.hostnames import parse_hostname
+from utils.ids import find_by_id8
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -75,11 +75,7 @@ def authorize_route(
         )
     kind, id8, _suffix = parsed
     model, label, allowed = _RULES[kind]
-    # The last eight hex characters of the id; the cast gives hex on
-    # SQLite and the dashed text on Postgres, and both end with them.
-    row = (
-        db.query(model).filter(cast(model.id, String).like(f"%{id8}")).first()
-    )
+    row = find_by_id8(db, model, id8)
     if row is None:
         logger.info(
             "authz host=%r forwarded_host=%r sub=%s decision=no-instance",

@@ -19,6 +19,8 @@ from api.model_adapters import router as model_adapters_router
 from api.models import router as models_router
 from api.notebooks import router as notebooks_router
 from api.notebooks import update_all_notebook_instance_endpoints
+from api.organizations import router as organizations_router
+from api.providers import router as providers_router
 from api.vectordb import router as vectordb_router
 from api.vectordb_instance import router as vectordb_instance_router
 from api.vectordb_instance import update_all_vectordb_instance_endpoints
@@ -125,6 +127,8 @@ def create_app(setup_db: bool = True):
     _app.include_router(authz_router, tags=["authz"])
     _app.include_router(credentials_router, tags=["credentials"])
     _app.include_router(chat_router, tags=["chat"])
+    _app.include_router(organizations_router, tags=["organizations"])
+    _app.include_router(providers_router, tags=["providers"])
 
     @_app.post("/reload-data", tags=["utility"])
     async def reload_data_endpoint(

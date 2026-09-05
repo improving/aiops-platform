@@ -188,5 +188,15 @@
     "subcategory": "text generation",
     "size": 1800000000,
     "countAdapters": 0
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000015",
+    "name": "all-MiniLM L6 v2",
+    "modelId": "all-minilm:33m",
+    "description": "Sentence embedding model served by Ollama on CPU (Apache 2.0)",
+    "category": "embedding",
+    "subcategory": "embedding",
+    "size": 67000000,
+    "countAdapters": 0
   }
 ]

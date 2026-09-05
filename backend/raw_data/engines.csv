@@ -3,4 +3,4 @@ id,name,llm_support,embedding_support,reranking_support,prompt_guard_support,vec
 f2fd8a4a5cfa4c40b8348cf8d86343fc,NIM,true,true,true,,,
 49faea0e40a84e14832b10d494f6bae0,vLLM,true,,,,,
 a975bb3bd23b48b1af180c75b0ffe2d1,OPEA,,,,true,,
-7c1f0d2e6b3a4f5c9e8d1a2b3c4d5e6f,Ollama,true,,,,,true
+7c1f0d2e6b3a4f5c9e8d1a2b3c4d5e6f,Ollama,true,true,,,,true

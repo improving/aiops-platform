@@ -172,6 +172,18 @@ class Controller(ABC):
             f"app.kubernetes.io/name={engineChart.chart_name}"
         )
 
+    def service_url(
+        self,
+        instance: InferenceInstanceSchema,
+        engineChart: EngineChartsSchema,
+    ) -> str:
+        """The in-cluster URL LiteLLM calls; it bypasses the gateway and
+        its API-key policy, so the workload credential goes as bearer."""
+        service = self.get_service_name(instance, engineChart)
+        return (
+            f"http://{service}.{self.namespace}.svc:{INFERENCE_GATEWAY_PORT}"
+        )
+
     async def prepare_helm_values(
         self,
         instance: InferenceInstanceSchema,

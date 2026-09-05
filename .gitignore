@@ -30,3 +30,6 @@ out/
 .cr-release-packages/
 .cr-index/
 charts/**/charts/*.tgz
+
+# Agent worktrees created by Claude Code
+.claude/worktrees/
