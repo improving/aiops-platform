@@ -110,7 +110,7 @@ def _find_instance_target(db: Session, name: str, user: CurrentUser) -> Target:
         org_id=instance.org_id,
         litellm_model_id=instance.litellm_model_id,
         endpoint=instance.endpoint,
-        upstream_model=instance.model.modelId,
+        upstream_model=instance.reference or instance.model.modelId,
         api_key_lookup=lambda: instance_api_key(db, instance),
     )
 
@@ -195,7 +195,7 @@ def list_instance_targets(db: Session, user: CurrentUser) -> list[dict]:
                 ),
                 "instance_id": str(row.id),
                 "provider_id": None,
-                "model": row.model.modelId,
+                "model": row.reference or row.model.modelId,
                 "engine": row.engine.name,
                 "ready": bool(ready),
                 "via": "litellm" if registered else "direct",

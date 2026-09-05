@@ -11,10 +11,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { HandIcon, RocketIcon, PlusIcon } from "@radix-ui/react-icons";
+import { HandIcon, RocketIcon, ArchiveIcon } from "@radix-ui/react-icons";
 import { Model } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
-import ImportModelDialog from "@/components/models/ImportModelDialog";
 import { modelService } from "@/services/modelService";
 import { formatEnumLabel, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
@@ -35,7 +34,6 @@ export default function ModelCatalog() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedSubcategory, setSelectedSubcategory] = useState("all");
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchModels = useCallback(async () => {
@@ -51,15 +49,6 @@ export default function ModelCatalog() {
     fetchModels();
   }, [fetchModels]);
 
-  const handleImportSuccess = () => {
-    setIsImportDialogOpen(false);
-    fetchModels();
-    toast({
-      title: "Success",
-      description: "Model imported successfully.",
-    });
-  };
-
   const filteredModels = models.filter(
     (model) =>
       (model.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -69,9 +58,13 @@ export default function ModelCatalog() {
         model.subcategory === selectedSubcategory)
   );
 
-  const categories = Array.from(new Set(models.map((model) => model.category)));
+  const categories = Array.from(
+    new Set(models.map((model) => model.category).filter(Boolean))
+  );
+  // A registry entry imported from a source (Hugging Face, Ollama,
+  // OpenRouter) or added manually without one has no subcategory.
   const subcategories = Array.from(
-    new Set(models.map((model) => model.subcategory))
+    new Set(models.map((model) => model.subcategory).filter(Boolean))
   );
 
   return (
@@ -113,12 +106,11 @@ export default function ModelCatalog() {
             ))}
           </SelectContent>
         </Select>
-        <Button
-          onClick={() => setIsImportDialogOpen(true)}
-          icon={<PlusIcon className="w-4 h-4" />}
-        >
-          Import Model
-        </Button>
+        <Link href="/models/registry" passHref>
+          <Button variant="outline" icon={<ArchiveIcon className="w-4 h-4" />}>
+            Manage registry
+          </Button>
+        </Link>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredModels.map((model) => (
@@ -137,12 +129,16 @@ export default function ModelCatalog() {
             content={
               <>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                    {formatEnumLabel(model.category)}
-                  </span>
-                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                    {formatEnumLabel(model.subcategory)}
-                  </span>
+                  {model.category && (
+                    <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                      {formatEnumLabel(model.category)}
+                    </span>
+                  )}
+                  {model.subcategory && (
+                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                      {formatEnumLabel(model.subcategory)}
+                    </span>
+                  )}
                   {model.countAdapters > 0 && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm hover:bg-blue-200 hover:text-blue-900 underline">
                       <Link href={`/models/${model.id}?tab=adapters`}>
@@ -155,7 +151,7 @@ export default function ModelCatalog() {
                   {model.description}
                 </p>
                 <p className="text-sm text-gray-600">
-                  Size: {formatSize(model.size)}
+                  Size: {model.size ? formatSize(model.size) : "unknown"}
                 </p>
               </>
             }
@@ -183,11 +179,6 @@ export default function ModelCatalog() {
           />
         ))}
       </div>
-      <ImportModelDialog
-        isOpen={isImportDialogOpen}
-        onClose={() => setIsImportDialogOpen(false)}
-        onSuccess={handleImportSuccess}
-      />
     </>
   );
 }

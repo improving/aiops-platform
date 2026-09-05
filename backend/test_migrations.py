@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import sqlalchemy as sa
 from alembic import command
@@ -25,8 +26,20 @@ models_table = sa.table(
     sa.column("id", sa.UUID()),
     sa.column("name", sa.String()),
     sa.column("modelId", sa.String()),
+    sa.column("category", sa.String()),
+    sa.column("capabilities", sa.JSON()),
+    sa.column("formats", sa.JSON()),
     sa.column("created_at", sa.DateTime(timezone=True)),
     sa.column("updated_at", sa.DateTime(timezone=True)),
+)
+
+# The 0007 registry table, typed the same way.
+serving_options_table = sa.table(
+    "model_serving_options",
+    sa.column("id", sa.UUID()),
+    sa.column("model_id", sa.UUID()),
+    sa.column("engine", sa.String()),
+    sa.column("reference", sa.String()),
 )
 
 organizations_table = sa.table(
@@ -101,7 +114,13 @@ def test_upgrade_fresh_database(tmp_path):
         table_names(engine)
     )
     assert current_revision(engine) == head_revision()
+    # A mis-numbered file would still satisfy the dynamic check above.
+    assert head_revision() == "0007"
     assert {"organizations", "users", "memberships"} <= table_names(engine)
+    assert "model_serving_options" in table_names(engine)
+    assert "reference" in column_names(engine, "inference_instances")
+    for column in ("source", "status", "capabilities", "formats", "tags"):
+        assert column in column_names(engine, "models"), column
     for table in TENANT_TABLES:
         assert {"org_id", "owner_id"} <= column_names(engine, table), table
     assert "api_endpoint" in column_names(engine, "vectordb_instances")
@@ -162,6 +181,96 @@ def test_upgrade_twice_is_a_no_op(tmp_path):
         ids = conn.execute(sa.select(models_table.c.id)).scalars().all()
     assert ids == [model_id]
     assert len(organizations(engine)) == 1
+
+
+def test_registry_migration_seeds_serving_options_from_category_and_model_id(
+    tmp_path,
+):
+    """0007's data step: an Ollama tag gets one Ollama serving option, a
+    Hugging Face-style llm id gets HuggingFace, vLLM and NIM."""
+    engine = make_engine(tmp_path)
+    with engine.begin() as conn:
+        command.upgrade(alembic_config(conn), "0006")
+
+    ollama_id = uuid.uuid4()
+    hf_id = uuid.uuid4()
+    now = datetime.now()
+    with engine.begin() as conn:
+        conn.execute(
+            models_table.insert(),
+            [
+                {
+                    "id": ollama_id,
+                    "name": "Qwen3 0.6B",
+                    "modelId": "qwen3:0.6b",
+                    "category": "llm",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+                {
+                    "id": hf_id,
+                    "name": "Llama 3.1 8B Instruct",
+                    "modelId": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                    "category": "llm",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            ],
+        )
+
+    upgrade_to_head(engine)
+
+    assert current_revision(engine) == head_revision() == "0007"
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(
+                serving_options_table.c.model_id,
+                serving_options_table.c.engine,
+                serving_options_table.c.reference,
+            )
+        ).all()
+    by_model: dict = {}
+    for model_id, option_engine, reference in rows:
+        by_model.setdefault(model_id, []).append((option_engine, reference))
+
+    assert by_model[ollama_id] == [("Ollama", "qwen3:0.6b")]
+    assert set(by_model[hf_id]) == {
+        ("HuggingFace", "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+        ("vLLM", "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+        ("NIM", "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+    }
+
+    # capabilities/formats are JSON-typed columns: the data step must
+    # pass Python lists through them, not pre-json.dumps()-ed strings,
+    # which the column would then double-encode.
+    with engine.connect() as conn:
+        capabilities_and_formats = conn.execute(
+            sa.select(
+                models_table.c.capabilities, models_table.c.formats
+            ).where(models_table.c.id == ollama_id)
+        ).one()
+    assert capabilities_and_formats == (["chat"], ["gguf"])
+
+
+def test_registry_migration_tolerates_a_row_with_no_category(tmp_path):
+    """A pre-registry row inserted without a category (the shape
+    test_upgrade_stamps_database_created_by_the_old_code seeds) must not
+    make the data step raise, and gets no serving options."""
+    engine = make_engine(tmp_path)
+    with engine.begin() as conn:
+        command.upgrade(alembic_config(conn), BASELINE_REVISION)
+    model_id = seed_model(engine)
+
+    upgrade_to_head(engine)
+
+    assert current_revision(engine) == head_revision()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.select(serving_options_table.c.id).where(
+                serving_options_table.c.model_id == model_id
+            )
+        ).all()
+    assert rows == []
 
 
 def test_refresh_db_leaves_a_clean_upgraded_schema(tmp_path):

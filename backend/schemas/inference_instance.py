@@ -47,5 +47,21 @@ class InferenceInstanceSchema(BaseModel):
     ready: bool | None = False
     status: str | None = None
     litellm_model_name: str | None = None
+    # The serving option's reference (Phase 3), when the instance was
+    # launched from one; every consumer reads
+    # ``instance.reference or instance.model.modelId``.
+    reference: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InferenceInstanceCreateSchema(InferenceInstanceSchema):
+    """Request body for creating an inference instance.
+
+    ``serving_option_id`` is request-only, like NotebookCreateSchema's
+    name validation: it selects one of the model's serving options
+    (schemas/serving_option.py) and its ``reference`` is persisted on
+    the instance row instead of being echoed back on read.
+    """
+
+    serving_option_id: uuid.UUID | None = None

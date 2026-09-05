@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-05
 ---
 
@@ -18,6 +18,16 @@ Serving options link an entry to the engines or hosted providers that can run it
 
 ## Consequences
 
-- An Alembic migration reshapes `models` and adds `model_serving_options` and `providers`; existing rows become `manual` entries.
+- An Alembic migration (`0007`) reshapes `models` and adds `model_serving_options`; existing rows become `manual` entries.
+  The `providers` table came earlier with Phase 2b (migration `0006`).
 - Importers depend on external APIs (Hugging Face Hub, OpenRouter); they run on demand and on a schedule, never at request time.
 - The export is the source of truth for a fresh install; the database is the source of truth for a running one.
+
+## Consequences observed (2026-09-05, Phase 3)
+
+- The YAML seed sorts entries by source, source id and name, so a fresh `TEST_MODE` database assigns different deterministic ids than the old CSV did; snapshot files changed once.
+- Serving options carry the engine reference (an Ollama tag, a Hugging Face repo, `hf.co/<repo>:<quant>` for GGUF repos on Ollama, a hosted provider model);
+  the instance persists the chosen `reference`, and every controller and the LiteLLM registration read `instance.reference or model.modelId`.
+- The importers verify TLS with certifi, because the dev backend's `SSL_CERT_FILE` points at the local CA.
+- The Phase 1 rule that guessed engines from the model id (`frontend/src/lib/engines.ts`) is gone; the wizard renders serving options.
+

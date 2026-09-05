@@ -24,7 +24,11 @@ from models.inference_instance import (
 from models.inference_instance_dashboards import DBInferenceInstanceDashboards
 from models.model_adapters import DBModelAdapters
 from models.models import DBModel
-from schemas.inference_instance import InferenceInstanceSchema
+from models.serving_option import ServingOption
+from schemas.inference_instance import (
+    InferenceInstanceCreateSchema,
+    InferenceInstanceSchema,
+)
 from schemas.inference_instance_dashboards import (
     InferenceInstanceDashboardsSchema,
 )
@@ -75,7 +79,7 @@ def register_instance(
     route = instance_litellm_params(
         full_instance.engine.name,
         full_instance.model.category,
-        full_instance.model.modelId,
+        full_instance.reference or full_instance.model.modelId,
         controller.service_url(full_instance, engine_chart),
         api_key,
     )
@@ -276,7 +280,7 @@ async def get_inference_instance_dashboards(
     status_code=201,
 )
 async def create_inference_instance(
-    instance: InferenceInstanceSchema,
+    instance: InferenceInstanceCreateSchema,
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(require_writer),
 ):
@@ -284,7 +288,7 @@ async def create_inference_instance(
     Create a new inference instance.
 
     Args:
-        instance (InferenceInstanceSchema): The inference instance data.
+        instance (InferenceInstanceCreateSchema): The inference instance data.
 
     Returns:
         InferenceInstanceSchema: The created inference instance.
@@ -309,6 +313,26 @@ async def create_inference_instance(
             raise HTTPException(
                 status_code=404, detail="Model or Engine not found"
             )
+
+        reference = None
+        if instance.serving_option_id is not None:
+            serving_option = (
+                db.query(ServingOption)
+                .filter(
+                    ServingOption.id == instance.serving_option_id,
+                    ServingOption.model_id == model.id,
+                )
+                .first()
+            )
+            if not serving_option:
+                logger.error(
+                    f"Serving option not found for model {model.id}: "
+                    f"{instance.serving_option_id}"
+                )
+                raise HTTPException(
+                    status_code=404, detail="Serving option not found"
+                )
+            reference = serving_option.reference
 
         engine_chart = (
             db.query(DBEngineCharts)
@@ -356,6 +380,7 @@ async def create_inference_instance(
             config=db_config,
             org_id=user.org_id,
             owner_id=user.id,
+            reference=reference,
         )
 
         db.add(db_config)

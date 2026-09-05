@@ -140,6 +140,44 @@ interface Host {
   gpu_usage: number;
 }
 
+// One row of GET /v1alpha1/models/{id}/serving-options
+// (backend/schemas/serving_option.py): which engine can run a catalog
+// entry and the reference its controller needs. `engine_id` is null for a
+// hosted option (e.g. "openrouter"), which has no engines row and no
+// chart to launch; the launch wizard renders only options with one.
+interface ServingOption {
+  id: string;
+  engine: string;
+  reference: string;
+  default_args: Record<string, string> | null;
+  engine_id: string | null;
+  cpu: boolean | null;
+}
+
+// GET /v1alpha1/registry/search: one registry.entry.RegistryEntry from a
+// source, before it becomes a row (backend/schemas/registry.py).
+interface RegistryEntryPreview {
+  source: string;
+  source_id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  subcategory: string | null;
+  size: number | null;
+  license: string | null;
+  parameters: number | null;
+  context_length: number | null;
+  capabilities: string[];
+  formats: string[];
+  tags: string[];
+  serving_options: {
+    engine: string;
+    reference: string;
+    default_args: Record<string, string> | null;
+  }[];
+  already_imported: boolean;
+}
+
 interface Model {
   id: string;
   name: string;
@@ -149,6 +187,23 @@ interface Model {
   subcategory: string;
   size: number;
   countAdapters: number;
+
+  // Registry fields (Phase 3, backend/schemas/model.py), all additive and
+  // optional: a plain launch-wizard/fine-tune caller keeps working without
+  // them, and the base_model references on Adapter/FineTuneJob never carry
+  // the full row.
+  source?: string;
+  source_id?: string | null;
+  license?: string | null;
+  parameters?: number | null;
+  context_length?: number | null;
+  capabilities?: string[];
+  formats?: string[];
+  tags?: string[];
+  status?: string;
+  synced_at?: string | null;
+  sync_error?: string | null;
+  serving_options?: ServingOption[] | null;
 }
 interface Adapter {
   id: string;
@@ -226,6 +281,8 @@ export type {
   Engine,
   Host,
   Model,
+  ServingOption,
+  RegistryEntryPreview,
   Adapter,
   FineTuneConfig,
   FineTuneParams,

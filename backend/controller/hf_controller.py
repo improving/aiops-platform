@@ -17,7 +17,9 @@ class HuggingFaceController(Controller):
         engineChart: EngineChartsSchema,
     ):
         context = {
-            "config": {"modelID": instance.model.modelId},
+            "config": {
+                "modelID": instance.reference or instance.model.modelId
+            },
             "env": [],
             "volumes": {
                 "hf_cache": {

@@ -28,18 +28,22 @@ It is a monorepo assembled from four former repositories with their history (`MI
 2. The backend routers under `backend/api/` persist catalog and instance rows (SQLite by default, Postgres via `DATABASE_URL`)
    and hand deploys to `backend/controller/`, which renders Helm values from `backend/templates/*.yaml.jinja`
    and installs charts with pyhelm3 (the `helm` binary must be on `PATH`).
-3. Charts are pulled at runtime from the URLs in `backend/raw_data/engine_charts.csv` and `vectordb.csv`;
+3. The model catalog is a registry in the database (`backend/registry/`, `backend/api/registry.py`, page `/models/registry`):
+   entries carry source, license, parameters, capabilities, status and serving options (engine plus reference),
+   importers read Hugging Face, the Ollama registry and OpenRouter, and `make registry-export` writes the seed
+   `backend/raw_data/models.yaml` that an empty database loads. The wizard launches an entry through one of its serving options.
+4. Charts are pulled at runtime from the URLs in `backend/raw_data/engine_charts.csv` and `vectordb.csv`;
    most point at `https://infracloudio.github.io/charts`, which is why chart publishing keeps landing in the
    `infracloudio/charts` repository even though the chart sources live here.
-4. An APScheduler job in `backend/core.py` polls every 5 s for instances without an endpoint and fills it from the
+5. An APScheduler job in `backend/core.py` polls every 5 s for instances without an endpoint and fills it from the
    Kubernetes Service (LoadBalancer ingress, else cluster IP), or from the gateway hostname when
-   `AIOPS_PARENT_DOMAIN` is set (see point 7). The UI polls the API every 5 s while work is pending.
-5. Notebooks are `kind: Notebook` custom resources, so the cluster needs the standalone Kubeflow notebook controller
+   `AIOPS_PARENT_DOMAIN` is set (see point 8). The UI polls the API every 5 s while work is pending.
+6. Notebooks are `kind: Notebook` custom resources, so the cluster needs the standalone Kubeflow notebook controller
    (`make kind-up` installs it). GPU engines are catalog-only on a laptop;
    Ollama (`backend/controller/ollama_controller.py`, `charts/ollama`, engine flag `cpu`) is the one engine that runs on kind.
    `AIOPS_CHARTS_DIR` (set by `make backend` to `charts/`) makes the controllers install a chart from the checkout
    when `charts/<chart_name>/Chart.yaml` exists, so a chart can be tried before it is published.
-6. **Identity: Keycloak is the only identity provider.**
+7. **Identity: Keycloak is the only identity provider.**
    The UI signs users in with Auth.js against the realm `aiops` (OIDC code flow with PKCE)
    and keeps the access token in its session;
    the backend validates that token on every `/v1alpha1/*` route except `/health`
@@ -48,7 +52,7 @@ It is a monorepo assembled from four former repositories with their history (`MI
    `AUTH_MODE=disabled` skips both checks
    and is only honoured with `TEST_MODE=true` (backend) or logged as a warning at startup (frontend);
    both default to `oidc`.
-7. **Deployed workloads are protected at the gateway, and never see the caller's identity directly.**
+8. **Deployed workloads are protected at the gateway, and never see the caller's identity directly.**
    Each instance's controller creates one or two `HTTPRoute`s under a deterministic hostname
    (`nb-<id8>`, `vdb-<id8>`, `vdb-<id8>-api`, `inf-<id8>.<parent domain>`,
    where `<id8>` is the *last* eight hex characters of the instance id)
@@ -61,7 +65,7 @@ It is a monorepo assembled from four former repositories with their history (`MI
    both kinds of policy, plus the `HTTPRoute`s themselves, are created by `backend/utils/gateway.py`
    and are no-ops without `AIOPS_PARENT_DOMAIN` set,
    so a plain `uv run uvicorn` behaves exactly as before the gateway existed.
-8. **Chat, embeddings and rerank go through the control plane and LiteLLM, never straight to a model.**
+9. **Chat, embeddings and rerank go through the control plane and LiteLLM, never straight to a model.**
    Every deployed inference instance is registered in the LiteLLM proxy (`backend/utils/litellm.py`, namespace `litellm`,
    `make litellm-up`) as model `inst-<id8>` with its in-cluster Service URL and workload credential;
    each organization gets a LiteLLM team and one virtual key in a Secret.

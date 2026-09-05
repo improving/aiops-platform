@@ -205,6 +205,91 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   403 reuses `not_owner`; 404 covers unknown and unparsable hosts; one info log line per decision.
   `test_authz.py` imports the token helpers from `test_auth.py`.
 
+## Model registry (Phase 3)
+
+- `models` grew from a flat catalog into a registry: `source` (`manual`, `huggingface`, `ollama`, `openrouter`),
+  `source_id` (the id at that source, `NULL` for a manual row), `license`, `parameters`, `context_length`,
+  `capabilities`/`formats`/`tags` (`JSON`, `NOT NULL`, default `[]` -- pass Python lists through them, never
+  `json.dumps()` first, or the column double-encodes the value into a string), `status` (`draft`, `published`,
+  `deprecated`; only `published` rows are the members' catalog), `synced_at`/`sync_error`/`raw` (sync
+  bookkeeping) and `org_id` (`NULL` means global, every organization's catalog; a non-`NULL` row is that
+  organization's own addition -- `api/models.py` `catalog_scope` filters on this directly, not
+  `auth.policy.org_scope`, which maps `NULL` to the *default* organization only and would hide the global
+  catalog from every other organization). `model_serving_options` (`models/serving_option.py`) is one row per
+  `(model_id, engine)`: which engine can run the entry and the `reference` its controller needs (an Ollama tag,
+  a Hugging Face repo id, a `hf.co/<repo>:<quant>` GGUF pull, or a hosted provider model id such as an
+  OpenRouter id, which has no matching `engines` row). Migration `0007` (`down_revision = "0006"`) adds all of
+  this plus `inference_instances.reference`, and backfills every pre-existing `models` row's `capabilities`,
+  `formats` and serving options from `category` and whether `modelId` looks like an Ollama tag (a `:` and no
+  `/`); on a fresh `TEST_MODE` database the migration runs before any row exists, so that backfill is a no-op
+  there and the CSV/YAML-seeded rows get their serving options from `load_models` (below) instead.
+- `instance.reference` (`models/inference_instance.py`) is the serving option's `reference`, set on
+  `create_inference_instance` when the request carries a `serving_option_id`
+  (`schemas/inference_instance.py` `InferenceInstanceCreateSchema`, verified to belong to the instance's model
+  before it is persisted). **Every place that renders or forwards a model id reads
+  `instance.reference or instance.model.modelId`**, never `instance.model.modelId` alone: the controllers
+  (`ollama_controller.py` `models.pull`, `hf_controller.py`/`vllm_controller.py`/`opea_controller.py`
+  `modelID`/`model`), `api/inference_instance.py` `register_instance` (the LiteLLM `model` param), and
+  `api/chat.py` `_find_instance_target` (`upstream_model`, the direct-path substitution) and
+  `list_instance_targets` (`"model"`).
+- The seed is `raw_data/models.yaml`, not a CSV: `db/db.py` `load_models` reads it (`path=` is a test-only
+  override) and upserts by `(source, source_id)` when `source_id` is set, else by `modelId`, matching serving
+  options by `(model, engine)`; it never deletes a row, so a model or option dropped from the YAML stays in the
+  database until an admin removes it. `registry/export.py` `export_registry(db)`/`write_registry(db, path)` is
+  the inverse: the *global* catalog (`org_id IS NULL`) only, sorted by `source`, then `source_id`, then `name`,
+  with a stable per-entry key order, as YAML text -- `scripts/registry_export.py`
+  (`uv run python scripts/registry_export.py` from `backend/`; a `make registry-export` target that runs it
+  against the local Postgres is still pending) writes it to `raw_data/models.yaml`.
+  `test_registry_export.py` guards both directions: exporting the seeded test database
+  and reloading it round-trips to the same YAML, and the *committed* `raw_data/models.yaml` already equals its
+  own export (a hand edit that reorders entries would fail this and must be re-exported instead).
+- Importers (`registry/`) are pure functions from a source's JSON to a `registry.entry.RegistryEntry`
+  (`source, source_id, name, description, category, subcategory, size, license, parameters, context_length,
+  capabilities, formats, tags, raw, serving_options: list[tuple[engine, reference]]`); the HTTP fetch lives in
+  one thin client per source, built with `verify=certifi.where()` (`make backend` points `SSL_CERT_FILE` at the
+  local CA only, which would fail TLS to every public host otherwise). `registry/huggingface.py`
+  `parse_model()`/`search()`/`fetch()`: category from `pipeline_tag` (falling back to `config.architectures`
+  ending in `ForCausalLM`), license from `cardData.license` or a `license:` tag, `parameters` from
+  `safetensors.total`, a GGUF repo (`library_name == "gguf"` or a `.gguf` sibling) picks one file -- `Q4_K_M`
+  when the repo has it, else the first `.gguf` sibling -- for both `size` and the Ollama serving option's quant
+  suffix, a gated repo (`gated` truthy) gets no serving options and a `"gated"` tag. `registry/ollama.py`
+  `fetch(reference)`: `reference` is `name` or `name:tag` (`tag` defaults to `latest`), reads the OCI manifest
+  (`GET https://registry.ollama.ai/v2/library/{name}/manifests/{tag}`, no tag-listing endpoint, so there is no
+  real search: the "Add Ollama model" query is the full reference and the answer is this one preview), `size`
+  is the `application/vnd.ollama.image.model` layer's size, capability is `embedding` for a small known-name
+  set (`ollama.EMBEDDING_MODEL_NAMES`) and `chat` otherwise. `registry/openrouter.py` `list_models()`: every
+  entry is category `llm`, `capabilities` gains `"vision"` when `image` is an input modality, `raw` keeps only
+  the pricing. `registry/sources.py` `search(source, query, limit)`/`fetch(source, source_id)` is the
+  source-name dispatcher `api/registry.py` calls; every source raises `registry.entry.SourceError(status,
+  detail)` on a rejected (429, with the `retry-after` header folded into `detail`) or unreachable request.
+  `test_registry_importers.py` exercises every parser against a fixture recorded from the real API
+  (`test_fixtures/*.json`, trimmed to a handful of entries) and every `search`/`fetch` against an
+  `httpx.MockTransport`; importers never touch the network in tests.
+- `api/registry.py` (`/v1alpha1/registry`, `require_admin` on every write; `GET /` is open to members but
+  always filtered to `status == "published"` for them, `?status=&source=&capability=&q=` for an admin) is the
+  admin surface: `GET /search?source=huggingface|ollama|openrouter&q=&limit=` returns previews
+  (`RegistryEntryPreviewSchema`, `already_imported` looked up by `(source, source_id)`);
+  `POST /import {source, source_id, status?, provider_id?}` fetches and creates the row (`status` defaults to
+  `draft`) and its serving options, 409 on a repeat `(source, source_id)`; an `openrouter` import additionally
+  requires `provider_id` of an enabled OpenRouter provider (Phase 2b) and registers the model under it
+  (`_register_openrouter_model`, reusing `api.providers._register`/`_add_model_row`) so it becomes a chat
+  target too. `POST /manual` and `api/models.py` `POST /v1alpha1/models` both go through
+  `registry/manual.py` `create_manual_model` (source `manual`, always `published`, no source to sync from), so
+  a model created either route is exactly the same shape. `PATCH /{id}` replaces serving options only when the
+  request carries them. `POST /{id}/sync` re-fetches from the row's source and calls
+  `registry.sync.apply_sync_fields` (license, parameters, context_length, size, formats, tags, raw, `synced_at`
+  -- never `name`/`description`, which an admin may have hand-edited). `DELETE /{id}` answers 409 (naming every
+  blocking kind) when inference instances, model adapters or fine-tune jobs still reference the row.
+  `AIOPS_CHAT_MOCK=true` (`api.chat.chat_mock_enabled`) makes `search`/`fetch` read `test_fixtures/*.json`
+  instead of the network (one canned entry per source; Hugging Face's is `Qwen/Qwen3-0.6B-GGUF`), for the fast
+  Playwright tier and `test_registry_api.py`.
+- `registry/sync.py` `sync_published(db)` is the daily best-effort resync of every published, source-backed
+  (`source_id IS NOT NULL`) row: a source outage on one row sets `sync_error` (and is logged) without raising,
+  so it never blocks the rest; a later success clears it. `core.py` schedules it every
+  `REGISTRY_SYNC_INTERVAL_SECONDS` (default 86400; `0` disables it; like every other scheduled job, `TEST_MODE`
+  never builds the scheduler at all) alongside the three endpoint-polling jobs -- `test_lifespan_runs_scheduler`
+  asserts 4 jobs, not 3.
+
 ## Conventions and gotchas
 
 - The default namespace is `ai-stack`, overridable with `AIOPS_NAMESPACE`; controllers read it at call time.

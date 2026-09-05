@@ -1063,3 +1063,36 @@ async def test_ollama_controller_helm_values(snapshot):
     release = controller._get_release_name(instance)
     assert controller.get_service_name(instance, engine_chart) == release
     snapshot.assert_match(yaml.dump(values), "ollama-values.yaml")
+
+
+@pytest.mark.asyncio
+async def test_ollama_controller_helm_values_uses_the_serving_option_reference():
+    """Phase 3: a GGUF serving option's reference (a hf.co/<repo>:<quant>
+    pull) is what gets pulled, not the catalog row's modelId."""
+    controller = get_controller("ollama", core_v1_api=mock.Mock())
+    engine = EngineSchema(
+        id=genid.uuid4(), name="Ollama", llm_support=True, cpu=True
+    )
+    model = ModelSchema(
+        id=genid.uuid4(),
+        name="Qwen3 0.6B GGUF",
+        modelId="Qwen/Qwen3-0.6B-GGUF",
+        category="llm",
+    )
+    instance = InferenceInstanceSchema(
+        id=genid.uuid4(),
+        model=model,
+        engine=engine,
+        host=None,
+        reference="hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0",
+        config=InferenceInstanceConfigParamsSchema(id=genid.uuid4()),
+    )
+    engine_chart = EngineChartsSchema(
+        id=genid.uuid4(),
+        engine="ollama",
+        chart_type="llm",
+        chart_repo="https://infracloudio.github.io/charts",
+        chart_name="ollama",
+    )
+    values = await controller.prepare_helm_values(instance, engine_chart)
+    assert values["models"]["pull"] == ["hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0"]

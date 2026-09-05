@@ -12,9 +12,10 @@ class OPEAController(Controller):
         instance: InferenceInstanceSchema,
         engineChart: EngineChartsSchema,
     ):
+        model_id = instance.reference or instance.model.modelId
         context = {
-            "safety_guard_model_id": instance.model.modelId,
-            "tgi": {"llm_model_id": instance.model.modelId},
+            "safety_guard_model_id": model_id,
+            "tgi": {"llm_model_id": model_id},
             "global": {
                 "huggingfacehub_api_token": os.getenv("HF_API_TOKEN"),
                 "model_use_pvc": "hf-cache",

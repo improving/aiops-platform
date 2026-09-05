@@ -78,6 +78,11 @@ class DBInferenceInstance(Base):
     # not configured or the engine has no LiteLLM route.
     litellm_model_name = Column(String, nullable=True)
     litellm_model_id = Column(String, nullable=True)
+    # The serving option's reference (Phase 3), when the instance was
+    # launched from one: an Ollama tag, a Hugging Face repo, a
+    # ``hf.co/<repo>:<quant>`` GGUF pull, or a hosted provider model id.
+    # Every consumer reads ``instance.reference or instance.model.modelId``.
+    reference = Column(String, nullable=True)
 
     model = relationship("DBModel")
     engine = relationship("DBEngine")

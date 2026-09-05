@@ -95,22 +95,14 @@ test.describe("model catalog", () => {
     await expect(catalog.cards).toHaveCount(expected.length);
   });
 
-  test("Import Model opens a dialog that Cancel closes", async ({ page }) => {
+  test("Manage registry navigates to the registry page", async ({ page }) => {
     const catalog = new ModelCatalogPage(page);
     await catalog.open();
-    await catalog.importButton.click();
-
-    const dialog = catalog.dialog();
-    await expect(dialog).toBeVisible();
-    await expect(
-      dialog.getByRole("heading", { name: "Import Model" })
-    ).toBeVisible();
-    await expect(dialog.getByPlaceholder("Model Name")).toBeVisible();
-    await expect(dialog.getByPlaceholder("Model ID")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Import" })).toBeVisible();
-
-    await dialog.getByRole("button", { name: "Cancel" }).click();
-    await expect(dialog).toBeHidden();
+    await catalog.navigateByClick(
+      catalog.manageRegistryLink,
+      /\/models\/registry$/
+    );
+    await catalog.expectHeading("Model Registry");
   });
 
   test("a card title opens the model details", async ({ page, api }) => {

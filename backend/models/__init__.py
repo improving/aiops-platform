@@ -16,6 +16,7 @@ from models import (
     notebook,
     organization,
     provider,
+    serving_option,
     user,
     vectordb,
     vectordb_instance,

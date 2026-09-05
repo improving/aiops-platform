@@ -1,6 +1,7 @@
 import csv
 import uuid
 
+import yaml
 from sqlalchemy import MetaData, and_
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -10,7 +11,8 @@ from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine, DBEngineDefaultArgs, DBEngineDefaultConfig
-from models.models import DBModel
+from models.models import STATUS_PUBLISHED, DBModel
+from models.serving_option import ServingOption
 from models.vectordb import DBVectorDB
 from paths import RAW_DATA_DIR
 from utils import genid
@@ -278,37 +280,81 @@ def load_engine_default_args(db):
     db.commit()
 
 
-def load_models(db):
+def load_models(db, path=None):
+    """Seed the global catalog from ``raw_data/models.yaml`` (or
+    ``path``, for tests -- ``registry/export.py`` writes the same shape
+    back out). Upserts by ``(source, source_id)`` when ``source_id`` is
+    set, else by ``modelId``, and never deletes a row: a model or
+    serving option removed from the YAML stays in the database until an
+    admin removes it."""
     logger.info("Loading models")
-    with open(RAW_DATA_DIR / "models.csv", encoding="utf-8") as f:
-        csv_reader = csv.DictReader(f)
-        for row in csv_reader:
-            model = (
-                db.query(DBModel)
-                .filter(DBModel.modelId == row["modelId"])
-                .first()
-            )
-            if not model:
-                model = DBModel(
-                    id=genid.uuid4(),
-                    name=row["name"],
-                    modelId=row["modelId"],
-                    description=row["description"],
-                    category=row["category"],
-                    subcategory=row["subcategory"],
-                    size=int(row["size"]),
-                )
-                logger.info(f"adding model id: {model.modelId}")
-                db.add(model)
-            else:
-                logger.info(f"Updating model id: {model.modelId}")
-                model.name = row["name"]
-                model.modelId = row["modelId"]
-                model.description = row["description"]
-                model.category = row["category"]
-                model.subcategory = row["subcategory"]
-                model.size = int(row["size"])
+    with open(path or RAW_DATA_DIR / "models.yaml", encoding="utf-8") as f:
+        document = yaml.safe_load(f) or {}
+    for entry in document.get("models") or []:
+        _load_model_entry(db, entry)
     db.commit()
+
+
+def _find_model_for_entry(db, entry) -> DBModel | None:
+    source = entry.get("source") or "manual"
+    source_id = entry.get("source_id")
+    if source_id:
+        return (
+            db.query(DBModel)
+            .filter(DBModel.source == source, DBModel.source_id == source_id)
+            .first()
+        )
+    return (
+        db.query(DBModel).filter(DBModel.modelId == entry["model_id"]).first()
+    )
+
+
+def _load_model_entry(db, entry):
+    model = _find_model_for_entry(db, entry)
+    if not model:
+        model = DBModel(id=genid.uuid4())
+        logger.info(f"adding model id: {entry['model_id']}")
+        db.add(model)
+    else:
+        logger.info(f"Updating model id: {entry['model_id']}")
+
+    model.name = entry["name"]
+    model.modelId = entry["model_id"]
+    model.description = entry.get("description")
+    model.category = entry.get("category")
+    model.subcategory = entry.get("subcategory")
+    model.size = entry.get("size")
+    model.source = entry.get("source") or "manual"
+    model.source_id = entry.get("source_id")
+    model.license = entry.get("license")
+    model.parameters = entry.get("parameters")
+    model.context_length = entry.get("context_length")
+    model.capabilities = entry.get("capabilities") or []
+    model.formats = entry.get("formats") or []
+    model.tags = entry.get("tags") or []
+    model.status = entry.get("status") or STATUS_PUBLISHED
+    # The serving options below need model.id, which only exists once
+    # a new row has been flushed.
+    db.flush()
+
+    for option in entry.get("serving_options") or []:
+        _load_serving_option_entry(db, model, option)
+
+
+def _load_serving_option_entry(db, model, option):
+    row = (
+        db.query(ServingOption)
+        .filter(
+            ServingOption.model_id == model.id,
+            ServingOption.engine == option["engine"],
+        )
+        .first()
+    )
+    if not row:
+        row = ServingOption(model_id=model.id, engine=option["engine"])
+        db.add(row)
+    row.reference = option["reference"]
+    row.default_args = option.get("default_args")
 
 
 def reload_data(db: Session):

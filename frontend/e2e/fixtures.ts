@@ -105,6 +105,19 @@ export type EngineRecord = {
   default_config: { name: string; defaultValue: string }[];
 };
 
+// GET /v1alpha1/models/{id}/serving-options (backend/schemas/serving_option.py):
+// engine_id is null for a hosted option (e.g. "openrouter"), which has no
+// engines row and no chart to launch; the launch wizard renders only
+// options with one.
+export type ServingOptionRecord = {
+  id: string;
+  engine: string;
+  reference: string;
+  default_args: Record<string, string> | null;
+  engine_id: string | null;
+  cpu: boolean | null;
+};
+
 export type InferenceInstanceRecord = {
   id: string;
   ready: boolean;
@@ -146,6 +159,18 @@ export type ProviderRecord = {
     capability: string;
     enabled: boolean;
   }[];
+};
+
+// GET /v1alpha1/registry (backend/api/registry.py): one model row,
+// including its serving options (backend/schemas/serving_option.py).
+export type RegistryEntryRecord = {
+  id: string;
+  name: string;
+  modelId: string;
+  source: string;
+  source_id: string | null;
+  status: string;
+  serving_options: { id: string; engine: string; reference: string }[] | null;
 };
 
 // GET/PUT /v1alpha1/organizations/current/{spend,budget}.
@@ -267,6 +292,15 @@ export class BackendApi {
   async engines(): Promise<EngineRecord[]> {
     const res = await this.send("GET", "/engines");
     expect(res.ok(), `GET /engines -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async servingOptions(modelId: string): Promise<ServingOptionRecord[]> {
+    const res = await this.send("GET", `/models/${modelId}/serving-options`);
+    expect(
+      res.ok(),
+      `GET /models/${modelId}/serving-options -> ${res.status()}`
+    ).toBeTruthy();
     return res.json();
   }
 
@@ -417,6 +451,19 @@ export class BackendApi {
   async deleteProvider(id: string): Promise<void> {
     const res = await this.send("DELETE", `/providers/${id}`);
     expect([200, 204, 404]).toContain(res.status());
+  }
+
+  // "disabled" auth (the fast tier) maps every request to the TEST_MODE
+  // dev admin, so this sees every status, not just published.
+  async registryEntries(): Promise<RegistryEntryRecord[]> {
+    const res = await this.send("GET", "/registry");
+    expect(res.ok(), `GET /registry -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async deleteRegistryEntry(id: string): Promise<void> {
+    const res = await this.send("DELETE", `/registry/${id}`);
+    expect([200, 204, 404, 409]).toContain(res.status());
   }
 
   async orgSpend(): Promise<OrgSpendRecord> {

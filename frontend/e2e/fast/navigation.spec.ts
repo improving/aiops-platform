@@ -5,6 +5,7 @@ const pages = [
   { path: "/", heading: "Welcome to AI Hub" },
   { path: "/notebooks", heading: "Notebooks" },
   { path: "/models/catalog", heading: "Model Catalog" },
+  { path: "/models/registry", heading: "Model Registry" },
   { path: "/models/endpoints", heading: "Inference Endpoints" },
   { path: "/vector-databases/catalog", heading: "Vector Database Catalog" },
   {
@@ -41,6 +42,10 @@ test.describe("header navigation", () => {
     await shell.clickDropdownItem("Models", "Catalog");
     await expect(page).toHaveURL(/\/models\/catalog$/);
     await shell.expectHeading("Model Catalog");
+
+    await shell.clickDropdownItem("Models", "Registry");
+    await expect(page).toHaveURL(/\/models\/registry$/);
+    await shell.expectHeading("Model Registry");
 
     await shell.clickDropdownItem("Models", "Instances");
     await expect(page).toHaveURL(/\/models\/endpoints$/);

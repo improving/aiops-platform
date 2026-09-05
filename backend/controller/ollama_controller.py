@@ -23,9 +23,11 @@ class OllamaController(Controller):
         engineChart: EngineChartsSchema,
     ):
         context = {
-            # Phase 3: the registry's serving option carries the tag; today
-            # the catalog row's modelId is the Ollama tag itself.
-            "models": [instance.model.modelId],
+            # The serving option's reference (an Ollama tag, or a
+            # hf.co/<repo>:<quant> GGUF pull) when the instance was
+            # launched from one; otherwise the catalog row's modelId,
+            # which is the Ollama tag itself for a pre-registry row.
+            "models": [instance.reference or instance.model.modelId],
             "env": [],
         }
         if instance.config and instance.config.env_vars:

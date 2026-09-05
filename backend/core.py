@@ -21,6 +21,7 @@ from api.notebooks import router as notebooks_router
 from api.notebooks import update_all_notebook_instance_endpoints
 from api.organizations import router as organizations_router
 from api.providers import router as providers_router
+from api.registry import router as registry_router
 from api.vectordb import router as vectordb_router
 from api.vectordb_instance import router as vectordb_instance_router
 from api.vectordb_instance import update_all_vectordb_instance_endpoints
@@ -29,6 +30,7 @@ from auth.settings import MODE_DISABLED, check_auth_settings
 from db.database import get_db, get_db_direct, get_engine
 from db.db import init_db, refresh_db, reload_data
 from logger import setup_logger
+from registry.sync import sync_published
 
 logger = setup_logger(__name__)
 
@@ -38,6 +40,28 @@ SCHEDULED_JOBS = (
     update_all_notebook_instance_endpoints,
     update_all_vectordb_instance_endpoints,
 )
+
+# The daily registry sync (registry/sync.py): re-fetches every
+# published, source-backed catalog entry, best effort. 0 disables it;
+# TEST_MODE never schedules any job (build_scheduler is only called
+# outside TEST_MODE, see create_app's lifespan).
+REGISTRY_SYNC_INTERVAL_ENV = "REGISTRY_SYNC_INTERVAL_SECONDS"
+DEFAULT_REGISTRY_SYNC_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+def registry_sync_interval_seconds() -> int:
+    raw = os.environ.get(REGISTRY_SYNC_INTERVAL_ENV, "").strip()
+    if not raw:
+        return DEFAULT_REGISTRY_SYNC_INTERVAL_SECONDS
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning(
+            "%s=%r is not an integer, using the default",
+            REGISTRY_SYNC_INTERVAL_ENV,
+            raw,
+        )
+        return DEFAULT_REGISTRY_SYNC_INTERVAL_SECONDS
 
 
 def is_test_mode() -> bool:
@@ -73,6 +97,14 @@ def build_scheduler() -> AsyncIOScheduler:
             trigger="interval",
             seconds=SCHEDULER_INTERVAL_SECONDS,
             id=job.__name__,
+        )
+    sync_interval = registry_sync_interval_seconds()
+    if sync_interval > 0:
+        scheduler.add_job(
+            _run_with_own_session(sync_published),
+            trigger="interval",
+            seconds=sync_interval,
+            id=sync_published.__name__,
         )
     return scheduler
 
@@ -129,6 +161,7 @@ def create_app(setup_db: bool = True):
     _app.include_router(chat_router, tags=["chat"])
     _app.include_router(organizations_router, tags=["organizations"])
     _app.include_router(providers_router, tags=["providers"])
+    _app.include_router(registry_router, tags=["registry"])
 
     @_app.post("/reload-data", tags=["utility"])
     async def reload_data_endpoint(

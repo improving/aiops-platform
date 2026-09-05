@@ -81,23 +81,26 @@ test.describe("launch wizard", () => {
     await expect(launch.createButton).toBeVisible();
   });
 
-  test("only LLM-capable engines are offered for an LLM", async ({
+  test("only launchable serving options are offered for an LLM", async ({
     page,
     api,
   }) => {
     const model = await firstLlm(api);
-    const engines = await api.engines();
-    // Ollama is llm_support too, but it only serves its own registry tags
-    // (the "CPU engines" tests below), never a Hugging Face id.
-    const llmEngines = engines
-      .filter((e) => e.llm_support && e.name !== "Ollama")
-      .map((e) => e.name);
+    // The engine Select renders the model's own serving options
+    // (GET /models/{id}/serving-options), in that order, filtered to the
+    // ones with an engine_id (a hosted option has none and no chart to
+    // launch); Ollama is llm_support too, but a Hugging Face id's catalog
+    // row has no Ollama serving option (see "a Hugging Face id offers
+    // HuggingFace, vLLM and NIM" below).
+    const options = await api.servingOptions(model.id);
+    const expected = options.filter((o) => o.engine_id).map((o) => o.engine);
+    expect(expected.length).toBeGreaterThan(0);
 
     const launch = new LaunchModelPage(page);
     await openLaunch(page, launch, model.id);
     await launch.skipButton.click();
     await launch.engineSelect.click();
-    await expect(page.getByRole("option")).toHaveText(llmEngines);
+    await expect(page.getByRole("option")).toHaveText(expected);
     await page.keyboard.press("Escape");
   });
 
@@ -166,25 +169,27 @@ test.describe("launch wizard", () => {
   });
 });
 
-test.describe("CPU engines", () => {
-  test("an Ollama tag offers only Ollama and needs no host", async ({
+test.describe("serving options", () => {
+  test("an Ollama tag offers only its Ollama option and needs no host", async ({
     page,
     api,
   }) => {
     const models = await api.models();
-    const ollamaModel = models.find(
-      (m) => m.modelId.includes(":") && !m.modelId.includes("/")
-    );
+    // qwen3:0.6b is the seeded Ollama-only catalog entry (also used by
+    // e2e/cluster/chat-lifecycle.spec.ts): its only serving option is
+    // ("Ollama", "qwen3:0.6b").
+    const ollamaModel = models.find((m) => m.modelId === "qwen3:0.6b");
     expect(
       ollamaModel,
-      "the catalog should contain an Ollama tag"
+      "the catalog should contain the qwen3:0.6b Ollama tag"
     ).toBeTruthy();
 
     const launch = new LaunchModelPage(page);
     await openLaunch(page, launch, ollamaModel!.id);
 
     // The accelerator step is optional: the tabs are enabled and Next
-    // moves on without a host.
+    // moves on without a host, because the Ollama serving option's engine
+    // has cpu: true.
     await expect(launch.tab("Deploy Config")).toBeEnabled();
     await expect(launch.cpuHint).toBeVisible();
     await launch.nextButton.click();
@@ -198,15 +203,23 @@ test.describe("CPU engines", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("a Hugging Face id does not offer Ollama", async ({ page, api }) => {
+  test("a Hugging Face id offers HuggingFace, vLLM and NIM", async ({
+    page,
+    api,
+  }) => {
     const model = await firstLlm(api);
+    const options = await api.servingOptions(model.id);
+    const expected = options.filter((o) => o.engine_id).map((o) => o.engine);
+    expect(expected).not.toContain("Ollama");
+    expect(expected).toEqual(
+      expect.arrayContaining(["HuggingFace", "vLLM", "NIM"])
+    );
+
     const launch = new LaunchModelPage(page);
     await openLaunch(page, launch, model.id);
     await launch.skipButton.click();
     await launch.engineSelect.click();
-    const options = await launch.engineOptions().allTextContents();
+    await expect(launch.engineOptions()).toHaveText(expected);
     await page.keyboard.press("Escape");
-    expect(options).not.toContain("Ollama");
-    expect(options).toContain("vLLM");
   });
 });

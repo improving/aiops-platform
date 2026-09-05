@@ -240,6 +240,15 @@ lb: ## Print the cloud-provider-kind command to enable LoadBalancer IPs (require
 
 # --- backend / frontend ------------------------------------------------------
 
+registry-export: ## Export the model registry of the local Postgres to backend/raw_data/models.yaml (review the diff, then commit)
+	cd backend && \
+		DATABASE_URL=postgresql://localhost:5432 \
+		DATABASE_NAME=postgres \
+		DATABASE_USER=postgres \
+		DATABASE_PASSWORD=postgres \
+		uv run python scripts/registry_export.py
+	@git -C . diff --stat backend/raw_data/models.yaml
+
 db-migrate: ## Apply the Alembic migrations to the local Postgres
 	cd backend && \
 		DATABASE_URL=postgresql://localhost:5432 \

@@ -36,10 +36,22 @@ pnpm e2e:ui                               # Playwright UI mode
   `toast(parseApiError(error))`.
 - Lists that wait on Kubernetes (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`, notebook details) refresh
   through `src/hooks/usePolling.ts` every 5 s while any item is non-terminal; refreshes are silent (no spinner, no toast).
-- `src/lib/engines.ts` decides which engines a catalog entry can launch on: `enginesForModel` keeps the engines that
-  support the model's category and offers Ollama only for Ollama tags (`qwen3:0.6b`: a `:` and no `/`), never for
-  Hugging Face ids; `cpuOnly` makes the launch wizard's accelerator step optional (Next without a host) when every
-  candidate engine has `cpu: true`. This rule is a Phase 1 stopgap that the registry's serving options replace.
+- Model registry (Phase 3): `/models/registry` (`RegistryPage.tsx`, `src/services/registryService.ts`) is the admin
+  surface over `GET/POST/PATCH/DELETE /v1alpha1/registry` (members get the same page read-only, gated the same way
+  as `ProvidersPage.tsx`). `ImportFromHuggingFaceDialog.tsx`/`AddOllamaModelDialog.tsx`/`AddHostedModelDialog.tsx`
+  call `registryService.search(source, q)` then `registryService.importEntry({source, source_id, status: "draft"})`;
+  `AddManuallyDialog.tsx` replaces the old "Import Model" dialog, now `registryService.manualCreate(...)` with a
+  list of `{engine, reference}` serving options and optional (not required) description/subcategory/size. Ollama
+  and "Add manually" close their dialog on a successful import (one entry per open); Hugging Face and hosted stay
+  open so an admin can import several results in a row, and close only through their own "Done" button. Publish/
+  Deprecate flip `status` through `registryService.update`; Sync calls `POST /{id}/sync`; `EditEntryDialog.tsx`
+  edits metadata and replaces serving options.
+- The launch wizard (`LaunchModel.tsx`) fetches `modelService.getModelServingOptions(id)`
+  (`GET /v1alpha1/models/{id}/serving-options`) and keeps only the options with a non-null `engine_id` (a hosted
+  option such as `openrouter` has none and no chart to launch); the engine `Select` lists those options by their
+  `engine` name, and submitting sends `serving_option_id` alongside `engine.id` (`InferenceInstanceCreateSchema`).
+  `cpuOnly` (inlined in `LaunchModel.tsx`) makes the accelerator step optional when every launchable option's
+  `cpu` is `true`. `src/lib/engines.ts` (the Phase 1 `enginesForModel`/`isOllamaTag` stopgap) is gone.
 - `src/lib/backend.ts` `backendUrl()` is the one place that resolves the backend URL on the server
   (`AIOPS_BACKEND_URL`, else the inlined `NEXT_PUBLIC_AIOPS_BACKEND_URL`); `src/proxy.ts` and the chat route use it.
 - Chat: `modelService.getChatTargets()` calls `GET /api/v1alpha1/chat/targets`, which lists what the caller may

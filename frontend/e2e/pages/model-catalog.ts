@@ -5,7 +5,7 @@ export class ModelCatalogPage extends AppShell {
   readonly search: Locator;
   readonly categoryFilter: Locator;
   readonly subcategoryFilter: Locator;
-  readonly importButton: Locator;
+  readonly manageRegistryLink: Locator;
   readonly cards: Locator;
 
   constructor(page: Page) {
@@ -15,7 +15,9 @@ export class ModelCatalogPage extends AppShell {
     // comboboxes on the page, in DOM order.
     this.categoryFilter = page.getByRole("combobox").nth(0);
     this.subcategoryFilter = page.getByRole("combobox").nth(1);
-    this.importButton = page.getByRole("button", { name: "Import Model" });
+    this.manageRegistryLink = page.getByRole("link", {
+      name: "Manage registry",
+    });
     this.cards = page.locator('main [data-slot="card"]');
   }
 

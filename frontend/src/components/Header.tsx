@@ -40,6 +40,11 @@ const menuItems = [
         description: "Browse and select from a variety of AI models",
       },
       {
+        label: "Registry",
+        href: "/models/registry",
+        description: "Import, publish and manage the model catalog",
+      },
+      {
         label: "Instances",
         href: "/models/endpoints",
         description: "Manage and monitor your deployed model instances",

@@ -300,6 +300,24 @@ The fast Playwright tier exercises the page with a mock discovery and an in-memo
 a real hosted chat runs only when `E2E_OPENAI_API_KEY` is set in the shell for `hosted-chat.spec.ts`
 (the key is never written to a file).
 
+## Model registry
+
+The catalog is a registry in the database, seeded from `backend/raw_data/models.yaml` on an empty database
+and managed by admins on `/models/registry`:
+list with filters (source, capability, status), publish or deprecate, edit, sync, delete,
+"Import from Hugging Face" (search, preview, import as draft), "Add Ollama model" (a tag, sized from the registry manifest),
+"Add hosted model" (a model from an enabled OpenRouter provider) and "Add manually".
+Members see published entries in the catalog; the launch wizard offers an entry's serving options
+(engine plus reference, for example `Ollama` with `hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0` for a GGUF repo)
+and the instance keeps the chosen `reference`.
+Published entries with a source are re-synced daily (`REGISTRY_SYNC_INTERVAL_SECONDS`, `0` disables), best effort.
+
+`make registry-export` writes the registry of the local Postgres back to `backend/raw_data/models.yaml`
+(global entries only, stable order), so catalog changes travel through pull requests;
+the file must equal the export of a database seeded from it.
+The Playwright fast tier and the backend tests never call the sources:
+`AIOPS_CHAT_MOCK=true` makes the importers read the recorded fixtures under `backend/test_fixtures/`.
+
 ## Backend
 
 `make backend` runs `uv run uvicorn app:app --reload` with the full local env contract:
@@ -340,12 +358,15 @@ and is meant only for the fast Playwright tier.
 Ollama is an inference engine like the others, but it runs on CPU,
 so it is the one engine that works on the kind stack.
 The catalog carries three Apache 2.0 Ollama tags
-(`qwen3:0.6b`, `qwen2.5:1.5b-instruct`, `smollm2:1.7b`; `backend/raw_data/models.csv`);
+(`qwen3:0.6b`, `qwen2.5:1.5b-instruct`, `smollm2:1.7b`; `backend/raw_data/models.yaml`);
 launching one from the catalog offers only the Ollama engine,
 and the accelerator step can be skipped with Next (no GPU host needed).
 The first launch pulls the Ollama image (about 2.6 GiB) and the model (0.5 to 1.8 GiB) onto the kind node,
 so the instance takes 5 to 10 minutes to become Ready the first time;
-the chart's `postStart` hook pulls the model before the pod reports Ready.
+the chart's `postStart` hook pulls the model before the pod reports Ready
+and re-creates it in place with the chart's `ollama.contextLength` (4096):
+a model's own `num_ctx` (Hugging Face GGUF repos ship 40960) would otherwise override `OLLAMA_CONTEXT_LENGTH`,
+and its KV cache alone (about 4.4 GiB) exceeds the pod's memory limit, so the first chat OOM-kills the container.
 The instance gets the usual `inf-<id8>` gateway host with an API key.
 That host answers `401 Client authentication failed.` to a browser,
 because only requests with the key in `x-api-key` pass the gateway,

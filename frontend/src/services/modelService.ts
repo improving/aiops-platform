@@ -10,6 +10,7 @@ import {
   Engine,
   Host,
   FineTuneConfig,
+  ServingOption,
 } from "@/types/models";
 
 export const modelService = {
@@ -33,15 +34,13 @@ export const modelService = {
     return response.data;
   },
 
-  importModel: async (data: {
-    name: string;
-    modelId: string;
-    description: string;
-    category: string;
-    subcategory: string;
-    size: number;
-  }) => {
-    const response = await api.post<Model>("/api/v1alpha1/models", data);
+  // Left-joined with the engine rows: an option whose engine has no
+  // engines row (a hosted option such as "openrouter") comes back with
+  // engine_id: null; the launch wizard renders only options with one.
+  getModelServingOptions: async (id: string) => {
+    const response = await api.get<ServingOption[]>(
+      `/api/v1alpha1/models/${id}/serving-options`
+    );
     return response.data;
   },
 
@@ -164,6 +163,10 @@ export const modelService = {
     engine: { id: string };
     host: string;
     config: Record<string, unknown>;
+    // The picked serving option (Phase 3): its reference is persisted on
+    // the instance row and every consumer reads
+    // instance.reference or instance.model.modelId.
+    serving_option_id?: string;
   }) => {
     const response = await api.post<InferenceInstance>(
       "/api/v1alpha1/inferenceInstance",

@@ -1,13 +1,47 @@
 [
   {
     "id": "00000000-0000-4000-8134-d6e500000002",
-    "name": "Llama 3.1 8B Instruct",
-    "modelId": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "description": "Llama 3.1 is a large language model",
-    "category": "llm",
-    "subcategory": "text generation",
-    "size": 16106127360,
-    "countAdapters": 0
+    "name": "BGE Reranker",
+    "modelId": "BAAI/bge-reranker-large",
+    "description": "BAAI/bge-reranker-large is a large language model",
+    "category": "reranker",
+    "subcategory": "reranker",
+    "size": 6764573491,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "rerank"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000001",
+        "engine": "HuggingFace",
+        "reference": "BAAI/bge-reranker-large",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000002",
+        "engine": "NIM",
+        "reference": "BAAI/bge-reranker-large",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000003",
@@ -17,47 +51,249 @@
     "category": "embedding",
     "subcategory": "embedding",
     "size": 1395864371,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "embedding"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000003",
+        "engine": "HuggingFace",
+        "reference": "BAAI/bge-large-en-v1.5",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000004",
+        "engine": "NIM",
+        "reference": "BAAI/bge-large-en-v1.5",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000004",
-    "name": "BGE Reranker",
-    "modelId": "BAAI/bge-reranker-large",
-    "description": "BAAI/bge-reranker-large is a large language model",
-    "category": "reranker",
-    "subcategory": "reranker",
-    "size": 6764573491,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e500000005",
-    "name": "Llama 3.1 8B",
-    "modelId": "meta-llama/Meta-Llama-3.1-8B",
-    "description": "meta-llama/Meta-Llama-3.1-8B is a large language model",
-    "category": "llm",
-    "subcategory": "text generation",
-    "size": 17179869184,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e500000006",
     "name": "Llama 3 8B",
     "modelId": "meta-llama/Meta-Llama-3-8B",
     "description": "meta-llama/Meta-Llama-3-8B is a large language model",
     "category": "llm",
     "subcategory": "text generation",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000005",
+        "engine": "HuggingFace",
+        "reference": "meta-llama/Meta-Llama-3-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000006",
+        "engine": "NIM",
+        "reference": "meta-llama/Meta-Llama-3-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000007",
+        "engine": "vLLM",
+        "reference": "meta-llama/Meta-Llama-3-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
-    "id": "00000000-0000-4000-8134-d6e500000007",
+    "id": "00000000-0000-4000-8134-d6e500000005",
     "name": "Llama 3 8B Instruct",
     "modelId": "meta-llama/Meta-Llama-3-8B-Instruct",
     "description": "meta-llama/Meta-Llama-3-8B-Instruct is a large language model",
     "category": "llm",
     "subcategory": "text generation",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000008",
+        "engine": "HuggingFace",
+        "reference": "meta-llama/Meta-Llama-3-8B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000009",
+        "engine": "NIM",
+        "reference": "meta-llama/Meta-Llama-3-8B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000000a",
+        "engine": "vLLM",
+        "reference": "meta-llama/Meta-Llama-3-8B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000006",
+    "name": "Llama 3.1 8B",
+    "modelId": "meta-llama/Meta-Llama-3.1-8B",
+    "description": "meta-llama/Meta-Llama-3.1-8B is a large language model",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 17179869184,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000000b",
+        "engine": "HuggingFace",
+        "reference": "meta-llama/Meta-Llama-3.1-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000000c",
+        "engine": "NIM",
+        "reference": "meta-llama/Meta-Llama-3.1-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000000d",
+        "engine": "vLLM",
+        "reference": "meta-llama/Meta-Llama-3.1-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000007",
+    "name": "Llama 3.1 8B Instruct",
+    "modelId": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "description": "Llama 3.1 is a large language model",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 16106127360,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000000e",
+        "engine": "HuggingFace",
+        "reference": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000000f",
+        "engine": "NIM",
+        "reference": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000010",
+        "engine": "vLLM",
+        "reference": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000008",
@@ -67,7 +303,49 @@
     "category": "llm",
     "subcategory": "text generation",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000011",
+        "engine": "HuggingFace",
+        "reference": "meta-llama/Llama-3.2-1B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000012",
+        "engine": "NIM",
+        "reference": "meta-llama/Llama-3.2-1B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000013",
+        "engine": "vLLM",
+        "reference": "meta-llama/Llama-3.2-1B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000009",
@@ -77,107 +355,489 @@
     "category": "llm",
     "subcategory": "text generation",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000014",
+        "engine": "HuggingFace",
+        "reference": "meta-llama/Llama-3.2-3B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000015",
+        "engine": "NIM",
+        "reference": "meta-llama/Llama-3.2-3B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000016",
+        "engine": "vLLM",
+        "reference": "meta-llama/Llama-3.2-3B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e50000000a",
-    "name": "Phi 1.5",
-    "modelId": "microsoft/phi-1_5",
-    "description": "microsoft/phi-1_5 is a large language model",
-    "category": "llm",
-    "subcategory": "text generation",
-    "size": 2899102924,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e50000000b",
-    "name": "Phi 3 mini 4k",
-    "modelId": "microsoft/Phi-3-mini-4k-instruct",
-    "description": "microsoft/Phi-3-mini-4k-instruct is a small language model",
-    "category": "llm",
-    "subcategory": "text generation",
-    "size": 24576,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e50000000c",
-    "name": "Qwen2 7B Instruct",
-    "modelId": "Qwen/Qwen2-7B-Instruct",
-    "description": "Qwen/Qwen2-7B-Instruct is a large language model",
-    "category": "llm",
-    "subcategory": "text generation",
-    "size": 16106127360,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e50000000d",
-    "name": "NV Rerank QA Mistral 4B V3",
-    "modelId": "nvidia/nv-rerankqa-mistral-4b-v3",
-    "description": "The NVIDIA Retrieval QA Mistral 4B Reranking Model",
-    "category": "reranker",
-    "subcategory": "reranker",
-    "size": 8192,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e50000000e",
-    "name": "NV Embed QA Mistral 7B V2",
-    "modelId": "nvidia/nv-embedqa-mistral-7b-v2",
-    "description": "The NVIDIA Retrieval QA Mistral 7B Embedding model",
-    "category": "embedding",
-    "subcategory": "embedding",
-    "size": 8192,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e50000000f",
     "name": "Llama Guard 3 8B",
     "modelId": "meta-llama/Llama-Guard-3-8B",
     "description": "It is an 8B parameter Llama 3-based LLM safeguard model",
     "category": "prompt_guard",
     "subcategory": "prompt_guard",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "guard"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000017",
+        "engine": "OPEA",
+        "reference": "meta-llama/Llama-Guard-3-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
-    "id": "00000000-0000-4000-8134-d6e500000010",
+    "id": "00000000-0000-4000-8134-d6e50000000b",
     "name": "Meta Llama Guard 2 8B",
     "modelId": "meta-llama/Meta-Llama-Guard-2-8B",
     "description": "It is an 8B parameter Llama 2-based LLM safeguard model",
     "category": "prompt_guard",
     "subcategory": "prompt_guard",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "guard"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000018",
+        "engine": "OPEA",
+        "reference": "meta-llama/Meta-Llama-Guard-2-8B",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
-    "id": "00000000-0000-4000-8134-d6e500000011",
+    "id": "00000000-0000-4000-8134-d6e50000000c",
     "name": "Mistral 7B v0.1",
     "modelId": "mistralai/Mistral-7B-v0.1",
     "description": "Mistral 7B v0.1 is a large language model",
     "category": "llm",
     "subcategory": "text generation",
     "size": 16106127360,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000019",
+        "engine": "HuggingFace",
+        "reference": "mistralai/Mistral-7B-v0.1",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000001a",
+        "engine": "NIM",
+        "reference": "mistralai/Mistral-7B-v0.1",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000001b",
+        "engine": "vLLM",
+        "reference": "mistralai/Mistral-7B-v0.1",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e50000000d",
+    "name": "NV Embed QA Mistral 7B V2",
+    "modelId": "nvidia/nv-embedqa-mistral-7b-v2",
+    "description": "The NVIDIA Retrieval QA Mistral 7B Embedding model",
+    "category": "embedding",
+    "subcategory": "embedding",
+    "size": 8192,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "embedding"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000001c",
+        "engine": "HuggingFace",
+        "reference": "nvidia/nv-embedqa-mistral-7b-v2",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000001d",
+        "engine": "NIM",
+        "reference": "nvidia/nv-embedqa-mistral-7b-v2",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e50000000e",
+    "name": "NV Rerank QA Mistral 4B V3",
+    "modelId": "nvidia/nv-rerankqa-mistral-4b-v3",
+    "description": "The NVIDIA Retrieval QA Mistral 4B Reranking Model",
+    "category": "reranker",
+    "subcategory": "reranker",
+    "size": 8192,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "rerank"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000001e",
+        "engine": "HuggingFace",
+        "reference": "nvidia/nv-rerankqa-mistral-4b-v3",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e50000001f",
+        "engine": "NIM",
+        "reference": "nvidia/nv-rerankqa-mistral-4b-v3",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e50000000f",
+    "name": "Phi 1.5",
+    "modelId": "microsoft/phi-1_5",
+    "description": "microsoft/phi-1_5 is a large language model",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 2899102924,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000020",
+        "engine": "HuggingFace",
+        "reference": "microsoft/phi-1_5",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000021",
+        "engine": "NIM",
+        "reference": "microsoft/phi-1_5",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000022",
+        "engine": "vLLM",
+        "reference": "microsoft/phi-1_5",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000010",
+    "name": "Phi 3 mini 4k",
+    "modelId": "microsoft/Phi-3-mini-4k-instruct",
+    "description": "microsoft/Phi-3-mini-4k-instruct is a small language model",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 24576,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000023",
+        "engine": "HuggingFace",
+        "reference": "microsoft/Phi-3-mini-4k-instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000024",
+        "engine": "NIM",
+        "reference": "microsoft/Phi-3-mini-4k-instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000025",
+        "engine": "vLLM",
+        "reference": "microsoft/Phi-3-mini-4k-instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000011",
+    "name": "Qwen2 7B Instruct",
+    "modelId": "Qwen/Qwen2-7B-Instruct",
+    "description": "Qwen/Qwen2-7B-Instruct is a large language model",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 16106127360,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "safetensors"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000026",
+        "engine": "HuggingFace",
+        "reference": "Qwen/Qwen2-7B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000027",
+        "engine": "NIM",
+        "reference": "Qwen/Qwen2-7B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      },
+      {
+        "id": "00000000-0000-4000-8134-d6e500000028",
+        "engine": "vLLM",
+        "reference": "Qwen/Qwen2-7B-Instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000012",
-    "name": "Qwen3 0.6B",
-    "modelId": "qwen3:0.6b",
-    "description": "Qwen3 0.6B chat model served by Ollama on CPU (Apache 2.0)",
-    "category": "llm",
-    "subcategory": "text generation",
-    "size": 523000000,
-    "countAdapters": 0
-  },
-  {
-    "id": "00000000-0000-4000-8134-d6e500000013",
     "name": "Qwen2.5 1.5B Instruct",
     "modelId": "qwen2.5:1.5b-instruct",
     "description": "Qwen2.5 1.5B instruct model served by Ollama on CPU (Apache 2.0)",
     "category": "llm",
     "subcategory": "text generation",
     "size": 986000000,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "gguf"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e500000029",
+        "engine": "Ollama",
+        "reference": "qwen2.5:1.5b-instruct",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-4000-8134-d6e500000013",
+    "name": "Qwen3 0.6B",
+    "modelId": "qwen3:0.6b",
+    "description": "Qwen3 0.6B chat model served by Ollama on CPU (Apache 2.0)",
+    "category": "llm",
+    "subcategory": "text generation",
+    "size": 523000000,
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "gguf"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000002a",
+        "engine": "Ollama",
+        "reference": "qwen3:0.6b",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000014",
@@ -187,7 +847,33 @@
     "category": "llm",
     "subcategory": "text generation",
     "size": 1800000000,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "chat"
+    ],
+    "formats": [
+      "gguf"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000002b",
+        "engine": "Ollama",
+        "reference": "smollm2:1.7b",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   },
   {
     "id": "00000000-0000-4000-8134-d6e500000015",
@@ -197,6 +883,32 @@
     "category": "embedding",
     "subcategory": "embedding",
     "size": 67000000,
-    "countAdapters": 0
+    "countAdapters": 0,
+    "source": "manual",
+    "source_id": null,
+    "license": null,
+    "parameters": null,
+    "context_length": null,
+    "capabilities": [
+      "embedding"
+    ],
+    "formats": [
+      "gguf"
+    ],
+    "tags": [],
+    "status": "published",
+    "synced_at": null,
+    "sync_error": null,
+    "raw": null,
+    "serving_options": [
+      {
+        "id": "00000000-0000-4000-8134-d6e50000002c",
+        "engine": "Ollama",
+        "reference": "all-minilm:33m",
+        "default_args": null,
+        "engine_id": null,
+        "cpu": null
+      }
+    ]
   }
 ]

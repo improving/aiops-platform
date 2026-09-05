@@ -18,7 +18,7 @@ class VLLMController(Controller):
         # secretKeyRef instead of rendering the value into the template.
         credential_secret_name, _ = credential_secret_names("inf", instance.id)
         context = {
-            "model": instance.model.modelId,
+            "model": instance.reference or instance.model.modelId,
             "args": [],
             "lora_adapters": {},
             "env": [],

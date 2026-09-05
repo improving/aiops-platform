@@ -247,7 +247,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Size</Label>
-                <span>{formatSize(model.size)}</span>
+                <span>{model.size ? formatSize(model.size) : "unknown"}</span>
               </div>
             </div>
           }

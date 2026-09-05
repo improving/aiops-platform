@@ -1,4 +1,5 @@
 import json
+import uuid
 from unittest import mock
 
 import pytest
@@ -6,7 +7,17 @@ from fastapi.testclient import TestClient
 
 from api.inference_instance import missing_endpoint_clause
 from core import create_app
+from db.database import get_db_direct
+from models.models import DBModel
+from models.serving_option import ServingOption
 from schemas.notebook import NOTEBOOK_NAME_MAX_LENGTH
+from test_auth import (  # noqa: F401 (fixtures)
+    bearer,
+    make_token,
+    oidc_client,
+    rsa_key,
+)
+from utils import genid
 
 
 def test_missing_endpoint_clause_compiles_to_is_null():
@@ -32,7 +43,8 @@ def test_lifespan_runs_scheduler(monkeypatch):
     with TestClient(app) as client:
         scheduler = app.state.scheduler
         assert scheduler.running
-        assert len(scheduler.get_jobs()) == 3
+        # The 3 endpoint-polling jobs plus the daily registry sync.
+        assert len(scheduler.get_jobs()) == 4
         assert client.get("/health").status_code == 200
     assert not scheduler.running
     assert app.state.scheduler is None
@@ -431,3 +443,191 @@ def test_create_without_litellm_configured(inference_env, monkeypatch):
     assert response.status_code == 201, response.text
     assert response.json()["litellm_model_name"] is None
     client.delete(f"/v1alpha1/inferenceInstance/{response.json()['id']}")
+
+
+# --- Phase 3 Task 1: registry fields, serving options, reference ------------
+
+
+def _add_model(**overrides) -> str:
+    db = get_db_direct()
+    try:
+        model = DBModel(
+            id=genid.uuid4(),
+            name=overrides.pop("name", "Registry Test Model"),
+            modelId=overrides.pop("modelId", "registry/test-model"),
+            category=overrides.pop("category", "llm"),
+            **overrides,
+        )
+        db.add(model)
+        db.commit()
+        db.refresh(model)
+        return str(model.id)
+    finally:
+        db.close()
+
+
+def _delete_model(model_id: str):
+    db = get_db_direct()
+    try:
+        mid = uuid.UUID(model_id)
+        db.query(ServingOption).filter(ServingOption.model_id == mid).delete()
+        db.query(DBModel).filter(DBModel.id == mid).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
+def _add_serving_option(model_id: str, engine: str, reference: str) -> str:
+    db = get_db_direct()
+    try:
+        option = ServingOption(
+            model_id=uuid.UUID(model_id), engine=engine, reference=reference
+        )
+        db.add(option)
+        db.commit()
+        db.refresh(option)
+        return str(option.id)
+    finally:
+        db.close()
+
+
+def _delete_serving_option(option_id: str):
+    db = get_db_direct()
+    try:
+        db.query(ServingOption).filter(
+            ServingOption.id == uuid.UUID(option_id)
+        ).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_catalog_hides_a_draft_row_from_members_shows_it_to_admins(
+    oidc_client,  # noqa: F811
+    rsa_key,  # noqa: F811
+):
+    draft_id = _add_model(
+        name="Draft Model", modelId="draft/model", status="draft"
+    )
+    try:
+        member = bearer(
+            make_token(rsa_key, sub="reg-member", roles=("member",))
+        )
+        admin = bearer(make_token(rsa_key, sub="reg-admin", roles=("admin",)))
+
+        listed = oidc_client.get("/v1alpha1/models", headers=member).json()
+        assert draft_id not in {m["id"] for m in listed}
+
+        member_get = oidc_client.get(
+            f"/v1alpha1/models/{draft_id}", headers=member
+        )
+        assert member_get.status_code == 404
+
+        admin_get = oidc_client.get(
+            f"/v1alpha1/models/{draft_id}", headers=admin
+        )
+        assert admin_get.status_code == 200, admin_get.text
+        assert admin_get.json()["status"] == "draft"
+    finally:
+        _delete_model(draft_id)
+
+
+def test_model_serving_options_endpoint_shape():
+    model_id = _add_model(
+        name="Serving Options Model", modelId="org/serving-options"
+    )
+    option_ids = [
+        _add_serving_option(model_id, "HuggingFace", "org/serving-options"),
+        # A hosted option has no matching engines row.
+        _add_serving_option(model_id, "openrouter", "org/serving-options"),
+    ]
+
+    try:
+        app = create_app()
+        client = TestClient(app)
+        response = client.get(f"/v1alpha1/models/{model_id}/serving-options")
+        assert response.status_code == 200, response.text
+        by_engine = {o["engine"]: o for o in response.json()}
+        assert by_engine["HuggingFace"]["engine_id"] is not None
+        assert by_engine["HuggingFace"]["cpu"] is False
+        assert by_engine["HuggingFace"]["reference"] == "org/serving-options"
+        # A hosted option has no engines row: engine_id and cpu are null,
+        # and the wizard is expected to skip it.
+        assert by_engine["openrouter"]["engine_id"] is None
+        assert by_engine["openrouter"]["cpu"] is None
+    finally:
+        for option_id in option_ids:
+            _delete_serving_option(option_id)
+        _delete_model(model_id)
+
+
+def test_create_inference_instance_with_serving_option_persists_reference(
+    inference_env,
+):
+    """A model row of its own (not the seeded qwen3:0.6b, whose own
+    Ollama serving option's reference matches its plain modelId) makes
+    the GGUF-vs-modelId distinction the register_instance assertion
+    below needs unambiguous."""
+    controller, litellm = inference_env
+    app = create_app()
+    client = TestClient(app)
+    engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
+    model_id = _add_model(
+        name="Qwen3 0.6B GGUF", modelId="Qwen/Qwen3-0.6B-GGUF"
+    )
+    gguf_reference = "hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0"
+    option_id = _add_serving_option(model_id, "Ollama", gguf_reference)
+
+    try:
+        response = client.post(
+            "/v1alpha1/inferenceInstance",
+            json={
+                "model": {"id": model_id},
+                "engine": {"id": engines["Ollama"]["id"]},
+                "config": {},
+                "serving_option_id": option_id,
+            },
+        )
+        assert response.status_code == 201, response.text
+        created = response.json()
+        assert created["reference"] == gguf_reference
+
+        # register_instance (2a) uses the reference, not the catalog's
+        # modelId, for the LiteLLM model param.
+        name, params, info = litellm.register_model.call_args.args
+        assert params["model"] == f"openai/{gguf_reference}"
+
+        deleted = client.delete(f"/v1alpha1/inferenceInstance/{created['id']}")
+        assert deleted.status_code == 200
+    finally:
+        _delete_serving_option(option_id)
+        _delete_model(model_id)
+
+
+def test_create_inference_instance_rejects_a_foreign_serving_option(
+    inference_env,
+):
+    """A serving_option_id must belong to the model it is submitted
+    with, not just exist."""
+    controller, litellm = inference_env
+    app = create_app()
+    client = TestClient(app)
+    engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
+    models = {m["modelId"]: m for m in client.get("/v1alpha1/models").json()}
+    other_model_id = _add_model(name="Other Model", modelId="org/other-model")
+    option_id = _add_serving_option(other_model_id, "Ollama", "unrelated")
+
+    try:
+        response = client.post(
+            "/v1alpha1/inferenceInstance",
+            json={
+                "model": {"id": models["qwen3:0.6b"]["id"]},
+                "engine": {"id": engines["Ollama"]["id"]},
+                "config": {},
+                "serving_option_id": option_id,
+            },
+        )
+        assert response.status_code == 404
+    finally:
+        _delete_serving_option(option_id)
+        _delete_model(other_model_id)

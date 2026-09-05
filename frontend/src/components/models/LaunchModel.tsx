@@ -20,13 +20,17 @@ import {
   ValueNoneIcon,
 } from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
-import { Adapter, Engine, Host, Model } from "@/types/models";
+import { Adapter, Engine, Host, Model, ServingOption } from "@/types/models";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
-import { enginesForModel, cpuOnly } from "@/lib/engines";
+
+/** True when every launchable serving option runs without a GPU. */
+function cpuOnly(options: ServingOption[]): boolean {
+  return options.length > 0 && options.every((option) => option.cpu);
+}
 
 const tabs = ["accelerators", "deployConfig", "envVars"];
 
@@ -50,14 +54,14 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [activeTab, setActiveTab] = useState("accelerators");
   const [formData, setFormData] = useState({
     hostId: "",
-    engineId: "",
+    servingOptionId: "",
   });
   const [args, setArgs] = useState<CLIArg[]>([]);
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [model, setModel] = useState<Model | null>(null);
-  const [filteredEngines, setFilteredEngines] = useState<Engine[]>([]);
+  const [servingOptions, setServingOptions] = useState<ServingOption[]>([]);
   const [adapters, setAdapters] = useState<Adapter[]>([]);
   const [selectedAdapters, setSelectedAdapters] = useState<Adapter[]>([]);
   const { toast } = useToast(); // Initialize toast
@@ -89,6 +93,16 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         toast(parseApiError(error));
       }
     };
+    const fetchServingOptions = async () => {
+      try {
+        const data = await modelService.getModelServingOptions(params.id);
+        // The wizard renders only options with an engine_id: a hosted
+        // option (e.g. "openrouter") has none and no chart to launch.
+        setServingOptions(data.filter((option) => option.engine_id));
+      } catch (error) {
+        toast(parseApiError(error));
+      }
+    };
     const fetchAdapters = async () => {
       try {
         const data = await modelService.getAdapters(params.id);
@@ -101,21 +115,20 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     fetchEngines();
     fetchHosts();
     fetchModel();
+    fetchServingOptions();
     fetchAdapters();
   }, [params.id, toast]);
 
-  useEffect(() => {
-    if (model && engines.length > 0) {
-      setFilteredEngines(enginesForModel(model, engines));
-    }
-  }, [model, engines]);
+  const needsHost = !cpuOnly(servingOptions);
 
-  const needsHost = !cpuOnly(filteredEngines);
+  const selectedOption = servingOptions.find(
+    (option) => option.id === formData.servingOptionId
+  );
 
   useEffect(() => {
-    if (formData.engineId) {
+    if (selectedOption) {
       const selectedEngine = engines.find(
-        (engine) => engine.id === formData.engineId
+        (engine) => engine.id === selectedOption.engine_id
       );
       if (selectedEngine) {
         const defaultArgs: CLIArg[] = selectedEngine.default_args.map(
@@ -142,7 +155,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         setEnvVars(defaultEnvVars);
       }
     }
-  }, [formData.engineId, engines]);
+  }, [selectedOption, engines]);
 
   const handleArgChange = (
     index: number,
@@ -212,8 +225,9 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     try {
       const data = await modelService.createInferenceInstance({
         model: { id: params.id },
-        engine: { id: formData.engineId },
+        engine: { id: selectedOption?.engine_id ?? "" },
         host: formData.hostId,
+        serving_option_id: formData.servingOptionId || undefined,
         config: {
           maxInputLength: 0,
           maxTokens: 0,
@@ -261,7 +275,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       });
       return;
     }
-    if (value === "envVars" && !formData.engineId) {
+    if (value === "envVars" && !formData.servingOptionId) {
       toast({
         title: "Engine Selection Required",
         description:
@@ -291,7 +305,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       }
       setActiveTab("deployConfig");
     } else if (activeTab === "deployConfig") {
-      if (!formData.engineId) {
+      if (!formData.servingOptionId) {
         toast({
           title: "Engine Selection Required",
           description: "Please select an engine before proceeding.",
@@ -322,14 +336,20 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
           </TabsTrigger>
           <TabsTrigger
             value="envVars"
-            disabled={(!formData.hostId && needsHost) || !formData.engineId}
+            disabled={
+              (!formData.hostId && needsHost) || !formData.servingOptionId
+            }
           >
             CLI Args and Env Variables
           </TabsTrigger>
         </TabsList>
         <TabsContent value="accelerators">
           <DisplayCard
-            title="Select Accelerator"
+            title={
+              model
+                ? `Select Accelerator — ${model.name}`
+                : "Select Accelerator"
+            }
             content={
               <>
                 {!needsHost && (
@@ -431,25 +451,28 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
             content={
               <>
                 <Select
-                  name="engineId"
-                  value={formData.engineId}
+                  name="servingOptionId"
+                  value={formData.servingOptionId}
                   onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, engineId: value }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      servingOptionId: value,
+                    }))
                   }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select Engine" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filteredEngines.map((engine) => (
-                      <SelectItem key={engine.id} value={engine.id}>
-                        {engine.name}
+                    {servingOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.engine}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
-                {formData.engineId && (
+                {formData.servingOptionId && (
                   <div className="mt-6">
                     <div className="flex items-center space-x-2 mb-4">
                       <Switch
