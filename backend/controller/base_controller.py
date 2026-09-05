@@ -13,10 +13,21 @@ from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
+from utils.gateway import (
+    apikey_secret_name,
+    delete_http_route,
+    delete_security_policy,
+    ensure_apikey_policy,
+    ensure_http_route,
+    instance_hostname,
+)
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
 
 # Chart.yaml keys that Helm needs; every other key is informational.
 REQUIRED_CHART_METADATA_KEYS = frozenset({"apiVersion", "name", "version"})
+
+# Inference engines only ever expose one port through their chart's Service.
+INFERENCE_GATEWAY_PORT = 80
 
 
 class ChartMetadataError(Exception):
@@ -113,8 +124,11 @@ class Controller(ABC):
         helm_client: HelmClient = None,
     ):
         self.logger = setup_logger(__name__)
-        self.api_instance = api_instance or client.CustomObjectsApi()
+        # core_v1_api first: get_core_v1_client() loads the kube config,
+        # which client.CustomObjectsApi() below silently needs too (it
+        # reads the kubernetes client's global default Configuration).
         self.core_v1_api = core_v1_api or get_core_v1_client()
+        self.api_instance = api_instance or client.CustomObjectsApi()
         self.namespace = namespace or get_default_namespace()
         self.helm = helm_client or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
@@ -166,7 +180,7 @@ class Controller(ABC):
     def _get_base_context(self, instance: InferenceInstanceSchema):
         base_context = {
             "nodeSelector": {},
-            "service": {"type": "LoadBalancer", "port": 80},
+            "service": {"type": "ClusterIP", "port": 80},
             "resources": {"limits": {"gpu": 1}, "requests": {"gpu": 1}},
             "volumes": {"hf_cache": {"claimName": "hf-cache"}},
             "volumeMounts": {"hf_cache": {"mountPath": "/data"}},
@@ -202,6 +216,72 @@ class Controller(ABC):
         self.logger.info(f"fetched chart: {chart_name} from {repo_url}")
 
         return chart
+
+    def _gateway_route_name(self, instance: InferenceInstanceSchema):
+        return self._get_release_name(instance)
+
+    def _safe_gateway_call(self, description: str, fn, *args, **kwargs):
+        """Run one gateway call, logging instead of raising on failure.
+
+        Never raises: a gateway problem must not be mistaken for a Helm
+        failure (which would leave the release installed but the row
+        deleted, since the caller's except-and-delete does not know the
+        difference), must not block the install/upgrade/uninstall it
+        follows, and must not stop the next call from being attempted.
+        """
+        try:
+            fn(*args, **kwargs)
+        except Exception:
+            self.logger.exception(description)
+
+    def _ensure_gateway_routes(
+        self,
+        instance: InferenceInstanceSchema,
+        engineChart: EngineChartsSchema,
+    ):
+        """Create/patch the one SDK HTTPRoute (inf-<id8>; inference has no
+        browser UI) and, once its credential Secret exists (Task 12), the
+        API-key policy on it. No-op without the gateway env contract."""
+        route_name = self._gateway_route_name(instance)
+        self._safe_gateway_call(
+            f"Failed to ensure gateway route {route_name} for {instance.id}",
+            ensure_http_route,
+            self.namespace,
+            route_name,
+            instance_hostname("inf", instance.id),
+            self.get_service_name(instance, engineChart),
+            INFERENCE_GATEWAY_PORT,
+            api_instance=self.api_instance,
+        )
+        self._safe_gateway_call(
+            f"Failed to ensure the API-key policy for {route_name}",
+            ensure_apikey_policy,
+            self.namespace,
+            route_name,
+            apikey_secret_name("inf", instance.id),
+            api_instance=self.api_instance,
+            core_v1_api=self.core_v1_api,
+        )
+
+    def _delete_gateway_routes(self, instance: InferenceInstanceSchema):
+        """Policy first, then the route it targets. Called from a
+        `finally`, where a new exception would silently replace the one
+        already being propagated; see _safe_gateway_call."""
+        route_name = self._gateway_route_name(instance)
+        self._safe_gateway_call(
+            f"Failed to delete the API-key policy for {route_name}",
+            delete_security_policy,
+            self.namespace,
+            route_name,
+            api_instance=self.api_instance,
+        )
+        self._safe_gateway_call(
+            f"Failed to delete gateway route {route_name} for {instance.id}",
+            delete_http_route,
+            self.namespace,
+            route_name,
+            api_instance=self.api_instance,
+        )
 
     def create_ns_if_needed(self):
         try:
@@ -245,6 +325,7 @@ class Controller(ABC):
                 create_namespace=True,
             )
             self.logger.info(f"Helm install succeeded for chart: {chart_name}")
+            self._ensure_gateway_routes(instance, engineChart)
         except (
             Exception
         ) as e:  # Consider replacing with a more specific exception
@@ -270,6 +351,7 @@ class Controller(ABC):
                 self.helm, chart_name, chart, values, namespace=self.namespace
             )
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
+            self._ensure_gateway_routes(instance, engineChart)
         except (
             Exception
         ) as e:  # Consider replacing with a more specific exception
@@ -298,6 +380,7 @@ class Controller(ABC):
                 f"Helm uninstall failed: {str(e)}"
             ) from e  # {{ edit_3 }}
         finally:
+            self._delete_gateway_routes(instance)
             self._unlink_downloaded_chart(instance)
 
 

@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from auth.current_user import CurrentUser, get_current_user, require_writer
 from db.database import get_db
 from models.inference_instance import DBInferenceInstance
 from models.models import DBModel
@@ -13,7 +14,10 @@ router = APIRouter()
 
 # API to get model information
 @router.get("/v1alpha1/models", response_model=list[ModelSchema])
-def get_models(db: Session = Depends(get_db)):
+def get_models(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Retrieve all models from the database.
 
@@ -32,7 +36,11 @@ def get_models(db: Session = Depends(get_db)):
 
 
 @router.get("/v1alpha1/models/{id}", response_model=ModelSchema)
-def get_model(id: uuid.UUID, db: Session = Depends(get_db)):
+def get_model(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Retrieve a specific model by its ID.
 
@@ -53,7 +61,11 @@ def get_model(id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/v1alpha1/models", response_model=ModelSchema)
-def create_model(model: ModelSchema, db: Session = Depends(get_db)):
+def create_model(
+    model: ModelSchema,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
+):
     """
     Create a new model in the database. Remember to checkin the model
     to the code repository.
@@ -73,7 +85,10 @@ def create_model(model: ModelSchema, db: Session = Depends(get_db)):
 
 @router.put("/v1alpha1/models/{id}", response_model=ModelSchema)
 def update_model(
-    id: uuid.UUID, model: ModelSchema, db: Session = Depends(get_db)
+    id: uuid.UUID,
+    model: ModelSchema,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
 ):
     """
     Update an existing model in the database.
@@ -100,7 +115,11 @@ def update_model(
 
 
 @router.delete("/v1alpha1/models/{id}")
-def delete_model(id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_model(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
+):
     """
     Delete a model from the database.
 

@@ -3,9 +3,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from auth.current_user import CurrentUser, get_current_user, require_writer
+from auth.policy import authorize_read, authorize_write, org_scope
 from controller.finetune_controller import FinetuneController
 from db.database import get_db
 from logger import setup_logger
+from models.finetune import DBFinetune
 from repositories.finetune_repository import FinetuneRepository
 from schemas.finetune import (
     FinetuneCreateSchema,
@@ -21,9 +24,13 @@ finetune_controller = FinetuneController()
 @router.get(
     "/v1alpha1/models/{model_id}/finetune", response_model=list[FinetuneSchema]
 )
-async def list_finetunes(model_id: UUID, db: Session = Depends(get_db)):
+async def list_finetunes(
+    model_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
-    List all finetune jobs available in the cluster.
+    List the finetune jobs of a model in the caller's organization.
 
     Args:
         model_id (UUID): ID of the model.
@@ -36,7 +43,9 @@ async def list_finetunes(model_id: UUID, db: Session = Depends(get_db)):
     """
     try:
         repository = FinetuneRepository(db)
-        finetunes = repository.get_by_model_id(model_id)
+        finetunes = repository.get_by_model_id(
+            model_id, scope=org_scope(DBFinetune, user)
+        )
         for finetune in finetunes:
             finetune.status = await finetune_controller.get_job_status(
                 finetune
@@ -57,6 +66,7 @@ async def create_finetune(
     model_id: UUID,
     finetune: FinetuneCreateSchema,
     db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
 ):
     """
     Create a new finetune job.
@@ -75,7 +85,9 @@ async def create_finetune(
 
     try:
         logger.info(f"Creating finetune job for model {model_id}")
-        db_finetune = repository.create(model_id, finetune)
+        db_finetune = repository.create(
+            model_id, finetune, org_id=user.org_id, owner_id=user.id
+        )
 
         # Submit Kubernetes job
         await finetune_controller.submit_job(db_finetune)
@@ -94,7 +106,10 @@ async def create_finetune(
     response_model=FinetuneSchema,
 )
 async def get_finetune(
-    model_id: UUID, finetune_id: UUID, db: Session = Depends(get_db)
+    model_id: UUID,
+    finetune_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Get details of a specific finetune job.
@@ -116,6 +131,7 @@ async def get_finetune(
             raise HTTPException(
                 status_code=404, detail="Finetune job not found"
             )
+        authorize_read(user, finetune, "finetune job")
 
         # Get Kubernetes job status
         finetune.status = await finetune_controller.get_job_status(finetune)
@@ -138,6 +154,7 @@ async def update_finetune(
     finetune_id: UUID,
     finetune: FinetuneUpdateSchema,
     db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Update a finetune job.
@@ -155,11 +172,13 @@ async def update_finetune(
     """
     try:
         repository = FinetuneRepository(db)
-        updated_finetune = repository.update(model_id, finetune_id, finetune)
-        if updated_finetune is None:
+        existing = repository.get_by_id(model_id, finetune_id)
+        if existing is None:
             raise HTTPException(
                 status_code=404, detail="Finetune job not found"
             )
+        authorize_write(user, existing, "finetune job")
+        updated_finetune = repository.update(model_id, finetune_id, finetune)
 
         # For now, we don't update the Kubernetes job
         # If needed, we can implement job update logic in the controller
@@ -177,7 +196,10 @@ async def update_finetune(
     "/v1alpha1/models/{model_id}/finetune/{finetune_id}", status_code=204
 )
 async def delete_finetune(
-    model_id: UUID, finetune_id: UUID, db: Session = Depends(get_db)
+    model_id: UUID,
+    finetune_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Delete a finetune job.
@@ -196,6 +218,7 @@ async def delete_finetune(
             raise HTTPException(
                 status_code=404, detail="Finetune job not found"
             )
+        authorize_write(user, finetune, "finetune job")
 
         # Delete Kubernetes job
         await finetune_controller.delete_job(finetune)
@@ -212,7 +235,10 @@ async def delete_finetune(
 
 @router.get("/v1alpha1/models/{model_id}/finetune/{finetune_id}/logs")
 async def get_finetune_logs(
-    model_id: UUID, finetune_id: UUID, db: Session = Depends(get_db)
+    model_id: UUID,
+    finetune_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Get logs of a finetune job.
@@ -234,6 +260,7 @@ async def get_finetune_logs(
             raise HTTPException(
                 status_code=404, detail="Finetune job not found"
             )
+        authorize_read(user, finetune, "finetune job")
 
         logs = await finetune_controller.get_job_logs(finetune)
         return {"logs": logs}

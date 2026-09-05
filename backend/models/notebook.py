@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from db.database import Base
@@ -28,3 +28,9 @@ class Notebook(Base):
     endpoint = Column(String)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
+    )
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )

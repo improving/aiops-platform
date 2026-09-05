@@ -63,8 +63,7 @@ test.describe("header navigation", () => {
   test("the brand link returns home", async ({ page }) => {
     const shell = new AppShell(page);
     await shell.goto("/models/catalog");
-    await shell.brand.click();
-    await expect(page).toHaveURL(/\/$/);
+    await shell.navigateByClick(shell.brand, /\/$/);
     await shell.expectHeading("Welcome to AI Hub");
   });
 

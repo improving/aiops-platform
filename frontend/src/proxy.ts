@@ -1,23 +1,82 @@
-import { NextRequest, NextResponse } from "next/server"
-import { BACKEND_URL } from "./constants"
+import { NextRequest, NextResponse } from "next/server";
+import type { NextFetchEvent } from "next/server";
+import { auth } from "@/auth";
+import { BACKEND_URL } from "./constants";
+import type { Session } from "next-auth";
 
 // AIOPS_BACKEND_URL is read on the server at request time, so a container
 // can point at a different backend without a rebuild. NEXT_PUBLIC_* values
 // are inlined at build time and only serve as the fallback.
 function backendUrl(): string {
-  return process.env.AIOPS_BACKEND_URL || BACKEND_URL
+  return process.env.AIOPS_BACKEND_URL || BACKEND_URL;
 }
 
+// Everything except Next.js internals and the Auth.js routes; the handler
+// decides per path what happens.
 export const config = {
-  matcher: ["/api/v1alpha1/:path*"],
+  matcher: ["/((?!_next/|api/auth/|favicon\\.ico).*)"],
+};
+
+const API_PREFIX = "/api/v1alpha1";
+const LOGIN_PATH = "/login";
+// Files served from public/ (images, icons); a page path never has a suffix.
+const STATIC_FILE = /\.[a-z0-9]+$/i;
+
+function authDisabled(): boolean {
+  return process.env.AUTH_MODE === "disabled";
 }
 
-export function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/api/v1alpha1")) {
-    const apiPath = request.nextUrl.pathname.replace(/^\/api/, "")
-    return NextResponse.rewrite(
-      new URL(`${backendUrl()}${apiPath}${request.nextUrl.search}`),
-      { request }
-    )
+function rewriteToBackend(
+  request: NextRequest,
+  accessToken?: string
+): NextResponse {
+  const apiPath = request.nextUrl.pathname.replace(/^\/api/, "");
+  const headers = new Headers(request.headers);
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
+  return NextResponse.rewrite(
+    new URL(`${backendUrl()}${apiPath}${request.nextUrl.search}`),
+    { request: { headers } }
+  );
+}
+
+function handle(
+  request: NextRequest,
+  session: Session | null
+): NextResponse | undefined {
+  const { pathname, search } = request.nextUrl;
+  // A session whose refresh token was rejected is as good as none.
+  const live = session && !session.error ? session : null;
+
+  if (pathname.startsWith(API_PREFIX)) {
+    return rewriteToBackend(request, live?.accessToken);
+  }
+  if (authDisabled() || pathname === LOGIN_PATH || STATIC_FILE.test(pathname)) {
+    return undefined;
+  }
+  if (!live) {
+    const login = new URL(LOGIN_PATH, request.url);
+    login.searchParams.set("callbackUrl", `${pathname}${search}`);
+    return NextResponse.redirect(login);
+  }
+  return undefined;
+}
+
+// Auth.js types the wrapper for route handlers and middleware at once, which
+// is not callable with a proxy signature; it is the middleware form here.
+const withSession = auth((request) =>
+  handle(request, request.auth)
+) as unknown as (
+  request: NextRequest,
+  event: NextFetchEvent
+) => Promise<Response>;
+
+export function proxy(request: NextRequest, event: NextFetchEvent) {
+  // Disabled mode never touches Auth.js, so it works without AUTH_SECRET
+  // and without a reachable Keycloak (the e2e fast tier and CI).
+  if (authDisabled()) {
+    return handle(request, null);
+  }
+  return withSession(request, event);
 }

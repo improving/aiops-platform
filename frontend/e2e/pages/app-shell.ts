@@ -12,6 +12,8 @@ export class AppShell {
   readonly toasts: Locator;
   readonly themeToggle: Locator;
   readonly mobileMenuButton: Locator;
+  /** The avatar button; rendered only when the UI runs with AUTH_MODE=oidc. */
+  readonly userMenuButton: Locator;
 
   constructor(readonly page: Page) {
     this.header = page.locator("header");
@@ -27,10 +29,49 @@ export class AppShell {
     this.mobileMenuButton = this.header.getByRole("button", {
       name: "Open menu",
     });
+    this.userMenuButton = this.header.getByRole("button", {
+      name: "User menu",
+    });
+  }
+
+  /** Open the user menu; the returned locator holds the name, email and "Sign out". */
+  async openUserMenu(): Promise<Locator> {
+    await this.userMenuButton.click();
+    const menu = this.page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    return menu;
+  }
+
+  /** Sign out through the user menu; ends on /login after the Keycloak logout. */
+  async signOut() {
+    const menu = await this.openUserMenu();
+    await menu.getByRole("menuitem", { name: "Sign out" }).click();
+    await this.page.waitForURL((url) => url.pathname === "/login");
   }
 
   async goto(path = "/") {
     await this.page.goto(path);
+    // Pages fetch their data on mount and re-render; wait for that to settle
+    // so a click right after goto is not swallowed by the re-render.
+    await this.page.waitForLoadState("networkidle");
+  }
+
+  /**
+   * Click a link and wait for the URL to match. A click that lands during a
+   * re-render can be lost on slow CI runners, so retry it once before the
+   * assertion timeout expires.
+   */
+  async navigateByClick(link: Locator, url: RegExp) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await link.click();
+      try {
+        await this.page.waitForURL(url, { timeout: 5_000 });
+        return;
+      } catch {
+        // retry once
+      }
+    }
+    await expect(this.page).toHaveURL(url);
   }
 
   /** A top-level nav link (Notebooks, Develop). */

@@ -41,7 +41,7 @@ resources:
     nvidia.com/gpu: 1
 service:
   port: 80
-  type: LoadBalancer
+  type: ClusterIP
 serviceMonitor:
   additionalLabels:
     release: prometheus

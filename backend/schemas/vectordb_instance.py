@@ -12,6 +12,9 @@ class VectorDBInstanceSchema(BaseModel):
     vectorDB: VectorDBSchema
     configParams: dict[str, Any] | None = None
     endpoint: str | None = None
+    # The SDK endpoint behind the gateway, API-key protected (see
+    # models/vectordb_instance.py).
+    api_endpoint: str | None = None
     ready: bool | None = False
     status: str | None = None
 

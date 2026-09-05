@@ -117,11 +117,10 @@ test.describe("model catalog", () => {
     const [first] = await api.models();
     const catalog = new ModelCatalogPage(page);
     await catalog.open();
-    await catalog
-      .card(first.name)
-      .getByRole("link", { name: first.name })
-      .click();
-    await expect(page).toHaveURL(new RegExp(`/models/${first.id}$`));
+    await catalog.navigateByClick(
+      catalog.card(first.name).getByRole("link", { name: first.name }),
+      new RegExp(`/models/${first.id}$`)
+    );
     await catalog.expectHeading("Model Details");
   });
 });

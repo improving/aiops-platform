@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from kubernetes import client
 
+from auth.current_user import CurrentUser, get_current_user
 from logger import setup_logger
 from models.hosts import Host
 from utils.kubernetes_utils import get_core_v1_client
@@ -17,6 +18,7 @@ def get_hosts(
         default=False, description="Include nodes that are not in Ready status"
     ),
     v1: client.CoreV1Api = Depends(get_core_v1_client, use_cache=True),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Retrieve information about Kubernetes hosts.

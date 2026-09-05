@@ -13,7 +13,19 @@ podSecurityContext:
   fsGroup: {{ fs_group | default(1000) }}
 
 service:
-  type: {{ service_type | default('LoadBalancer') }}
+  type: {{ service_type | default('ClusterIP') }}
+
+{% if credential_secret_name %}
+# The instance API key (utils/credentials.py): the chart copies it from
+# this Secret (Helm `lookup` at render time) into its own <release>-apikey
+# Secret, so the Secret must exist before the install. The gateway checks
+# the same value on the "-api" host and forwards it to Qdrant.
+apiKey:
+  valueFrom:
+    secretKeyRef:
+      name: {{ credential_secret_name }}
+      key: api-key
+{% endif %}
 
 # Not needed for fresh install
 updateVolumeFsOwnership: {{ update_volume_fs_ownership | default(false) }}

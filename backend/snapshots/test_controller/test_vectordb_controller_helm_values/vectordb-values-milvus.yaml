@@ -1,2 +1,3 @@
-null
-...
+extraConfigFiles:
+  user.yaml: "common:\n  security:\n    authorizationEnabled: true\n    defaultRootPassword:\
+    \ \"t0t9bwxd4tU5ZpIpqg-WbR_oktL7VPpgOufOndJ2pZM\"\n"

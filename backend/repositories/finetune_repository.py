@@ -16,12 +16,14 @@ class FinetuneRepository:
     def get_all(self) -> list[DBFinetune]:
         return self.db.query(DBFinetune).all()
 
-    def get_by_model_id(self, model_id: UUID) -> list[DBFinetune]:
-        return (
-            self.db.query(DBFinetune)
-            .filter(DBFinetune.model_id == model_id)
-            .all()
+    def get_by_model_id(self, model_id: UUID, scope=None) -> list[DBFinetune]:
+        """The jobs of a model; ``scope`` is an extra SQL filter."""
+        query = self.db.query(DBFinetune).filter(
+            DBFinetune.model_id == model_id
         )
+        if scope is not None:
+            query = query.filter(scope)
+        return query.all()
 
     def get_by_id(
         self, model_id: UUID, finetune_id: UUID
@@ -35,10 +37,19 @@ class FinetuneRepository:
         )
 
     def create(
-        self, model_id: UUID, finetune: FinetuneCreateSchema
+        self,
+        model_id: UUID,
+        finetune: FinetuneCreateSchema,
+        org_id: UUID | None = None,
+        owner_id: UUID | None = None,
     ) -> DBFinetune:
         logger.info(f"Creating finetune job for model {model_id}")
-        db_finetune = DBFinetune(**finetune.model_dump(), model_id=model_id)
+        db_finetune = DBFinetune(
+            **finetune.model_dump(),
+            model_id=model_id,
+            org_id=org_id,
+            owner_id=owner_id,
+        )
         self.db.add(db_finetune)
         self.db.commit()
         self.db.refresh(db_finetune)

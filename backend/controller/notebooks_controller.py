@@ -7,6 +7,17 @@ from pyhelm3.errors import ReleaseNotFoundError
 from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.notebook import NotebookInstanceSchema
+from utils.gateway import (
+    add_oidc_target,
+    delete_backend_traffic_policy,
+    delete_http_route,
+    ensure_backend_traffic_policy,
+    ensure_gateway_client_secret,
+    ensure_http_route,
+    ensure_reference_grant,
+    instance_hostname,
+    remove_oidc_target,
+)
 from utils.kubernetes_utils import get_core_v1_client
 
 from .base_controller import (
@@ -27,8 +38,11 @@ class NotebooksController:
         helm: HelmClient = None,
     ):
         self.logger = setup_logger(__name__)
-        self.api_instance = api_instance or client.CustomObjectsApi()
+        # core_v1_api first: get_core_v1_client() loads the kube config,
+        # which client.CustomObjectsApi() below silently needs too (it
+        # reads the kubernetes client's global default Configuration).
         self.core_v1_api = core_v1_api or get_core_v1_client()
+        self.api_instance = api_instance or client.CustomObjectsApi()
         self.helm = helm or HelmClient()
         self.jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
@@ -152,6 +166,103 @@ class NotebooksController:
 
         return context
 
+    def _safe_gateway_call(self, description: str, fn, *args, **kwargs):
+        """Run one gateway call, logging instead of raising on failure.
+
+        Never raises: a gateway problem must not be mistaken for a Helm
+        failure (which would leave the release installed but the row
+        deleted, since the caller's except-and-delete does not know the
+        difference), must not block the install/upgrade/uninstall it
+        follows, and must not stop the next call from being attempted.
+        """
+        try:
+            fn(*args, **kwargs)
+        except Exception:
+            self.logger.exception(description)
+
+    def _ensure_gateway_route(self, instance: NotebookInstanceSchema):
+        """Create/patch the browser HTTPRoute; a no-op without the gateway
+        env contract (see utils/gateway.py). Notebooks get only one host.
+        """
+        self._safe_gateway_call(
+            f"Failed to ensure gateway route for {instance.id}",
+            ensure_http_route,
+            instance.namespace,
+            self._get_release_name(instance),
+            instance_hostname("nb", instance.id),
+            self.get_service_name(instance),
+            instance.service_port or 80,
+            api_instance=self.api_instance,
+        )
+
+    def _ensure_gateway_policies(self, instance: NotebookInstanceSchema):
+        """Put the route under the shared OIDC policy (owner-only access
+        is decided by the API's ext-authz endpoint) and give the kernel
+        WebSockets long timeouts. Each step is attempted on its own.
+
+        No appProtocol patch on the Service: the notebook-controller
+        rewrites the Service ports on every reconcile (verified live, Task
+        10), and Envoy speaks HTTP/1.1 to a Service without appProtocol,
+        so the WebSocket upgrade works as it is."""
+        namespace = instance.namespace
+        release = self._get_release_name(instance)
+        self._safe_gateway_call(
+            f"Failed to copy the gateway client secret into {namespace}",
+            ensure_gateway_client_secret,
+            namespace,
+            core_v1_api=self.core_v1_api,
+        )
+        self._safe_gateway_call(
+            f"Failed to ensure the reference grants for {namespace}",
+            ensure_reference_grant,
+            namespace,
+            api_instance=self.api_instance,
+        )
+        self._safe_gateway_call(
+            f"Failed to add {release} to the OIDC policy",
+            add_oidc_target,
+            namespace,
+            release,
+            api_instance=self.api_instance,
+        )
+        self._safe_gateway_call(
+            f"Failed to ensure the backend traffic policy for {release}",
+            ensure_backend_traffic_policy,
+            namespace,
+            release,
+            api_instance=self.api_instance,
+        )
+
+    def _delete_gateway_policies(self, instance: NotebookInstanceSchema):
+        """Policies go before the route they target."""
+        namespace = instance.namespace
+        release = self._get_release_name(instance)
+        self._safe_gateway_call(
+            f"Failed to delete the backend traffic policy for {release}",
+            delete_backend_traffic_policy,
+            namespace,
+            release,
+            api_instance=self.api_instance,
+        )
+        self._safe_gateway_call(
+            f"Failed to remove {release} from the OIDC policy",
+            remove_oidc_target,
+            namespace,
+            release,
+            api_instance=self.api_instance,
+        )
+
+    def _delete_gateway_route(self, instance: NotebookInstanceSchema):
+        """Called from a `finally`, where a new exception would silently
+        replace the one already being propagated; see _safe_gateway_call."""
+        self._safe_gateway_call(
+            f"Failed to delete gateway route for {instance.id}",
+            delete_http_route,
+            instance.namespace,
+            self._get_release_name(instance),
+            api_instance=self.api_instance,
+        )
+
     async def _add_and_update_helm_repo(
         self, instance: NotebookInstanceSchema
     ):
@@ -179,6 +290,8 @@ class NotebooksController:
                 create_namespace=True,
             )
             self.logger.info(f"Helm install succeeded for chart: {chart_name}")
+            self._ensure_gateway_route(instance)
+            self._ensure_gateway_policies(instance)
         except Exception as e:
             self.logger.exception(f"Helm install failed: {str(e)}")
             raise HelmInstallError(f"Helm install failed: {str(e)}") from e
@@ -197,6 +310,8 @@ class NotebooksController:
                 namespace=instance.namespace,
             )
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
+            self._ensure_gateway_route(instance)
+            self._ensure_gateway_policies(instance)
         except Exception as e:
             self.logger.exception(f"Helm upgrade failed: {str(e)}")
             raise HelmUpgradeError(f"Helm upgrade failed: {str(e)}") from e
@@ -216,3 +331,6 @@ class NotebooksController:
         except Exception as e:
             self.logger.exception(f"Helm uninstall failed: {str(e)}")
             raise HelmUninstallError(f"Helm uninstall failed: {str(e)}") from e
+        finally:
+            self._delete_gateway_policies(instance)
+            self._delete_gateway_route(instance)

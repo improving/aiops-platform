@@ -1,0 +1,36 @@
+# Configures the Envoy Gateway data plane for the kind cluster: expose the
+# managed Envoy Service as a NodePort pinned to 30080/30443 (matching
+# infra/local/kind-config.yaml's extraPortMappings), and reorder the OIDC
+# filter ahead of ext-authz so a first-time login has already produced the
+# bearer token that ext-authz needs (see
+# docs/superpowers/plans/2026-09-04-authentication-gateway-notes.md
+# section 4 -- the default chain runs ext_authz before oauth2).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: aiops-kind
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        # "Local" (the default) drops traffic on any node that isn't
+        # running the pod backing this Service; kind is single-node here,
+        # but "Cluster" keeps this working if the node count ever changes.
+        externalTrafficPolicy: Cluster
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - name: http-80
+                  port: 80
+                  nodePort: 30080
+                - name: https-443
+                  port: 443
+                  nodePort: 30443
+  filterOrder:
+    - name: envoy.filters.http.oauth2
+      before: envoy.filters.http.ext_authz

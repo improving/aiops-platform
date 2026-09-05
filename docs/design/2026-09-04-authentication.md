@@ -1,6 +1,6 @@
 # Authentication and authorization for the AIOps platform
 
-Status: proposed, for review.
+Status: accepted; ADRs 0001 to 0004 are accepted and implemented on branch `feat/authentication` (Phases 0 to 3).
 Decisions extracted from this document live in `docs/adr/0001` to `0004`.
 Versions and vendor facts were checked on 2026-09-04;
 items marked *inferred* were reasoned from documentation rather than tested.
@@ -230,3 +230,20 @@ personal access tokens, per-request rate limiting and billing.
 - vLLM security notes: <https://docs.vllm.ai/en/latest/usage/security/>
 - Zitadel license change: <https://zitadel.com/blog/zitadel-v3-announcement>
 - Langflow SSO status: <https://github.com/langflow-ai/langflow/issues/2855>
+
+## 8. Implementation notes
+
+Phases 0 to 3 are implemented on `feat/authentication`;
+the four ADRs this document produced are `accepted`,
+each with its own "Implementation notes" section for the deviation specific to that decision.
+The go/no-go spikes recorded in `2026-09-04-authentication-gateway-notes.md`
+and `2026-09-04-authentication-identity-notes.md` ("Spike results" in each) all resolved GO,
+with two adjustments folded into the ADRs rather than changing the architecture here:
+one shared OIDC `SecurityPolicy` per namespace instead of one per instance (ADR 0002; Keycloak does not
+glob-match a redirect URI, and Envoy Gateway's OIDC cookie name is per policy),
+and `sanitize: false` on API-key policies (ADR 0004)
+so a workload's own auth still sees the key the gateway already checked.
+The WebSocket spike, listed as unverified in section 3.4's table, is now verified:
+a Jupyter kernel stayed connected for eleven minutes through OIDC and ext-authz.
+Phase 4 (organizations, invitations, automation clients beyond the one pulled forward,
+namespace-per-organization) remains out of scope for this branch.

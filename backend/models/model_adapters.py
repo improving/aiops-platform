@@ -26,6 +26,12 @@ class DBModelAdapters(Base):
     )
     path = Column(String)
     hf_id = Column(String)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
+    )
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
     inference_instance_config_params = relationship(
         "DBInferenceInstanceConfigParams",

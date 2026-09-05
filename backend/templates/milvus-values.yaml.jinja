@@ -1,0 +1,12 @@
+{% if credential %}
+# The instance API key (utils/credentials.py) doubles as the Milvus root
+# password: the gateway checks it on the "-api" host and Milvus enforces
+# it as `root:<key>` (common.security, milvus.yaml). defaultRootPassword
+# only applies on the first start, which is when the instance is created.
+extraConfigFiles:
+  user.yaml: |+
+    common:
+      security:
+        authorizationEnabled: true
+        defaultRootPassword: {{ credential | tojson }}
+{% endif %}

@@ -1,2 +1,8 @@
+{#
+  No authentication values: Chroma 1.x "no longer provides built-in
+  authentication implementations" (v1.0.0 migration guide), so the
+  per-instance API key (utils/credentials.py) is enforced only by the
+  gateway on the "-api" host. In-cluster clients reach Chroma without a key.
+#}
 service:
-  type: {{ service_type | default('LoadBalancer') }}
+  type: {{ service_type | default('ClusterIP') }}

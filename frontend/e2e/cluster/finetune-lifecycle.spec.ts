@@ -11,9 +11,11 @@ test.describe("fine-tune lifecycle", { tag: "@cluster" }, () => {
 
   const leftovers: { modelId: string; jobId: string }[] = [];
 
-  test.afterEach(async ({ api }) => {
+  // Delete as admin: the automation user behind `api` is a member and may
+  // not delete what alice created.
+  test.afterEach(async ({ userApi }) => {
     for (const { modelId, jobId } of leftovers.splice(0)) {
-      await api.deleteFineTuneJob(modelId, jobId);
+      await (await userApi("admin")).deleteFineTuneJob(modelId, jobId);
     }
   });
 

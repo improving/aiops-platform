@@ -1,3 +1,8 @@
+apiKey:
+  valueFrom:
+    secretKeyRef:
+      key: api-key
+      name: vdb-0000000a-credentials
 containerSecurityContext:
   runAsGroup: 65534
   runAsUser: 65534
@@ -6,5 +11,5 @@ image:
 podSecurityContext:
   fsGroup: 1000
 service:
-  type: LoadBalancer
+  type: ClusterIP
 updateVolumeFsOwnership: false

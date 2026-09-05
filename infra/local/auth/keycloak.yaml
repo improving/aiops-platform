@@ -1,0 +1,139 @@
+# Keycloak, the only identity source for the local stack (Task 4 of
+# docs/superpowers/plans/2026-09-04-authentication.md). Realm data comes
+# from a ConfigMap ("keycloak-realm") that "make auth-up" builds from
+# realm-aiops.json and mounts read-only into the import directory; Keycloak
+# imports it on every start via "start-dev --import-realm".
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: keycloak
+spec:
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: http-management
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: auth
+  labels:
+    app.kubernetes.io/name: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.7.3
+          args: ["start-dev", "--import-realm"]
+          env:
+            # Matches the public hostname the gateway terminates TLS for;
+            # Keycloak uses this to build every URL in the discovery
+            # document and in redirects, so it must be the same value a
+            # client (browser or curl) actually reaches it at.
+            - name: KC_HOSTNAME
+              value: "https://auth.127.0.0.1.nip.io"
+            # Lowercase to match the header Envoy actually sends (gateway
+            # notes section 1).
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            # TLS is terminated at the gateway (spike: "Gateway to Keycloak
+            # over plain HTTP", go); Keycloak itself only needs to listen
+            # on plain HTTP inside the cluster.
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: "admin"
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              value: "admin"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: http-management
+              containerPort: 9000
+          volumeMounts:
+            - name: realm-import
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          resources:
+            requests:
+              memory: "1Gi"
+            limits:
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      volumes:
+        - name: realm-import
+          configMap:
+            name: keycloak-realm
+---
+# Browser and curl entrypoint for the realm; every other namespace's OIDC
+# SecurityPolicy also reaches Keycloak in-cluster via the Service above
+# (backendRefs keycloak.auth:8080), not through this route.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: keycloak
+  namespace: auth
+  labels:
+    app.kubernetes.io/managed-by: aiops
+spec:
+  parentRefs:
+    - name: aiops
+      namespace: envoy-gateway-system
+  hostnames:
+    - "auth.127.0.0.1.nip.io"
+  rules:
+    - backendRefs:
+        - name: keycloak
+          port: 8080
+---
+# Lets a SecurityPolicy created in ai-stack (by backend/utils/gateway.py,
+# a later task) point provider.backendRefs at the keycloak Service here --
+# Gateway API requires an explicit grant for any cross-namespace backendRef.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-ai-stack-securitypolicy-to-keycloak
+  namespace: auth
+spec:
+  from:
+    - group: gateway.envoyproxy.io
+      kind: SecurityPolicy
+      namespace: ai-stack
+  to:
+    - group: ""
+      kind: Service

@@ -68,6 +68,12 @@ class DBInferenceInstance(Base):
     config_id = Column(
         UUID(as_uuid=True), ForeignKey("inference_instance_config_params.id")
     )
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
+    )
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
     model = relationship("DBModel")
     engine = relationship("DBEngine")

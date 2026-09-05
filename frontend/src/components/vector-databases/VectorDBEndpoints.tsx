@@ -17,6 +17,7 @@ import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
+import { ShowCredentialButton } from "@/components/vector-databases/ShowCredentialButton";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
@@ -127,13 +128,35 @@ export default function VectorDBEndpoints() {
                       ></Button>
                     </span>
                   </p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    <strong>API endpoint: </strong>
+                    <span className="break-all">
+                      {instance.api_endpoint || "N/A"}
+                    </span>
+                    {instance.api_endpoint && (
+                      <Button
+                        variant="outline"
+                        aria-label="Copy API endpoint"
+                        onClick={() =>
+                          navigator.clipboard.writeText(
+                            instance.api_endpoint || ""
+                          )
+                        }
+                        className="ml-2"
+                        icon={<ClipboardCopyIcon className="w-4 h-4" />}
+                      ></Button>
+                    )}
+                  </p>
                 </>
               }
               footer={
-                <DeleteButton
-                  onDelete={() => handleDelete(instance.id)}
-                  onSuccess={() => fetchInstances()}
-                />
+                <div className="flex flex-wrap gap-2">
+                  <ShowCredentialButton instance={instance} />
+                  <DeleteButton
+                    onDelete={() => handleDelete(instance.id)}
+                    onSuccess={() => fetchInstances()}
+                  />
+                </div>
               }
             />
           ))}

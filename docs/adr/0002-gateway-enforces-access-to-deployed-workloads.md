@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-04
 ---
 
@@ -28,4 +28,25 @@ so local development runs without the gateway.
   and endpoints stored as URLs instead of `http://<ip>:<port>`.
 - Controllers create an `HTTPRoute` for every instance; deleting the instance deletes the route.
 - The authorization endpoint becomes part of the request path for every workload page load; it must be fast and cache ownership lookups.
-- WebSocket behaviour of the ext-authz step is inferred from Envoy's design and must be verified with a Jupyter kernel in Phase 2.
+- WebSocket behaviour of the ext-authz step, inferred from Envoy's design,
+  was verified with a Jupyter kernel in Phase 2:
+  a session stayed connected for eleven minutes through the gateway with no reconnect
+  (gateway notes, "Spike results").
+
+## Implementation notes
+
+Every browser route shares one `SecurityPolicy`, `aiops-workloads-oidc`,
+with `targetRefs` the controllers patch per instance, rather than one policy per instance as first designed.
+Two facts found during implementation forced this:
+Keycloak 26.7 does not glob-match a `*` placed before a literal path in a redirect URI,
+so a distinct `redirectURL` per instance host cannot be registered on one client;
+and Envoy Gateway derives its OIDC cookie names from the policy's identity,
+so only the policy that started a login can complete it,
+which rules out several per-instance policies sharing one callback host too.
+Every login instead completes on one shared callback host, `sso.<parent domain>`,
+registered as the client's only redirect URI, with cookies set for the whole parent domain
+so one login covers every instance
+(gateway notes, "Spike results"; `infra/local/auth/README.md`, "Redirect URIs and the shared OIDC policy").
+A consequence not in the original design:
+a browser route in any namespace other than the one holding the `sso` callback host is left unprotected,
+with a warning logged, until that namespace gets a callback host of its own.

@@ -24,6 +24,10 @@ def test_lifespan_skips_scheduler_in_test_mode():
 
 def test_lifespan_runs_scheduler(monkeypatch):
     monkeypatch.setenv("TEST_MODE", "false")
+    # Outside TEST_MODE the API insists on real authentication; the JWKS
+    # is fetched lazily, so a dummy issuer is enough to start.
+    monkeypatch.setenv("AUTH_MODE", "oidc")
+    monkeypatch.setenv("OIDC_ISSUER", "https://issuer.invalid/realms/test")
     app = create_app(setup_db=False)
     with TestClient(app) as client:
         scheduler = app.state.scheduler
@@ -178,4 +182,96 @@ def test_create_vectordb_instance_without_cluster_leaves_no_row(monkeypatch):
     )
     assert response.status_code == 503
     assert "Kubernetes is not reachable" in response.json()["detail"]
+    assert len(client.get("/v1alpha1/vectordb_instances").json()) == before
+
+
+@pytest.fixture
+def vectordb_env(monkeypatch):
+    """A mocked controller and credential store around the vector DB
+    instance endpoints; yields (client, controller, calls) where calls
+    records every credential helper call in order."""
+    import api.vectordb_instance as vi
+
+    controller_cls = mock.Mock()
+    controller = controller_cls.return_value
+    controller.namespace = "ai-stack"
+    controller.install = mock.AsyncMock()
+    controller.uninstall = mock.AsyncMock()
+    monkeypatch.setattr(vi, "VectorDBController", controller_cls)
+    monkeypatch.setattr(
+        vi, "get_pod_status_and_readiness", lambda *a, **k: (False, "Pending")
+    )
+    calls = mock.Mock()
+    calls.generate_secret.return_value = "s3cret"
+    monkeypatch.setattr(vi, "generate_secret", calls.generate_secret)
+    monkeypatch.setattr(vi, "store_credential", calls.store_credential)
+    monkeypatch.setattr(vi, "delete_credential", calls.delete_credential)
+    return TestClient(create_app()), controller, calls
+
+
+def _create_vectordb(client):
+    vectordb = client.get("/v1alpha1/vectordb").json()[0]
+    return client.post(
+        "/v1alpha1/vectordb_instances",
+        json={"vectorDB": {"id": vectordb["id"]}, "configParams": {}},
+    )
+
+
+def test_create_vectordb_instance_stores_a_credential_before_install(
+    vectordb_env,
+):
+    import uuid
+
+    client, controller, calls = vectordb_env
+    created = _create_vectordb(client)
+    assert created.status_code == 201, created.text
+    instance_id = uuid.UUID(created.json()["id"])
+
+    calls.generate_secret.assert_called_once_with(seed=str(instance_id))
+    store = calls.store_credential.call_args
+    assert store.args[1:] == ("ai-stack", "vdb", instance_id, "s3cret")
+    controller.install.assert_awaited_once()
+    assert controller.install.await_args.kwargs == {"credential": "s3cret"}
+    assert controller.install.await_args.args[0].id == instance_id
+    calls.delete_credential.assert_not_called()
+
+    deleted = client.delete(f"/v1alpha1/vectordb_instances/{instance_id}")
+    assert deleted.status_code == 204, deleted.text
+    controller.uninstall.assert_awaited_once()
+    delete = calls.delete_credential.call_args
+    assert delete.args[1:] == ("ai-stack", "vdb", instance_id)
+    ids = [i["id"] for i in client.get("/v1alpha1/vectordb_instances").json()]
+    assert str(instance_id) not in ids
+
+
+def test_create_vectordb_instance_install_failure_removes_the_credential(
+    vectordb_env,
+):
+    client, controller, calls = vectordb_env
+    controller.install.side_effect = RuntimeError("helm exploded")
+    before = len(client.get("/v1alpha1/vectordb_instances").json())
+
+    created = _create_vectordb(client)
+
+    assert created.status_code == 500
+    assert "helm exploded" in created.json()["detail"]
+    calls.store_credential.assert_called_once()
+    calls.delete_credential.assert_called_once()
+    assert (
+        calls.delete_credential.call_args.args[3]
+        == calls.store_credential.call_args.args[3]
+    )
+    assert len(client.get("/v1alpha1/vectordb_instances").json()) == before
+
+
+def test_create_vectordb_instance_store_failure_leaves_no_row(vectordb_env):
+    client, controller, calls = vectordb_env
+    calls.store_credential.side_effect = RuntimeError("secret write failed")
+    before = len(client.get("/v1alpha1/vectordb_instances").json())
+
+    created = _create_vectordb(client)
+
+    assert created.status_code == 500
+    controller.install.assert_not_awaited()
+    calls.delete_credential.assert_called_once()
     assert len(client.get("/v1alpha1/vectordb_instances").json()) == before

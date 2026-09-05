@@ -1,0 +1,55 @@
+# Self-signed local CA, then a CA-backed ClusterIssuer that signs the one
+# wildcard certificate the Gateway terminates TLS with. Explicit resources
+# rather than the cert-manager Gateway-API annotation (see gateway notes
+# section 2): a single fixed wildcard host doesn't benefit from
+# auto-provisioning, and this is easier to read and debug.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: aiops-selfsigned
+spec:
+  selfSigned: {}
+---
+# The CA certificate itself. Its Secret must live in cert-manager's
+# cluster-resource-namespace (the "cert-manager" namespace by default) so
+# the aiops-ca ClusterIssuer below can read it.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: aiops-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: aiops-ca
+  secretName: aiops-ca
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: aiops-selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: aiops-ca
+spec:
+  ca:
+    secretName: aiops-ca
+---
+# The wildcard certificate the Gateway's https listener terminates with.
+# cert-manager copies the issuing CA into this Secret's ca.crt key, which
+# is what "make ca-export" reads.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: aiops-wildcard
+  namespace: envoy-gateway-system
+spec:
+  secretName: aiops-wildcard-tls
+  dnsNames:
+    - "*.127.0.0.1.nip.io"
+    - "127.0.0.1.nip.io"
+  issuerRef:
+    name: aiops-ca
+    kind: ClusterIssuer

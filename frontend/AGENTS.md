@@ -48,6 +48,33 @@ pnpm e2e:ui                               # Playwright UI mode
 - `Header.tsx` builds the navigation from one `menuItems` array shared with `MobileNav.tsx` (a `Sheet` below `md`).
   Top-level links use `NavigationMenuLink asChild` with `flex-row`, never `Link legacyBehavior`.
 
+## Authentication
+
+- Auth.js v5 (`next-auth@5.0.0-beta.32`) with the Keycloak provider in `src/auth.ts`: public client `aiops-ui`, PKCE,
+  `trustHost: true`, tokens kept in the JWT session and refreshed in the `jwt` callback; the `session` callback exposes
+  `accessToken`, `roles` (decoded from the access token, UI hints only), `idToken` and `endSessionUrl`.
+- `src/proxy.ts` matches everything except `_next/`, `api/auth/` and `favicon.ico`: it rewrites `/api/v1alpha1/*` with
+  `Authorization: Bearer <accessToken>`, lets `/login` and files with a suffix through, and redirects other page requests
+  without a session to `/login?callbackUrl=<path>`. `AUTH_MODE=disabled` (server env) skips Auth.js entirely, and
+  `src/instrumentation.ts` logs `AUTH_MODE=disabled: the UI is unauthenticated` once at startup.
+- `NEXT_PUBLIC_AUTH_MODE` mirrors `AUTH_MODE` at build time and only decides whether `AuthProvider` mounts the
+  `SessionProvider` and whether `Header.tsx` renders `UserMenu`; never use it for access decisions.
+- Sign-in happens in the client component `src/app/login/page.tsx` with `signIn("keycloak", { redirectTo })`; do not
+  move it into a server action (Auth.js issue #13388 on Next 16). Sign-out is `signOut({ redirect: false })` followed by
+  a navigation to `session.endSessionUrl` so the Keycloak SSO session ends too.
+- The Playwright fast tier runs with `AUTH_MODE=disabled` and `NEXT_PUBLIC_AUTH_MODE=disabled`
+  (set in `playwright.config.ts`), so specs must not depend on the user menu.
+- The `cluster` tier logs in for real:
+  the `setup` project (`e2e/auth.setup.ts`) signs alice, bob and admin into Keycloak through its own login form
+  and saves each session to `playwright/.auth/<user>.json` (git-ignored);
+  the `cluster` project depends on `setup`, gets `ignoreHTTPSErrors: true` for the local CA,
+  and defaults its `storageState` to alice's.
+  The `asUser(name)` fixture opens a second `BrowserContext` with another saved user's storage state
+  for ownership/permission checks within one test;
+  `BackendApi` (the `api` fixture) instead fetches a client-credentials token from `aiops-automation`
+  when `AUTH_MODE` is not `disabled`, for calls made directly against the backend rather than through a
+  logged-in page.
+
 ## Conventions
 
 - Prefer accessible names in tests (`getByRole`, `getByLabel`); the Playwright fixtures fail on any console error,

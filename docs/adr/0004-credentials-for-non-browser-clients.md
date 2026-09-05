@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-04
 ---
 
@@ -25,3 +25,13 @@ The platform does not mint or sign tokens of its own.
 - A `workload_credentials` table tracks which Secret belongs to which resource and when it was shown; rotation is a delete-and-recreate.
 - The Hugging Face and NGC tokens stay platform-level secrets used only by controllers; they are never handed to users.
 - External secret stores (Vault, external-secrets) remain out of scope; Kubernetes Secrets in the release namespace are the store.
+
+## Implementation notes
+
+Each instance's credential is written to two Secrets, not one:
+`<kind>-<id8>-credentials` for the workload chart (Qdrant's `apiKey`, Milvus's root password)
+and `<kind>-<id8>-apikey-auth` for the gateway's `apiKeyAuth` `SecurityPolicy` on the `-api`/`inf-` route.
+That second policy is created with `sanitize: false`, a detail not called out in the design:
+`sanitize: true` (the default) strips the API-key header before forwarding,
+which would leave the workload with no key of its own to check requests against,
+so the same key has to reach both the gateway's check and the workload's.

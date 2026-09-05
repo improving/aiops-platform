@@ -1,0 +1,60 @@
+# The one OIDC SecurityPolicy for every browser-facing workload route in
+# ai-stack (notebooks nb-<id8>, vector database dashboards vdb-<id8>).
+# Its body is what backend/utils/gateway.py ensure_security_policy
+# (mode "oidc") creates when the policy is missing; the controllers only
+# add and remove entries in targetRefs (add_oidc_target /
+# remove_oidc_target). One policy, not one per instance, because Envoy
+# Gateway derives the OIDC cookie suffix from the policy, and only the
+# policy that started a login can finish it on the shared callback host
+# sso.127.0.0.1.nip.io (infra/local/gateway/sso.yaml). "make auth-up"
+# creates it only when it is missing (a kubectl apply would reset
+# targetRefs to the one entry below and cut every running instance off);
+# it needs Keycloak and the aiops-gateway-oidc Secret.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: aiops-workloads-oidc
+  namespace: ai-stack
+  labels:
+    app.kubernetes.io/managed-by: aiops
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: sso
+  oidc:
+    provider:
+      issuer: https://auth.127.0.0.1.nip.io/realms/aiops
+      authorizationEndpoint: https://auth.127.0.0.1.nip.io/realms/aiops/protocol/openid-connect/auth
+      tokenEndpoint: https://auth.127.0.0.1.nip.io/realms/aiops/protocol/openid-connect/token
+      backendRefs:
+        - name: keycloak
+          namespace: auth
+          port: 8080
+    clientID: aiops-gateway
+    clientSecret:
+      name: aiops-gateway-oidc
+    redirectURL: https://sso.127.0.0.1.nip.io/oauth2/callback
+    logoutPath: /oauth2/logout
+    cookieDomain: 127.0.0.1.nip.io
+    forwardAccessToken: true
+    refreshToken: true
+    scopes:
+      - openid
+      - profile
+      - email
+  extAuth:
+    headersToExtAuth:
+      - authorization
+      - cookie
+    http:
+      backendRefs:
+        - name: aiops-backend
+          namespace: ai-stack
+          port: 8000
+      path: /v1alpha1/authz/route
+      headersToBackend:
+        - x-auth-user-email
+        - x-auth-user-sub
+        - x-auth-org
+    failOpen: false

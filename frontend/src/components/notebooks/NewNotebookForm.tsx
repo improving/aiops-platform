@@ -34,6 +34,10 @@ const NAME_MAX_LENGTH = 32;
 // must start and end with an alphanumeric character.
 const DNS_1123_LABEL_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 
+// A cleared number input must not become NaN (React rejects NaN as a value);
+// keep "" so the schema reports the range error instead.
+const numberOrEmpty = (value: string) => (value === "" ? "" : Number(value));
+
 const notebookSchema = z
   .object({
     name: z
@@ -221,7 +225,9 @@ export default function NewNotebookForm() {
                   max={4}
                   step={0.5}
                   {...field}
-                  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                  onChange={(e) =>
+                    field.onChange(numberOrEmpty(e.target.value))
+                  }
                 />
               </FormControl>
               <FormMessage />
@@ -241,7 +247,9 @@ export default function NewNotebookForm() {
                   min={1}
                   max={32}
                   {...field}
-                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                  onChange={(e) =>
+                    field.onChange(numberOrEmpty(e.target.value))
+                  }
                 />
               </FormControl>
               <FormMessage />
@@ -288,7 +296,9 @@ export default function NewNotebookForm() {
                     min={1}
                     max={4}
                     {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value))}
+                    onChange={(e) =>
+                      field.onChange(numberOrEmpty(e.target.value))
+                    }
                   />
                 </FormControl>
                 <FormMessage />
@@ -309,7 +319,9 @@ export default function NewNotebookForm() {
                   min={5}
                   max={20}
                   {...field}
-                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                  onChange={(e) =>
+                    field.onChange(numberOrEmpty(e.target.value))
+                  }
                 />
               </FormControl>
               <FormDescription>Minimum 5 GB, maximum 20 GB.</FormDescription>

@@ -4,8 +4,10 @@
 # Exercises the backend control-plane API against a real kind cluster:
 #   - health check
 #   - catalog listings (vectordb, models, engines)
-#   - create a Qdrant vector DB instance, wait for it to be Ready, curl its
-#     health endpoint through a port-forward
+#   - create a Qdrant vector DB instance, wait for it to be Ready, fetch its
+#     API key and curl /collections on the "-api" gateway host with and
+#     without the key (or its health endpoint through a port-forward when
+#     there is no gateway)
 #   - create a Jupyter notebook instance, wait for it to be Running, curl its
 #     base path through a port-forward (skip with --skip-notebook)
 #   - delete both instances and wait for their Helm releases to disappear
@@ -15,6 +17,19 @@ set -euo pipefail
 
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 NAMESPACE="${NAMESPACE:-ai-stack}"
+# Used to verify a stored https:// endpoint (gateway TLS) instead of
+# port-forwarding, when the backend has AIOPS_PARENT_DOMAIN set. Also passed
+# to curl for the token request below.
+CA_CERT="${CA_CERT:-infra/local/ca/ca.crt}"
+# When AUTH_MODE is not "disabled" every backend call needs a bearer token;
+# obtained via client credentials from the automation client (see
+# fetch_token below). AUTH_MODE=disabled matches the backend's own env var so
+# `make e2e-smoke` and the backend it is pointed at agree on whether a token
+# is required.
+AUTH_MODE="${AUTH_MODE:-oidc}"
+OIDC_ISSUER="${OIDC_ISSUER:-https://auth.127.0.0.1.nip.io/realms/aiops}"
+AUTOMATION_CLIENT_ID="${AUTOMATION_CLIENT_ID:-aiops-automation}"
+AUTOMATION_CLIENT_SECRET="${AUTOMATION_CLIENT_SECRET:-dev-automation-secret}"
 SKIP_NOTEBOOK=false
 
 for arg in "$@"; do
@@ -37,10 +52,62 @@ FAILURES=0
 VECTORDB_INSTANCE_ID=""
 NOTEBOOK_INSTANCE_ID=""
 PF_PID=""
+TOKEN=""
+API_BODY_FILE=/tmp/e2e-api-body.json
+API_STATUS=""
 
 pass() { printf "PASS  %-55s %s\n" "$1" "${2:-}"; }
 fail() { printf "FAIL  %-55s %s\n" "$1" "${2:-}"; FAILURES=$((FAILURES + 1)); }
 info() { printf "INFO  %s\n" "$1"; }
+
+# --- authentication ----------------------------------------------------------
+#
+# The backend enforces AUTH_MODE=oidc by rejecting every request without a
+# valid bearer token (401). Obtain one with the client-credentials grant from
+# the automation client, and refresh it once if a call ever answers 401 (the
+# access token is short-lived; a slow step can outlive it).
+
+fetch_token() {
+  [[ "$AUTH_MODE" == "disabled" ]] && return
+  local status
+  status=$(curl -sS -o /tmp/e2e-token.json -w "%{http_code}" --cacert "$CA_CERT" \
+    -d grant_type=client_credentials \
+    -d client_id="$AUTOMATION_CLIENT_ID" \
+    -d client_secret="$AUTOMATION_CLIENT_SECRET" \
+    "$OIDC_ISSUER/protocol/openid-connect/token") || status="000"
+  if [[ "$status" != "200" ]]; then
+    echo "FAIL: could not obtain an automation token from $OIDC_ISSUER (http_status=$status)" >&2
+    cat /tmp/e2e-token.json 2>/dev/null >&2 || true
+    exit 1
+  fi
+  TOKEN=$(jq -r '.access_token' /tmp/e2e-token.json)
+}
+
+# api_request METHOD PATH [JSON_BODY]
+# Sends one call to $BACKEND_URL, with the bearer token attached when one was
+# obtained. Sets API_STATUS and writes the response body to $API_BODY_FILE.
+# Retries once, after fetching a fresh token, on a 401.
+api_call() {
+  local method="$1" path="$2" data="${3:-}"
+  local args=(-sS -o "$API_BODY_FILE" -w "%{http_code}" -X "$method")
+  [[ -n "$TOKEN" ]] && args+=(-H "Authorization: Bearer $TOKEN")
+  [[ -n "$data" ]] && args+=(-H "Content-Type: application/json" -d "$data")
+  API_STATUS=$(curl "${args[@]}" "$BACKEND_URL$path") || API_STATUS="000"
+}
+
+api_request() {
+  local method="$1" path="$2" data="${3:-}"
+  api_call "$method" "$path" "$data"
+  if [[ "$API_STATUS" == "401" && -n "$TOKEN" ]]; then
+    info "got 401 from $method $path; refreshing the automation token"
+    fetch_token
+    api_call "$method" "$path" "$data"
+  fi
+}
+
+api_get() { api_request GET "$1"; }
+api_post() { api_request POST "$1" "$2"; }
+api_delete() { api_request DELETE "$1"; }
 
 stop_port_forward() {
   if [[ -n "$PF_PID" ]] && kill -0 "$PF_PID" 2>/dev/null; then
@@ -54,13 +121,11 @@ cleanup() {
   stop_port_forward
   if [[ -n "$VECTORDB_INSTANCE_ID" ]]; then
     info "cleanup: deleting vectordb instance $VECTORDB_INSTANCE_ID"
-    curl -sS -X DELETE "$BACKEND_URL/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID" \
-      -o /dev/null -w "" || true
+    api_delete "/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID" || true
   fi
   if [[ -n "$NOTEBOOK_INSTANCE_ID" ]]; then
     info "cleanup: deleting notebook instance $NOTEBOOK_INSTANCE_ID"
-    curl -sS -X DELETE "$BACKEND_URL/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID" \
-      -o /dev/null -w "" || true
+    api_delete "/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID" || true
   fi
 }
 trap cleanup EXIT
@@ -71,12 +136,11 @@ elapsed() { echo "$(( $(date +%s) - start_ts ))s"; }
 # --- 1. health ---------------------------------------------------------------
 
 step_health() {
-  local body status
-  body=$(curl -sS -o /tmp/e2e-health.json -w "%{http_code}" "$BACKEND_URL/health") || true
-  if [[ "$body" == "200" ]] && [[ "$(jq -r '.message' /tmp/e2e-health.json 2>/dev/null)" == "OK" ]]; then
+  api_get "/health"
+  if [[ "$API_STATUS" == "200" ]] && [[ "$(jq -r '.message' "$API_BODY_FILE" 2>/dev/null)" == "OK" ]]; then
     pass "GET /health" "$(elapsed)"
   else
-    fail "GET /health" "http_status=$body body=$(cat /tmp/e2e-health.json 2>/dev/null)"
+    fail "GET /health" "http_status=$API_STATUS body=$(cat "$API_BODY_FILE" 2>/dev/null)"
   fi
 }
 
@@ -85,11 +149,12 @@ step_health() {
 step_catalog() {
   local path="$1" label="$2"
   local count
-  count=$(curl -sS "$BACKEND_URL$path" | jq 'length' 2>/dev/null || echo 0)
+  api_get "$path"
+  count=$(jq 'length' "$API_BODY_FILE" 2>/dev/null || echo 0)
   if [[ "$count" -gt 0 ]]; then
     pass "GET $path ($label)" "count=$count $(elapsed)"
   else
-    fail "GET $path ($label)" "count=$count"
+    fail "GET $path ($label)" "http_status=$API_STATUS count=$count"
   fi
 }
 
@@ -97,24 +162,21 @@ step_catalog() {
 
 step_create_vectordb() {
   local qdrant_id
-  qdrant_id=$(curl -sS "$BACKEND_URL/v1alpha1/vectordb" | jq -r '.[] | select(.name == "Qdrant") | .id' | head -1)
+  api_get "/v1alpha1/vectordb"
+  qdrant_id=$(jq -r '.[] | select(.name == "Qdrant") | .id' "$API_BODY_FILE" | head -1)
   if [[ -z "$qdrant_id" || "$qdrant_id" == "null" ]]; then
-    fail "resolve Qdrant catalog id" "not found in /v1alpha1/vectordb"
+    fail "resolve Qdrant catalog id" "not found in /v1alpha1/vectordb (http_status=$API_STATUS)"
     return
   fi
   info "Qdrant catalog id: $qdrant_id"
 
-  local resp status
-  resp=$(curl -sS -o /tmp/e2e-vectordb-create.json -w "%{http_code}" \
-    -X POST "$BACKEND_URL/v1alpha1/vectordb_instances" \
-    -H "Content-Type: application/json" \
-    -d "{\"vectorDB\":{\"id\":\"$qdrant_id\"},\"configParams\":{\"serviceType\":\"ClusterIP\"}}")
-  status="$resp"
-  if [[ "$status" != "201" ]]; then
-    fail "POST /v1alpha1/vectordb_instances" "http_status=$status body=$(cat /tmp/e2e-vectordb-create.json)"
+  api_post "/v1alpha1/vectordb_instances" \
+    "{\"vectorDB\":{\"id\":\"$qdrant_id\"},\"configParams\":{\"serviceType\":\"ClusterIP\"}}"
+  if [[ "$API_STATUS" != "201" ]]; then
+    fail "POST /v1alpha1/vectordb_instances" "http_status=$API_STATUS body=$(cat "$API_BODY_FILE")"
     return
   fi
-  VECTORDB_INSTANCE_ID=$(jq -r '.id' /tmp/e2e-vectordb-create.json)
+  VECTORDB_INSTANCE_ID=$(jq -r '.id' "$API_BODY_FILE")
   pass "POST /v1alpha1/vectordb_instances" "id=$VECTORDB_INSTANCE_ID $(elapsed)"
 }
 
@@ -123,10 +185,9 @@ step_wait_vectordb_ready() {
   local deadline=$(( $(date +%s) + 600 ))
   local endpoint="" ready="false"
   while [[ $(date +%s) -lt $deadline ]]; do
-    local body
-    body=$(curl -sS "$BACKEND_URL/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID" || echo '{}')
-    endpoint=$(jq -r '.endpoint // empty' <<<"$body")
-    ready=$(jq -r '.ready // false' <<<"$body")
+    api_get "/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID"
+    endpoint=$(jq -r '.endpoint // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+    ready=$(jq -r '.ready // false' "$API_BODY_FILE" 2>/dev/null || echo "false")
     if [[ -n "$endpoint" && "$ready" == "true" ]]; then
       pass "vectordb instance Ready" "endpoint=$endpoint $(elapsed)"
       return
@@ -138,6 +199,52 @@ step_wait_vectordb_ready() {
 
 step_qdrant_healthz() {
   [[ -z "$VECTORDB_INSTANCE_ID" ]] && { fail "curl Qdrant /healthz" "no instance id"; return; }
+
+  # Behind the gateway, the SDK ("-api") host is deterministic and stored
+  # as soon as AIOPS_PARENT_DOMAIN is set on the backend; curl it directly
+  # instead of port-forwarding to the Service. The host is protected by
+  # the instance API key (a SecurityPolicy on the route), so first read
+  # the key through the API (the automation user owns the instance and
+  # gets the one-time value), then check both the 401 and the 200.
+  local api_endpoint
+  api_get "/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID"
+  api_endpoint=$(jq -r '.api_endpoint // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+  if [[ "$api_endpoint" == https://* ]]; then
+    local key url="${api_endpoint}collections"
+    api_get "/v1alpha1/credentials/vdb/$VECTORDB_INSTANCE_ID"
+    key=$(jq -r '.value // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+    if [[ "$API_STATUS" != "200" || -z "$key" ]]; then
+      fail "GET /v1alpha1/credentials/vdb/{id}" "http_status=$API_STATUS body=$(cat "$API_BODY_FILE")"
+      return
+    fi
+    pass "GET /v1alpha1/credentials/vdb/{id}" "key=$(jq -r '.key' "$API_BODY_FILE") value=<redacted> $(elapsed)"
+
+    # The policy is programmed into Envoy a moment after the route; give
+    # both checks a few attempts.
+    local code attempt
+    for attempt in $(seq 1 6); do
+      code=$(curl -sS --cacert "$CA_CERT" -o /dev/null -w "%{http_code}" "$url" || echo 000)
+      [[ "$code" == "401" ]] && break
+      sleep 5
+    done
+    if [[ "$code" == "401" ]]; then
+      pass "curl Qdrant /collections via gateway without a key" "http_status=$code $(elapsed)"
+    else
+      fail "curl Qdrant /collections via gateway without a key" "expected 401, http_status=$code url=$url"
+    fi
+    for attempt in $(seq 1 6); do
+      code=$(curl -sS --cacert "$CA_CERT" -o /dev/null -w "%{http_code}" -H "api-key: $key" "$url" || echo 000)
+      [[ "$code" == "200" ]] && break
+      sleep 5
+    done
+    if [[ "$code" == "200" ]]; then
+      pass "curl Qdrant /collections via gateway with api-key" "http_status=$code $(elapsed)"
+    else
+      fail "curl Qdrant /collections via gateway with api-key" "http_status=$code url=$url"
+    fi
+    return
+  fi
+
   local svc_name
   svc_name=$(kubectl -n "$NAMESPACE" get svc -l "app.kubernetes.io/instance" -o json 2>/dev/null \
     | jq -r ".items[] | select(.metadata.name | startswith(\"qdrant-\")) | select(.metadata.name | endswith(\"$( echo "$VECTORDB_INSTANCE_ID" | cut -c1-8)\")) | .metadata.name" | head -1)
@@ -176,13 +283,12 @@ step_qdrant_healthz() {
 
 step_delete_vectordb() {
   [[ -z "$VECTORDB_INSTANCE_ID" ]] && return
-  local status
-  status=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE "$BACKEND_URL/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID")
-  if [[ "$status" != "204" && "$status" != "200" ]]; then
-    fail "DELETE /v1alpha1/vectordb_instances/{id}" "http_status=$status"
+  api_delete "/v1alpha1/vectordb_instances/$VECTORDB_INSTANCE_ID"
+  if [[ "$API_STATUS" != "204" && "$API_STATUS" != "200" ]]; then
+    fail "DELETE /v1alpha1/vectordb_instances/{id}" "http_status=$API_STATUS"
     return
   fi
-  local deadline=$(( $(date +%s) + 120 ))
+  local deadline=$(( $(date +%s) + 180 ))
   local gone=false
   while [[ $(date +%s) -lt $deadline ]]; do
     if ! helm -n "$NAMESPACE" list -o json 2>/dev/null | jq -e '.[] | select(.name | startswith("qdrant-"))' >/dev/null 2>&1; then
@@ -195,18 +301,14 @@ step_delete_vectordb() {
     pass "vectordb Helm release removed" "$(elapsed)"
     VECTORDB_INSTANCE_ID=""
   else
-    fail "vectordb Helm release removed" "still present after 120s"
+    fail "vectordb Helm release removed" "still present after 180s"
   fi
 }
 
 # --- 4. jupyter notebook instance -----------------------------------------------
 
 step_create_notebook() {
-  local resp status
-  resp=$(curl -sS -o /tmp/e2e-notebook-create.json -w "%{http_code}" \
-    -X POST "$BACKEND_URL/v1alpha1/notebooks" \
-    -H "Content-Type: application/json" \
-    -d '{
+  api_post "/v1alpha1/notebooks" '{
           "name": "e2e-smoke",
           "namespace": "'"$NAMESPACE"'",
           "type": "jupyter",
@@ -217,13 +319,12 @@ step_create_notebook() {
           "storage_size": "1Gi",
           "service_type": "ClusterIP",
           "service_port": 80
-        }')
-  status="$resp"
-  if [[ "$status" != "200" && "$status" != "201" ]]; then
-    fail "POST /v1alpha1/notebooks" "http_status=$status body=$(cat /tmp/e2e-notebook-create.json)"
+        }'
+  if [[ "$API_STATUS" != "200" && "$API_STATUS" != "201" ]]; then
+    fail "POST /v1alpha1/notebooks" "http_status=$API_STATUS body=$(cat "$API_BODY_FILE")"
     return
   fi
-  NOTEBOOK_INSTANCE_ID=$(jq -r '.id' /tmp/e2e-notebook-create.json)
+  NOTEBOOK_INSTANCE_ID=$(jq -r '.id' "$API_BODY_FILE")
   pass "POST /v1alpha1/notebooks" "id=$NOTEBOOK_INSTANCE_ID $(elapsed)"
 }
 
@@ -232,10 +333,9 @@ step_wait_notebook_ready() {
   local deadline=$(( $(date +%s) + 600 ))
   local endpoint="" status_val=""
   while [[ $(date +%s) -lt $deadline ]]; do
-    local body
-    body=$(curl -sS "$BACKEND_URL/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID" || echo '{}')
-    endpoint=$(jq -r '.endpoint // empty' <<<"$body")
-    status_val=$(jq -r '.status // empty' <<<"$body")
+    api_get "/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID"
+    endpoint=$(jq -r '.endpoint // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+    status_val=$(jq -r '.status // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
     if [[ -n "$endpoint" && "$status_val" == "Running" ]]; then
       pass "notebook instance Running" "endpoint=$endpoint $(elapsed)"
       return
@@ -247,6 +347,31 @@ step_wait_notebook_ready() {
 
 step_notebook_curl() {
   [[ -z "$NOTEBOOK_INSTANCE_ID" ]] && { fail "curl notebook base path" "no instance id"; return; }
+
+  # Behind the gateway, .endpoint is already the full https:// URL
+  # (including the /notebook/<ns>/<svc>/lab path); curl it directly
+  # instead of port-forwarding to the Service.
+  local endpoint
+  api_get "/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID"
+  endpoint=$(jq -r '.endpoint // empty' "$API_BODY_FILE" 2>/dev/null || echo "")
+  if [[ "$endpoint" == https://* ]]; then
+    # The Notebook reports Running before Jupyter listens on 8888, which
+    # the gateway answers as a 503 (upstream connect error) until the pod
+    # is actually accepting connections; retry like the port-forward path.
+    local code attempt
+    for attempt in $(seq 1 12); do
+      code=$(curl -sS --cacert "$CA_CERT" -o /tmp/e2e-notebook-body.txt -w "%{http_code}" "$endpoint" || echo 000)
+      [[ "$code" == "200" || "$code" == "302" || "$code" == "303" ]] && break
+      sleep 5
+    done
+    if [[ "$code" == "200" || "$code" == "302" || "$code" == "303" ]]; then
+      pass "curl notebook base path via gateway" "http_status=$code $(elapsed)"
+    else
+      fail "curl notebook base path via gateway" "http_status=$code body=$(head -c 200 /tmp/e2e-notebook-body.txt 2>/dev/null | tr '\n' ' ')"
+    fi
+    return
+  fi
+
   local svc_name
   svc_name=$(kubectl -n "$NAMESPACE" get svc -o name 2>/dev/null | grep '^service/e2e-smoke-' | head -1 | cut -d/ -f2)
   if [[ -z "$svc_name" ]]; then
@@ -292,13 +417,12 @@ step_notebook_curl() {
 
 step_delete_notebook() {
   [[ -z "$NOTEBOOK_INSTANCE_ID" ]] && return
-  local status
-  status=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE "$BACKEND_URL/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID")
-  if [[ "$status" != "200" && "$status" != "204" ]]; then
-    fail "DELETE /v1alpha1/notebooks/{id}" "http_status=$status"
+  api_delete "/v1alpha1/notebooks/$NOTEBOOK_INSTANCE_ID"
+  if [[ "$API_STATUS" != "200" && "$API_STATUS" != "204" ]]; then
+    fail "DELETE /v1alpha1/notebooks/{id}" "http_status=$API_STATUS"
     return
   fi
-  local deadline=$(( $(date +%s) + 120 ))
+  local deadline=$(( $(date +%s) + 180 ))
   local gone=false
   while [[ $(date +%s) -lt $deadline ]]; do
     if ! helm -n "$NAMESPACE" list -o json 2>/dev/null | jq -e '.[] | select(.name | startswith("e2e-smoke-"))' >/dev/null 2>&1; then
@@ -311,15 +435,20 @@ step_delete_notebook() {
     pass "notebook Helm release removed" "$(elapsed)"
     NOTEBOOK_INSTANCE_ID=""
   else
-    fail "notebook Helm release removed" "still present after 120s"
+    fail "notebook Helm release removed" "still present after 180s"
   fi
 }
 
 # --- run ---------------------------------------------------------------------
 
 echo "== aiops-platform e2e smoke test =="
-echo "BACKEND_URL=$BACKEND_URL NAMESPACE=$NAMESPACE SKIP_NOTEBOOK=$SKIP_NOTEBOOK"
+echo "BACKEND_URL=$BACKEND_URL NAMESPACE=$NAMESPACE AUTH_MODE=$AUTH_MODE SKIP_NOTEBOOK=$SKIP_NOTEBOOK"
 echo ""
+
+if [[ "$AUTH_MODE" != "disabled" ]]; then
+  info "fetching an automation token from $OIDC_ISSUER"
+  fetch_token
+fi
 
 step_health
 step_catalog "/v1alpha1/vectordb" "vectordb catalog"

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from auth.current_user import CurrentUser, get_current_user
 from db.database import get_db
 from models.engines import DBEngine
 from schemas.engine import EngineSchema
@@ -10,7 +11,10 @@ router = APIRouter()
 
 # API to get engine information
 @router.get("/v1alpha1/engines", response_model=list[EngineSchema])
-def get_engines(db: Session = Depends(get_db)):
+def get_engines(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Retrieve all engines from the database.
 

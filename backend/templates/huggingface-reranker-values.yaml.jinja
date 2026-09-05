@@ -27,7 +27,7 @@ strategy:
   type: {{ strategy.type | default("Recreate") }}
 
 service:
-  type: {{ service.type | default("LoadBalancer") }}
+  type: {{ service.type | default("ClusterIP") }}
   port: {{ service.port | default(80) }}
 
 serviceMonitor:

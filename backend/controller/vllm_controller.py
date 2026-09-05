@@ -2,6 +2,7 @@ import os
 
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
+from utils.credentials import CREDENTIAL_KEY, credential_secret_names
 
 from .base_controller import Controller
 
@@ -12,6 +13,10 @@ class VLLMController(Controller):
         instance: InferenceInstanceSchema,
         engineChart: EngineChartsSchema,
     ):
+        # vllm serve reads VLLM_API_KEY (Task 14): the chart's plain env
+        # list lets us reference the credentials Secret with a
+        # secretKeyRef instead of rendering the value into the template.
+        credential_secret_name, _ = credential_secret_names("inf", instance.id)
         context = {
             "model": instance.model.modelId,
             "args": [],
@@ -19,6 +24,8 @@ class VLLMController(Controller):
             "env": [],
             "configs": [],
             "volumeMounts": {"hf_cache": {"mountPath": "/model"}},
+            "credential_secret_name": credential_secret_name,
+            "credential_secret_key": CREDENTIAL_KEY,
         }
 
         if instance.config and instance.config.enable_tracing:

@@ -1,0 +1,59 @@
+# The backend runs on the Mac (uv run uvicorn ... --port 8000), not in the
+# cluster, but the gateway's ext-authz filter needs an in-cluster
+# backendRef to call GET /v1alpha1/authz/route on it (gateway notes
+# section 6). A selector-less Service plus a hand-written EndpointSlice
+# gives it one: "make gateway-up" resolves host.docker.internal from the
+# kind node (192.168.5.2 under colima) and substitutes it for
+# __HOST_IP__ before applying. The lab points a normal Service at the
+# in-cluster backend Deployment instead.
+apiVersion: v1
+kind: Service
+metadata:
+  name: aiops-backend
+  namespace: ai-stack
+  labels:
+    app.kubernetes.io/managed-by: aiops
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8000
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: aiops-backend-host
+  namespace: ai-stack
+  labels:
+    kubernetes.io/service-name: aiops-backend
+    app.kubernetes.io/managed-by: aiops
+addressType: IPv4
+ports:
+  - name: http
+    protocol: TCP
+    port: 8000
+endpoints:
+  - addresses:
+      - "__HOST_IP__"
+---
+# Lets an OIDC SecurityPolicy created in another namespace point its
+# extAuth.http.backendRefs at the aiops-backend Service above; Gateway
+# API requires an explicit grant for any cross-namespace backendRef.
+# backend/utils/gateway.py ensure_reference_grant appends the namespace
+# of every instance that installs outside ai-stack. The initial ai-stack
+# entry is a harmless self-reference: "from" may not be empty.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-securitypolicy-to-aiops-backend
+  namespace: ai-stack
+spec:
+  from:
+    - group: gateway.envoyproxy.io
+      kind: SecurityPolicy
+      namespace: ai-stack
+  to:
+    - group: ""
+      kind: Service
+      name: aiops-backend

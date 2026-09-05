@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from auth.current_user import CurrentUser, get_current_user, require_writer
+from auth.policy import authorize_read, authorize_write, org_scope
 from db.database import get_db
 from logger import setup_logger
 from models.model_adapters import DBModelAdapters
@@ -48,9 +50,13 @@ def get_model_adapter(db: Session, model_id: UUID, adapter_id: UUID):
     response_model=ModelAdapterSchema,
 )
 def get_model_adapter_api(
-    model_id: UUID, adapter_id: UUID, db: Session = Depends(get_db)
+    model_id: UUID,
+    adapter_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     db_adapter = get_model_adapter(db, model_id, adapter_id)
+    authorize_read(user, db_adapter, "model adapter")
     return db_to_schema(db_adapter)
 
 
@@ -58,10 +64,17 @@ def get_model_adapter_api(
     "/v1alpha1/model/{model_id}/adapters",
     response_model=list[ModelAdapterSchema],
 )
-def list_model_adapters(model_id: UUID, db: Session = Depends(get_db)):
+def list_model_adapters(
+    model_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     db_adapters = (
         db.query(DBModelAdapters)
-        .filter(DBModelAdapters.model_id == model_id)
+        .filter(
+            DBModelAdapters.model_id == model_id,
+            org_scope(DBModelAdapters, user),
+        )
         .all()
     )
     return [db_to_schema(adapter) for adapter in db_adapters]
@@ -73,7 +86,10 @@ def list_model_adapters(model_id: UUID, db: Session = Depends(get_db)):
     status_code=201,
 )
 def create_model_adapter(
-    model_id: UUID, adapter: ModelAdapterSchema, db: Session = Depends(get_db)
+    model_id: UUID,
+    adapter: ModelAdapterSchema,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
 ):
     if adapter.base_model and model_id != adapter.base_model.id:
         raise HTTPException(
@@ -89,6 +105,8 @@ def create_model_adapter(
         model_id=model_id,
         path=adapter.path,
         hf_id=adapter.hf_id,
+        org_id=user.org_id,
+        owner_id=user.id,
     )
     try:
         db.add(db_adapter)
@@ -122,6 +140,7 @@ def update_model_adapter(
     adapter_id: UUID,
     adapter: ModelAdapterSchema,
     db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     if adapter.base_model and model_id != adapter.base_model.id:
         raise HTTPException(
@@ -133,6 +152,7 @@ def update_model_adapter(
             status_code=400, detail="Either path or hf_id must be specified"
         )
     db_adapter = get_model_adapter(db, model_id, adapter_id)
+    authorize_write(user, db_adapter, "model adapter")
     db_adapter.name = adapter.name
     db_adapter.model_id = model_id
     db_adapter.path = adapter.path
@@ -161,8 +181,12 @@ def update_model_adapter(
     "/v1alpha1/model/{model_id}/adapters/{adapter_id}", status_code=204
 )
 def delete_model_adapter(
-    model_id: UUID, adapter_id: UUID, db: Session = Depends(get_db)
+    model_id: UUID,
+    adapter_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     db_adapter = get_model_adapter(db, model_id, adapter_id)
+    authorize_write(user, db_adapter, "model adapter")
     db.delete(db_adapter)
     db.commit()

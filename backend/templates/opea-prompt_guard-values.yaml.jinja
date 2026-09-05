@@ -10,7 +10,7 @@ global:
 SAFETY_GUARD_MODEL_ID: {{ safety_guard_model_id | default('meta-llama/Meta-Llama-Guard-2-8B') }}
 
 service:
-  type: {{ service_type | default('LoadBalancer') }}
+  type: {{ service_type | default('ClusterIP') }}
 
 {% if nodeSelector.hostname is defined %}
 nodeSelector:
@@ -20,7 +20,7 @@ nodeSelector:
 tgi:
   LLM_MODEL_ID: {{ tgi.llm_model_id | default('meta-llama/Meta-Llama-Guard-2-8B') }}
   service:
-    type: {{ tgi_service_type | default('LoadBalancer') }}
+    type: {{ tgi_service_type | default('ClusterIP') }}
 {% if nodeSelector.hostname is defined %}
   nodeSelector:
     kubernetes.io/hostname: {{ node_selector.hostname }}

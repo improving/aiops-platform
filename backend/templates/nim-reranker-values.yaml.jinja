@@ -21,7 +21,7 @@ nemo:
   groupID: {{ nemo.groupID | default("65534") }}
 
 service:
-  type: {{ service.type | default("LoadBalancer") }}
+  type: {{ service.type | default("ClusterIP") }}
   http_port: {{ service.http_port | default(8080) }}
   grpc_port: {{ service.grpc_port | default(null) }}
   nodePort: {{ service.nodePort | default(null) }}

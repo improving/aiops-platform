@@ -4,6 +4,7 @@
 !.env.example
 kubeconfig*
 *.db
+infra/local/ca/
 
 # OS / editor
 .DS_Store

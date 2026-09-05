@@ -4,6 +4,7 @@ import {
   InferenceInstance,
   InferenceInstanceDashboard,
   Adapter,
+  Credential,
   FineTuneJob,
   Engine,
   Host,
@@ -80,6 +81,16 @@ export const modelService = {
 
   deleteInferenceInstance: async (id: string) => {
     await api.delete(`/api/v1alpha1/inferenceInstance/${id}`);
+  },
+
+  // The value comes back once; afterwards it is null unless an admin
+  // passes reveal=true (backend/api/credentials.py).
+  getInferenceInstanceCredential: async (id: string, reveal = false) => {
+    const response = await api.get<Credential>(
+      `/api/v1alpha1/credentials/inf/${id}`,
+      reveal ? { params: { reveal: true } } : undefined
+    );
+    return response.data;
   },
 
   getAdapters: async (modelId: string) => {

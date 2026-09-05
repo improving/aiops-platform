@@ -45,6 +45,8 @@ jobs:
         run: ./hack/lint.sh
 
       - name: Test
+        env:
+          AUTH_MODE: disabled
         run: ./hack/runtest.sh
 
       - name: Fail if lint or tests modified tracked files

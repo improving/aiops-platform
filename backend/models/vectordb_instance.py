@@ -15,5 +15,13 @@ class DBVectorDBInstance(Base):
     vectordb_id = Column(UUID(as_uuid=True), ForeignKey("vectordb.id"))
     configParams = Column(JSON, nullable=True)  # Change this line
     endpoint = Column(String, nullable=True)
+    # The SDK endpoint behind the gateway, API-key protected.
+    api_endpoint = Column(String, nullable=True)
+    org_id = Column(
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
+    )
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
     vectorDB = relationship("DBVectorDB")

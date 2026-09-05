@@ -17,9 +17,11 @@ test.describe("vector database lifecycle", { tag: "@cluster" }, () => {
   // Instances created by a test that has not cleaned up after itself.
   const leftovers: string[] = [];
 
-  test.afterEach(async ({ api }) => {
+  // Delete as admin: the automation user behind `api` is a member and may
+  // not delete what alice created.
+  test.afterEach(async ({ userApi }) => {
     for (const id of leftovers.splice(0)) {
-      await api.deleteVectorDBInstance(id);
+      await (await userApi("admin")).deleteVectorDBInstance(id);
       await waitForHelmReleaseGone(id.slice(0, 8));
     }
   });

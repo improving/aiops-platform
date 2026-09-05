@@ -9,10 +9,11 @@ import {
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "next-themes";
 import { ThemeDropdown } from "./ThemeDropdown";
 import { MobileNav } from "./MobileNav";
+import { UserMenu } from "./UserMenu";
+import { AUTH_DISABLED } from "@/constants";
 import { cn } from "@/lib/utils";
 import {
   CodeIcon,
@@ -149,17 +150,11 @@ export default function Header() {
           <div className="hidden items-center md:flex md:ml-4">
             <ThemeDropdown setTheme={setTheme} />
           </div>
-          <Avatar className="hidden md:flex">
-            <AvatarImage
-              src="https://github.com/infracloudio.png"
-              alt="User avatar"
-            />
-            <AvatarFallback>IC</AvatarFallback>
-          </Avatar>
           <div className="flex items-center gap-2 md:hidden">
             <ThemeDropdown setTheme={setTheme} />
             <MobileNav menuItems={menuItems} isActive={isActive} />
           </div>
+          {!AUTH_DISABLED && <UserMenu />}
         </div>
       </div>
     </header>

@@ -37,6 +37,13 @@ env:
       secretKeyRef:
         name: {{ hf_api_token_secret_name | default('hf-api-token') }}
         key: {{ hf_api_token_secret_key | default('HF_API_TOKEN') }}
+{% if credential_secret_name is defined %}
+  - name: VLLM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: {{ credential_secret_name }}
+        key: {{ credential_secret_key | default('api-key') }}
+{% endif %}
 ##  - name: HF_HUB_OFFLINE
 ##    value: "{{ hf_hub_offline | default('1') }}"
 ##  - name: HF_HUB_CACHE
@@ -57,7 +64,7 @@ strategy:
   type: {{ strategy_type | default('Recreate') }}
 
 service:
-  type: {{ service.type | default('LoadBalancer') }}
+  type: {{ service.type | default('ClusterIP') }}
   port: {{ service.port | default(8000) }}
 
 serviceMonitor:

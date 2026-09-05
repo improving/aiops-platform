@@ -16,11 +16,15 @@ test.describe("notebook lifecycle", { tag: "@cluster" }, () => {
 
   const leftovers: string[] = [];
 
-  test.afterEach(async ({ api }) => {
+  // Notebooks are visible to their owner and org admins only, so the
+  // automation user behind `api` neither sees nor may delete alice's;
+  // clean up as admin.
+  test.afterEach(async ({ userApi }) => {
+    const admin = await userApi("admin");
     for (const id of leftovers.splice(0)) {
-      await api.deleteNotebook(id);
+      await admin.deleteNotebook(id);
       await expect
-        .poll(async () => (await api.notebooks()).map((n) => n.id), {
+        .poll(async () => (await admin.notebooks()).map((n) => n.id), {
           timeout: DELETE_TIMEOUT,
         })
         .not.toContain(id);
@@ -30,9 +34,11 @@ test.describe("notebook lifecycle", { tag: "@cluster" }, () => {
   for (const kind of kinds) {
     test(`create a ${kind.type} notebook, wait until Running, then delete it`, async ({
       page,
-      api,
+      userApi,
     }) => {
       const name = `e2e-${kind.type}-${shortId()}`;
+      // The owner's view of the API: the automation user cannot see it.
+      const api = await userApi("alice");
 
       const form = new NotebookFormPage(page);
       await form.open();

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import type { E2EOptions } from "./e2e/fixtures";
+import type { AuthMode, E2EOptions } from "./e2e/fixtures";
 
 // Two tiers:
 //   fast    - runs against a TEST_MODE backend (SQLite, seeded catalogs, no
@@ -30,6 +30,18 @@ const backendURL =
 // cluster even when the developer has a kubeconfig for kind.
 const NO_KUBECONFIG = "/nonexistent/e2e-kubeconfig";
 
+// Whether the `api` fixture (in e2e/fixtures.ts) attaches a bearer token.
+// E2E_AUTH_MODE overrides both projects explicitly; otherwise AUTH_MODE (the
+// same variable the backend and the managed frontend read) is honoured when
+// it names a mode; otherwise each project falls back to what its backend
+// actually needs: the fast project's managed backend always runs with
+// AUTH_MODE=disabled (below), and the cluster project talks to the real,
+// OIDC-enforcing backend.
+function authModeFor(projectDefault: AuthMode): AuthMode {
+  const value = process.env.E2E_AUTH_MODE ?? process.env.AUTH_MODE;
+  return value === "oidc" || value === "disabled" ? value : projectDefault;
+}
+
 export default defineConfig<E2EOptions>({
   testDir: "./e2e",
   fullyParallel: true,
@@ -51,6 +63,22 @@ export default defineConfig<E2EOptions>({
       testDir: "./e2e/fast",
       grepInvert: /@cluster/,
       timeout: 60_000,
+      // First navigations on a cold production server exceed Playwright's
+      // 5 s default on a two-core CI runner.
+      expect: { timeout: 15_000 },
+    },
+    {
+      // Logs alice, bob and admin into Keycloak once and saves their
+      // sessions to playwright/.auth/<user>.json (see e2e/auth.setup.ts).
+      // The cluster project depends on this and runs it automatically, so
+      // `pnpm e2e:cluster --grep ...` still regenerates fresh state; only a
+      // `--no-deps` or a `--project=cluster` filtered to a project other
+      // than "setup" skips it, per Playwright's project dependency rules.
+      name: "setup",
+      testDir: "./e2e",
+      testMatch: /auth\.setup\.ts/,
+      timeout: 60_000,
+      use: { ignoreHTTPSErrors: true },
     },
     {
       name: "cluster",
@@ -60,6 +88,18 @@ export default defineConfig<E2EOptions>({
       retries: 0,
       timeout: 10 * 60_000,
       expect: { timeout: 30_000 },
+      dependencies: ["setup"],
+      use: {
+        // Gateway TLS uses the local dev CA (infra/local/ca/ca.crt), which
+        // browsers and Playwright's request contexts do not trust by
+        // default.
+        ignoreHTTPSErrors: true,
+        // Every cluster spec is signed in as alice by default; a test that
+        // needs a second identity (e.g. to confirm bob gets 403) uses the
+        // `asUser("bob")` fixture instead of overriding this per test.
+        storageState: "playwright/.auth/alice.json",
+        authMode: authModeFor("oidc"),
+      },
     },
   ],
   webServer: START_SERVERS
@@ -70,7 +110,11 @@ export default defineConfig<E2EOptions>({
           command: `rm -f tmp/test_database_*.db && uv run uvicorn app:app --port ${BACKEND_PORT}`,
           cwd: "../backend",
           url: `${managedBackendURL}/health`,
-          env: { TEST_MODE: "true", KUBECONFIG: NO_KUBECONFIG },
+          env: {
+            TEST_MODE: "true",
+            AUTH_MODE: "disabled",
+            KUBECONFIG: NO_KUBECONFIG,
+          },
           // A fresh SQLite per run is the point of TEST_MODE; never reuse.
           reuseExistingServer: false,
           timeout: 120_000,
@@ -83,6 +127,10 @@ export default defineConfig<E2EOptions>({
           env: {
             AIOPS_BACKEND_URL: managedBackendURL,
             NEXT_PUBLIC_AIOPS_BACKEND_URL: managedBackendURL,
+            // The fast tier has no Keycloak: the proxy neither redirects nor
+            // adds a bearer, and the build hides the user menu.
+            AUTH_MODE: "disabled",
+            NEXT_PUBLIC_AUTH_MODE: "disabled",
           },
           reuseExistingServer: !CI,
           timeout: 300_000,

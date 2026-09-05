@@ -25,17 +25,24 @@ Prerequisites: colima (or another Docker daemon), kind, Helm, kubectl, uv, pnpm.
 
 ```bash
 colima start --cpu 4 --memory 8
-make kind-up        # kind cluster "aiops", Kubeflow notebook controller, namespace ai-stack
-make db-up          # Postgres in docker compose on localhost:5432
+make kind-up gateway-up ca-export auth-up db-up langflow-up
+# kind cluster "aiops"; Envoy Gateway + cert-manager + the local CA;
+# Keycloak with the dev realm; Postgres; Langflow -- all behind the gateway
 make backend        # terminal 1: API on http://localhost:8000
-make langflow-up    # optional: Langflow for the Develop page on http://localhost:7860
 make frontend       # terminal 2: UI on http://localhost:3000
 make e2e-smoke      # terminal 3: creates a Qdrant instance and a Jupyter notebook, then deletes them
 ```
 
-The UI proxies `/api/v1alpha1/*` to the backend, so no CORS setup is needed.
+The UI proxies `/api/v1alpha1/*` to the backend, so no CORS setup is needed,
+and signs users in through Keycloak before any page loads
+(dev users `alice`/`alice`, `bob`/`bob`, `admin`/`admin`, same password as username).
+curl, Node and Python tooling need to trust the gateway's local CA before they can reach
+`https://*.127.0.0.1.nip.io` -- run `make trust-ca` for the command it prints
+(`sudo`, macOS Keychain, not run automatically),
+or export `SSL_CERT_FILE`/`NODE_EXTRA_CA_CERTS` to `infra/local/ca/ca.crt` for one shell.
 GPU inference engines stay catalog-only on a laptop;
-vector databases and notebooks deploy for real into the kind cluster.
+vector databases and notebooks deploy for real into the kind cluster,
+each behind its own gateway hostname and identity check.
 `docs/local-dev.md` has the full walkthrough and troubleshooting.
 
 ## Development
@@ -51,6 +58,6 @@ Chart releases are published into the `infracloudio/charts` repository so the ch
 ## Configuration
 
 The backend reads `DATABASE_URL`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
-`AIOPS_NAMESPACE`, `HF_API_TOKEN`, `NGC_API_KEY` and the usual `KUBECONFIG`.
+`AIOPS_NAMESPACE`, `HF_API_TOKEN`, `NGC_API_KEY`, `AUTH_MODE`/`OIDC_ISSUER` and the usual `KUBECONFIG`.
 Kubernetes manifests take secrets from a `config.yaml` created from `backend/manifests/config.example.yaml`;
 that file is git-ignored.

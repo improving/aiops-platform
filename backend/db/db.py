@@ -1,11 +1,11 @@
 import csv
 import uuid
 
-from sqlalchemy import MetaData, Table, and_, text
+from sqlalchemy import MetaData, and_
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from db.database import Base
+from db.migrate import upgrade_to_head
 from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
@@ -18,94 +18,9 @@ from utils import genid
 logger = setup_logger(__name__)
 
 
-def update_table_definitions(db: Session, engine: Engine):
-    connection = engine.connect()
-    try:
-        metadata = MetaData()
-        metadata.reflect(bind=engine)
-
-        for table in Base.metadata.tables.values():
-            if table.name in metadata.tables:
-                existing_table = Table(
-                    table.name, metadata, autoload_with=engine
-                )
-                existing_columns = set(existing_table.columns.keys())
-                model_columns = set(table.columns.keys())
-
-                # Add new columns
-                add_update_columns(
-                    engine, connection, table, existing_table, existing_columns
-                )
-
-                # Drop removed columns
-                for column_name in existing_columns - model_columns:
-                    logger.info(
-                        f"Dropping column {column_name} from table {table.name}"
-                    )
-                    connection.execute(
-                        text(
-                            f'ALTER TABLE "{table.name}" DROP COLUMN "{column_name}"'
-                        )
-                    )
-            else:
-                logger.info(f"Creating table {table.name}")
-                table.create(bind=engine)
-
-        for table_name in metadata.tables.keys():
-            if table_name not in Base.metadata.tables:
-                logger.info(f"Dropping table {table_name}")
-                connection.execute(text(f'DROP TABLE "{table_name}"'))
-                connection.commit()
-
-        logger.info("Table definitions updated successfully")
-    except Exception as e:
-        logger.error(
-            f"An error occurred while updating table definitions: {e}"
-        )
-        db.rollback()
-        raise e
-    finally:
-        db.commit()
-        connection.close()
-        db.close()
-
-
-def add_update_columns(
-    engine: Engine, connection, table, existing_table, existing_columns
-):
-    for column in table.columns:
-        if column.name not in existing_columns:
-            logger.info(f"Adding column {column.name} to table {table.name}")
-            connection.execute(
-                text(
-                    f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column.type.compile(dialect=engine.dialect)}'
-                )
-            )
-            connection.commit()
-
-        else:
-            existing_column = existing_table.columns[column.name]
-            if str(column.type) != str(existing_column.type):
-                logger.info(
-                    f"Updating column {column.name} in table {table.name}. Existing type: {existing_column.type}, New type: {column.type}, compiled type: {column.type.compile(dialect=engine.dialect)}"
-                )
-                try:
-                    connection.execute(
-                        text(
-                            f'ALTER TABLE "{table.name}" ALTER COLUMN "{column.name}" TYPE {column.type.compile(dialect=engine.dialect)}'
-                        )
-                    )
-                    connection.commit()
-                except Exception as e:
-                    logger.error(
-                        f"Error updating column {column.name} in table {table.name}: {e}"
-                    )
-
-
 def init_db(db: Session, engine: Engine):
     logger.info("Initializing database")
-    Base.metadata.create_all(bind=engine)
-    update_table_definitions(db, engine)
+    upgrade_to_head(engine)
     load_initial_data(db)
     logger.info("Database initialized successfully")
 
@@ -410,8 +325,11 @@ def reload_data(db: Session):
 
 def refresh_db(db: Session, engine: Engine):
     try:
-        # Delete all tables
-        Base.metadata.drop_all(bind=engine)
+        # Drop every table, alembic_version included, so the
+        # migrations run again from scratch.
+        existing = MetaData()
+        existing.reflect(bind=engine)
+        existing.drop_all(bind=engine)
 
         # Reload tables and data
         init_db(db, engine)

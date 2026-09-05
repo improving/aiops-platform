@@ -14,6 +14,7 @@ import GrafanaEmbed from "@/components/GrafanaEmbed";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Adapter,
+  Credential,
   InferenceInstance,
   InferenceInstanceDashboard,
 } from "@/types/models";
@@ -81,7 +82,37 @@ export default function InferenceEndpointDetailsPage({
   const [selectedAdapter, setSelectedAdapter] = useState<Adapter | null>(null);
   const [serviceName, setServiceName] = useState<string | null>(null);
   const [jaegerLimit, setJaegerLimit] = useState(20);
+  const [credential, setCredential] = useState<Credential | null>(null);
+  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
+  const [credentialLoading, setCredentialLoading] = useState(false);
   const { toast } = useToast();
+
+  const handleShowApiKey = useCallback(
+    async (reveal = false) => {
+      setCredentialLoading(true);
+      try {
+        const data = await modelService.getInferenceInstanceCredential(
+          params.id,
+          reveal
+        );
+        setCredential(data);
+        setCredentialDialogOpen(true);
+        // A non-admin's reveal request is a 200 with value: null (the
+        // backend does not 403 it), so the UI must call that out itself.
+        if (reveal && !data.value) {
+          toast({
+            title: "Only an admin can reveal this key again",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        toast(parseApiError(error));
+      } finally {
+        setCredentialLoading(false);
+      }
+    },
+    [params.id, toast]
+  );
 
   const fetchInferenceInstance = useCallback(async () => {
     try {
@@ -214,6 +245,19 @@ export default function InferenceEndpointDetailsPage({
                     className="ml-2"
                     icon={<ClipboardCopyIcon className="w-4 h-4" />}
                   ></Button>
+                </span>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label>API Key</Label>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={credentialLoading}
+                    onClick={() => handleShowApiKey(false)}
+                  >
+                    Show API key
+                  </Button>
                 </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
@@ -422,6 +466,56 @@ export default function InferenceEndpointDetailsPage({
               </div>
             )}
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={credentialDialogOpen}
+        onOpenChange={setCredentialDialogOpen}
+      >
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Inference endpoint API key</DialogTitle>
+          </DialogHeader>
+          {credential?.value ? (
+            <div className="grid gap-4">
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={credential.value}
+                  className="font-mono"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() =>
+                    navigator.clipboard.writeText(credential.value || "")
+                  }
+                  icon={<ClipboardCopyIcon className="w-4 h-4" />}
+                ></Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This key is shown only once. Copy it now — admins can view it
+                again with <code>?reveal=true</code>.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              <p className="text-sm text-muted-foreground">
+                This key was already shown
+                {credential?.shown_at
+                  ? ` on ${new Date(credential.shown_at).toLocaleString()}`
+                  : ""}
+                . Admins can reveal it again.
+              </p>
+              <Button
+                variant="outline"
+                loading={credentialLoading}
+                onClick={() => handleShowApiKey(true)}
+              >
+                Reveal again (admin)
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Tabs>

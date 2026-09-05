@@ -1,8 +1,10 @@
 # Local services for the control plane.
 # postgres matches the backend's DATABASE_* defaults (see backend/db/database.py):
 # user/password/db all "postgres", port 5432.
-# langflow (profile "langflow") backs the Develop page; start it with
-# `make langflow-up` and run the frontend with NEXT_PUBLIC_LANGFLOW_URL set.
+# Langflow used to run here under the "langflow" profile; it now runs in the
+# kind cluster behind the gateway (infra/local/langflow/langflow.yaml,
+# "make langflow-up") so it gets the same OIDC login as every other
+# workload -- see docs/local-dev.md section "Langflow for the Develop page".
 services:
   postgres:
     image: postgres:17-alpine
@@ -23,27 +25,5 @@ services:
       retries: 10
       start_period: 10s
 
-  langflow:
-    image: langflowai/langflow:1.12.0
-    container_name: aiops-local-langflow
-    profiles: ["langflow"]
-    restart: unless-stopped
-    environment:
-      # Local development only: no login screen inside the embedded iframe.
-      LANGFLOW_AUTO_LOGIN: "true"
-      LANGFLOW_HOST: 0.0.0.0
-      LANGFLOW_PORT: "7860"
-    ports:
-      - "7860:7860"
-    volumes:
-      - aiops-langflow-data:/app/langflow
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7860/health_check')\""]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
-
 volumes:
   aiops-postgres-data:
-  aiops-langflow-data:

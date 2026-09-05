@@ -1,0 +1,30 @@
+# The one Gateway for the local stack: every deployed instance's HTTPRoute
+# (created by backend/utils/gateway.py, added in a later task) attaches to
+# this Gateway from whatever namespace it lives in.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: aiops
+  namespace: envoy-gateway-system
+spec:
+  gatewayClassName: aiops
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "*.127.0.0.1.nip.io"
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.127.0.0.1.nip.io"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: aiops-wildcard-tls
+      allowedRoutes:
+        namespaces:
+          from: All

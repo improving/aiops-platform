@@ -3,6 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export TEST_MODE=true
+# The tests call the API without tokens; conftest.py sets the same default.
+export AUTH_MODE="${AUTH_MODE:-disabled}"
 
 # Per-test SQLite databases live in tmp/
 mkdir -p tmp

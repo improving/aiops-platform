@@ -11,8 +11,23 @@ interface VectorDBInstanceSchema {
   vectorDB: VectorDBSchema;
   configParams: Record<string, unknown>;
   endpoint: string;
+  // The SDK endpoint behind the gateway, protected by the instance API key;
+  // null when no gateway is configured.
+  api_endpoint?: string | null;
   ready: boolean;
   status: string;
 }
 
-export type { VectorDBSchema, VectorDBInstanceSchema };
+// GET /api/v1alpha1/credentials/vdb/{id}: the value is returned once,
+// afterwards it is null and shown_at says when it was revealed.
+interface VectorDBCredentialSchema {
+  key: string;
+  value: string | null;
+  shown_at: string | null;
+}
+
+export type {
+  VectorDBSchema,
+  VectorDBInstanceSchema,
+  VectorDBCredentialSchema,
+};

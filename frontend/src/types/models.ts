@@ -19,6 +19,13 @@ interface InferenceInstanceConfig {
   enable_tracing: boolean;
 }
 
+interface Credential {
+  key: string;
+  // Only present on the first read, or on an admin's ?reveal=true.
+  value: string | null;
+  shown_at: string | null;
+}
+
 interface InferenceInstanceDashboard {
   id: string;
   dashboard_id: string | null;
@@ -147,6 +154,7 @@ interface FineTuneJob {
 }
 
 export type {
+  Credential,
   InferenceInstance,
   InferenceInstanceDashboard,
   Engine,

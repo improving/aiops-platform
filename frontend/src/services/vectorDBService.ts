@@ -1,5 +1,9 @@
 import api from "./api";
-import { VectorDBSchema, VectorDBInstanceSchema } from "@/types/vectordb";
+import {
+  VectorDBSchema,
+  VectorDBInstanceSchema,
+  VectorDBCredentialSchema,
+} from "@/types/vectordb";
 
 export const vectorDBService = {
   getVectorDBs: async () => {
@@ -27,5 +31,14 @@ export const vectorDBService = {
 
   deleteVectorDBInstance: async (id: string) => {
     await api.delete(`/api/v1alpha1/vectordb_instances/${id}`);
+  },
+
+  // Reveals the instance API key. The backend returns the value only once:
+  // every later call answers with value null.
+  getVectorDBCredential: async (id: string) => {
+    const response = await api.get<VectorDBCredentialSchema>(
+      `/api/v1alpha1/credentials/vdb/${id}`
+    );
+    return response.data;
   },
 };

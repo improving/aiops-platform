@@ -1,0 +1,81 @@
+# The shared OIDC callback host. Keycloak 26 does not glob-match a "*" in
+# the host of a redirect URI (Task 4 finding), and Envoy Gateway names its
+# OIDC cookies with a suffix derived from the SecurityPolicy, so a
+# callback can only be completed by the same policy that started the
+# login (Task 10 spike, gateway notes "Spike results"). Hence ONE
+# SecurityPolicy, aiops-workloads-oidc in ai-stack
+# (infra/local/auth/workloads-oidc-policy.yaml), targets this route plus
+# every instance browser route (backend/utils/gateway.py add_oidc_target),
+# and https://sso.127.0.0.1.nip.io/oauth2/callback is the only redirect
+# URI registered on the aiops-gateway client (realm-aiops.json). Envoy's
+# oauth2 filter on this route completes the code exchange, sets the
+# session cookies for the whole parent domain (cookieDomain) and
+# redirects back to the instance host the user started on.
+#
+# The nginx behind the route is never reached by a real user: the callback
+# path is answered by the filter itself, and a direct visit is turned
+# away by the ext-authz check (the sso host is not an instance).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sso
+  namespace: ai-stack
+  labels:
+    app.kubernetes.io/name: sso
+    app.kubernetes.io/managed-by: aiops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sso
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sso
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sso
+  namespace: ai-stack
+  labels:
+    app.kubernetes.io/name: sso
+    app.kubernetes.io/managed-by: aiops
+spec:
+  selector:
+    app.kubernetes.io/name: sso
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sso
+  namespace: ai-stack
+  labels:
+    app.kubernetes.io/managed-by: aiops
+spec:
+  parentRefs:
+    - name: aiops
+      namespace: envoy-gateway-system
+  hostnames:
+    - "sso.127.0.0.1.nip.io"
+  rules:
+    - backendRefs:
+        - name: sso
+          port: 80

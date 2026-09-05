@@ -8,6 +8,8 @@ from kubernetes import client
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
+from auth.current_user import CurrentUser, get_current_user, require_writer
+from auth.policy import authorize_read, authorize_write, org_scope
 from controller import get_controller
 from db.database import get_db
 from logger import setup_logger
@@ -26,26 +28,39 @@ from schemas.inference_instance_dashboards import (
     InferenceInstanceDashboardsSchema,
 )
 from utils import genid
+from utils.credentials import (
+    delete_credential,
+    generate_secret,
+    store_credential,
+)
+from utils.gateway import gateway_settings, instance_url
 from utils.kubernetes_utils import (
     get_pod_status_and_readiness,
     get_service_endpoint,
 )
+
+# The kind tag for utils/credentials.py: one API key per inference instance.
+CREDENTIAL_KIND = "inf"
 
 router = APIRouter()
 
 # Initialize the logger
 logger = setup_logger(__name__)
 
-# Static org_id for all dashboards
-org_id = "1"
+# Grafana's organization id, the same for every dashboard. Not the
+# tenancy org_id column on the instance rows.
+GRAFANA_ORG_ID = "1"
 
 
 @router.get(
     "/v1alpha1/inferenceInstance", response_model=list[InferenceInstanceSchema]
 )
-async def list_inference_instances(db: Session = Depends(get_db)):
+async def list_inference_instances(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
-    List all inference instances.
+    List the inference instances of the caller's organization.
 
     Args:
         db (Session): The database session, injected by FastAPI.
@@ -57,7 +72,11 @@ async def list_inference_instances(db: Session = Depends(get_db)):
         HTTPException: If there's an error retrieving the inference instances.
     """
     try:
-        instances = db.query(DBInferenceInstance).all()
+        instances = (
+            db.query(DBInferenceInstance)
+            .filter(org_scope(DBInferenceInstance, user))
+            .all()
+        )
         for instance in instances:
             instance_ready, instance_status = check_pod_status_and_readiness(
                 instance, db
@@ -73,7 +92,11 @@ async def list_inference_instances(db: Session = Depends(get_db)):
 @router.get(
     "/v1alpha1/inferenceInstance/{id}", response_model=InferenceInstanceSchema
 )
-async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
+async def get_inference_instance(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Retrieve a specific inference instance by ID.
 
@@ -97,6 +120,7 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
             raise HTTPException(
                 status_code=404, detail="Inference instance not found"
             )
+        authorize_read(user, instance, "inference instance")
 
         instance.ready, instance.status = check_pod_status_and_readiness(
             instance, db
@@ -116,7 +140,9 @@ async def get_inference_instance(id: uuid.UUID, db: Session = Depends(get_db)):
     response_model=list[InferenceInstanceDashboardsSchema],
 )
 async def get_inference_instance_dashboards(
-    id: uuid.UUID, db: Session = Depends(get_db)
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Retrieve dashboards for a specific inference instance.
@@ -131,6 +157,17 @@ async def get_inference_instance_dashboards(
         HTTPException: If there's an error retrieving the dashboards.
     """
     try:
+        instance = (
+            db.query(DBInferenceInstance)
+            .filter(DBInferenceInstance.id == id)
+            .first()
+        )
+        if not instance:
+            raise HTTPException(
+                status_code=404, detail="Inference instance not found"
+            )
+        authorize_read(user, instance, "inference instance")
+
         db_instance_dashboards = (
             db.query(DBInferenceInstanceDashboards)
             .filter(DBInferenceInstanceDashboards.inference_instance_id == id)
@@ -165,6 +202,8 @@ async def get_inference_instance_dashboards(
             instance_dashboard_list.append(instance_dashboard)
 
         return instance_dashboard_list
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(
             f"Error in get_inference_instance_dashboards: {str(e)}"
@@ -178,7 +217,9 @@ async def get_inference_instance_dashboards(
     status_code=201,
 )
 async def create_inference_instance(
-    instance: InferenceInstanceSchema, db: Session = Depends(get_db)
+    instance: InferenceInstanceSchema,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
 ):
     """
     Create a new inference instance.
@@ -254,6 +295,8 @@ async def create_inference_instance(
             healthEndpoint=instance.healthEndpoint or "",
             metricsEndpoint=instance.metricsEndpoint or "",
             config=db_config,
+            org_id=user.org_id,
+            owner_id=user.id,
         )
 
         db.add(db_config)
@@ -270,8 +313,35 @@ async def create_inference_instance(
         controller = get_controller(engine.name)
 
         try:
+            credential_value = generate_secret(seed=str(db_instance.id))
+            store_credential(
+                db,
+                controller.namespace,
+                CREDENTIAL_KIND,
+                db_instance.id,
+                credential_value,
+            )
+        except Exception as e:
+            db.delete(db_instance)
+            db.delete(db_config)
+            db.commit()
+            logger.exception(f"Failed to store credential: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to store credential: {str(e)}",
+            )
+
+        try:
             await controller.install(full_instance, engine_chart)
         except Exception as e:
+            try:
+                delete_credential(
+                    db, controller.namespace, CREDENTIAL_KIND, db_instance.id
+                )
+            except Exception:
+                # A stray Secret must not stop the row from being cleaned
+                # up: the install already failed.
+                logger.exception("Error deleting credential")
             db.delete(db_instance)
             db.delete(db_config)
             db.commit()
@@ -330,6 +400,7 @@ async def update_inference_instance(
     id: uuid.UUID,
     updated_instance: InferenceInstanceSchema,
     db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Update an existing inference instance.
@@ -355,6 +426,7 @@ async def update_inference_instance(
             raise HTTPException(
                 status_code=404, detail="Inference instance not found"
             )
+        authorize_write(user, db_instance, "inference instance")
 
         for key, value in updated_instance.model_dump(
             exclude_unset=True
@@ -457,7 +529,9 @@ def update_lora_adapters_in_inference_instance_config(
 
 @router.delete("/v1alpha1/inferenceInstance/{id}")
 async def delete_inference_instance(
-    id: uuid.UUID, db: Session = Depends(get_db)
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Delete an inference instance.
@@ -482,6 +556,7 @@ async def delete_inference_instance(
             raise HTTPException(
                 status_code=404, detail="Inference instance not found"
             )
+        authorize_write(user, db_instance, "inference instance")
 
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
         controller = get_controller(full_instance.engine.name)
@@ -494,6 +569,13 @@ async def delete_inference_instance(
                 status_code=500,
                 detail=f"Failed to remove Helm chart: {str(e)}",
             )
+
+        try:
+            delete_credential(db, controller.namespace, CREDENTIAL_KIND, id)
+        except Exception as e:
+            # A stray Secret must not block deleting the row: the Helm
+            # release is already gone.
+            logger.exception(f"Error deleting credential: {e}")
 
         try:
             instance_dashboards = (
@@ -567,7 +649,7 @@ async def create_instance_dashboards(
                 id=genid.uuid4(),
                 inference_instance_id=instance.id,
                 engine_chart_dashboard_id=chart_dashboard.id,
-                org_id=org_id,
+                org_id=GRAFANA_ORG_ID,
                 query_params=json.dumps(query_params),
             )
             db.add(inference_instance_dashboard)
@@ -654,6 +736,13 @@ def update_instance_endpoints(instanceId: uuid.UUID, db: Session):
 
     controller = get_controller(engine.name)
     service_name = controller.get_service_name(instance, engine_chart)
+
+    if gateway_settings() is not None:
+        # The hostname is deterministic, so the endpoint is set as soon as
+        # the gateway is configured, without waiting for the Service.
+        instance.endpoint = instance_url("inf", instance.id)
+        db.commit()
+        return
 
     try:
         endpoint = get_service_endpoint(controller.namespace, service_name)

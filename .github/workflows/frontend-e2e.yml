@@ -66,6 +66,8 @@ jobs:
         working-directory: frontend
         env:
           E2E_START_SERVERS: "1"
+          # The fast tier has no Keycloak; the backend accepts this only with TEST_MODE.
+          AUTH_MODE: disabled
         run: pnpm e2e
 
       - name: Upload the Playwright report

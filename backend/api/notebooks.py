@@ -6,11 +6,14 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from urllib3.exceptions import MaxRetryError
 
+from auth.current_user import CurrentUser, get_current_user, require_writer
+from auth.policy import authorize_owner, authorize_write, owner_scope
 from controller.notebooks_controller import NotebooksController
 from db.database import get_db
 from logger import setup_logger
 from models.notebook import Notebook
 from schemas.notebook import NotebookCreateSchema, NotebookInstanceSchema
+from utils.gateway import gateway_settings, instance_url
 from utils.kubernetes_utils import (
     get_pod_status_and_readiness,
     get_service_endpoint,
@@ -43,7 +46,9 @@ def filter_notebook_fields(data: dict) -> dict:
 
 @router.post("/v1alpha1/notebooks", response_model=NotebookInstanceSchema)
 async def create_notebook(
-    notebook: NotebookCreateSchema, db: Session = Depends(get_db)
+    notebook: NotebookCreateSchema,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
 ):
     """
     Create a new notebook instance.
@@ -73,7 +78,9 @@ async def create_notebook(
         )
 
     notebook_data = filter_notebook_fields(notebook.model_dump())
-    db_notebook = Notebook(**notebook_data)
+    db_notebook = Notebook(
+        **notebook_data, org_id=user.org_id, owner_id=user.id
+    )
     controller = NotebooksController()
     try:
         await controller.install(db_notebook)
@@ -87,9 +94,12 @@ async def create_notebook(
 
 
 @router.get("/v1alpha1/notebooks", response_model=list[NotebookInstanceSchema])
-async def list_notebooks(db: Session = Depends(get_db)):
+async def list_notebooks(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
-    List all notebook instances.
+    List the notebook instances of the caller's organization.
 
     Returns:
         List[NotebookInstanceSchema]: A list of all notebook instances.
@@ -97,7 +107,7 @@ async def list_notebooks(db: Session = Depends(get_db)):
     Raises:
         HTTPException: If there's an error retrieving the notebook instances.
     """
-    notebooks = db.query(Notebook).all()
+    notebooks = db.query(Notebook).filter(owner_scope(Notebook, user)).all()
     try:
         for notebook in notebooks:
             notebook.ready, notebook.status = check_pod_status_and_readiness(
@@ -112,7 +122,11 @@ async def list_notebooks(db: Session = Depends(get_db)):
 
 
 @router.get("/v1alpha1/notebooks/{id}", response_model=NotebookInstanceSchema)
-async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
+async def get_notebook(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Retrieve a specific notebook instance by ID.
 
@@ -128,6 +142,7 @@ async def get_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
     notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
+    authorize_owner(user, notebook, "notebook")
     try:
         notebook.ready, notebook.status = check_pod_status_and_readiness(
             notebook
@@ -145,6 +160,7 @@ async def update_notebook(
     id: uuid.UUID,
     notebook: NotebookInstanceSchema,
     db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """
     Update an existing notebook instance.
@@ -162,6 +178,7 @@ async def update_notebook(
     db_notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not db_notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
+    authorize_write(user, db_notebook, "notebook")
     for key, value in filter_notebook_fields(notebook.model_dump()).items():
         setattr(db_notebook, key, value)
     db.commit()
@@ -172,7 +189,11 @@ async def update_notebook(
 
 
 @router.delete("/v1alpha1/notebooks/{id}")
-async def delete_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
+async def delete_notebook(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
     """
     Delete a notebook instance.
 
@@ -188,6 +209,7 @@ async def delete_notebook(id: uuid.UUID, db: Session = Depends(get_db)):
     db_notebook = db.query(Notebook).filter(Notebook.id == id).first()
     if not db_notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
+    authorize_write(user, db_notebook, "notebook")
     controller = NotebooksController()
     await controller.uninstall(db_notebook)
     db.delete(db_notebook)
@@ -243,6 +265,20 @@ def update_instance_endpoints(instance: Notebook, db: Session):
     logger.info(f"Updating endpoints for instance {instance.id}")
     controller = NotebooksController()
     service_name = controller.get_service_name(instance)
+
+    if gateway_settings() is not None:
+        # The hostname is deterministic, so the endpoint is set as soon as
+        # the gateway is configured, without waiting for the Service.
+        if instance.type == "jupyter":
+            instance.endpoint = instance_url(
+                "nb",
+                instance.id,
+                f"/notebook/{instance.namespace}/{service_name}/lab",
+            )
+        else:
+            instance.endpoint = instance_url("nb", instance.id)
+        db.commit()
+        return
 
     try:
         endpoint = get_service_endpoint(instance.namespace, service_name)

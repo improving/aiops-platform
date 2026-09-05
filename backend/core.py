@@ -8,6 +8,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from api import finetune
+from api.authz import router as authz_router
+from api.credentials import router as credentials_router
 from api.engines import router as engines_router
 from api.hosts import router as hosts_router
 from api.inference_instance import router as inference_instance_router
@@ -19,6 +21,8 @@ from api.notebooks import update_all_notebook_instance_endpoints
 from api.vectordb import router as vectordb_router
 from api.vectordb_instance import router as vectordb_instance_router
 from api.vectordb_instance import update_all_vectordb_instance_endpoints
+from auth.current_user import CurrentUser, require_admin
+from auth.settings import MODE_DISABLED, check_auth_settings
 from db.database import get_db, get_db_direct, get_engine
 from db.db import init_db, refresh_db, reload_data
 from logger import setup_logger
@@ -71,6 +75,14 @@ def build_scheduler() -> AsyncIOScheduler:
 
 
 def create_app(setup_db: bool = True):
+    # Fail at startup on a configuration that cannot work; the JWKS itself
+    # is fetched lazily on the first request.
+    auth = check_auth_settings(is_test_mode())
+    if auth.mode == MODE_DISABLED:
+        logger.warning(
+            "AUTH_MODE=disabled: every request runs as the dev admin"
+        )
+
     engine = get_engine()
     db = get_db_direct()
 
@@ -109,15 +121,22 @@ def create_app(setup_db: bool = True):
     _app.include_router(notebooks_router, tags=["notebooks"])
     _app.include_router(model_adapters_router, tags=["model_adapters"])
     _app.include_router(finetune.router, tags=["finetune"])
+    _app.include_router(authz_router, tags=["authz"])
+    _app.include_router(credentials_router, tags=["credentials"])
 
     @_app.post("/reload-data", tags=["utility"])
-    async def reload_data_endpoint(db: Session = Depends(get_db)):
+    async def reload_data_endpoint(
+        db: Session = Depends(get_db),
+        user: CurrentUser = Depends(require_admin),
+    ):
         reload_data(db)
         return {"message": "Data reloaded successfully"}
 
     @_app.post("/refresh-db", tags=["utility"])
     async def refresh_db_endpoint(
-        db: Session = Depends(get_db), engine: Engine = Depends(get_engine)
+        db: Session = Depends(get_db),
+        engine: Engine = Depends(get_engine),
+        user: CurrentUser = Depends(require_admin),
     ):
         refresh_db(db, engine)
         return {"message": "Data refreshed successfully"}
