@@ -751,6 +751,8 @@ async def create_instance_dashboards(
             query_params = {
                 "var-namespace": namespace,
                 "var-service": service_name,
+                # The LiteLLM dashboard filters on the target name.
+                "var-target": instance_model_name(instance.id),
             }
             inference_instance_dashboard = DBInferenceInstanceDashboards(
                 id=genid.uuid4(),

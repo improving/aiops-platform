@@ -403,6 +403,17 @@ def test_create_registers_the_instance_in_litellm(inference_env):
         created["litellm_model_name"]
         == f"inst-{created['id'].replace('-', '')[-8:]}"
     )
+    # The Ollama chart rows point at the LiteLLM dashboard, filtered on
+    # the target name.
+    dashboards = client.get(
+        f"/v1alpha1/inferenceInstance/{created['id']}/dashboards"
+    ).json()
+    assert dashboards, "the Ollama llm chart has dashboard rows"
+    assert {d["dashboard_id"] for d in dashboards} == {"aiops-litellm"}
+    assert all(
+        d["query_params"]["var-target"] == created["litellm_model_name"]
+        for d in dashboards
+    )
     name, params, info = litellm.register_model.call_args.args
     assert name == created["litellm_model_name"]
     assert params["model"] == "openai/qwen3:0.6b"

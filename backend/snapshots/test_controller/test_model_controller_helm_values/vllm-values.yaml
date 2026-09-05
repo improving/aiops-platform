@@ -13,7 +13,7 @@ env:
   valueFrom:
     secretKeyRef:
       key: api-key
-      name: inf-0000003d-credentials
+      name: inf-0000005a-credentials
 - name: HF_HUB_OFFLINE
   value: '1'
 - name: HF_HUB_CACHE
