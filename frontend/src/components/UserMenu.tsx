@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut, useSession } from "next-auth/react";
+import { clearChatHistory } from "@/lib/chatStorage";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ export function UserMenu() {
   const onSignOut = async () => {
     // Drop the Auth.js cookie first, then end the Keycloak SSO session;
     // Keycloak sends the browser back to /login.
+    clearChatHistory();
     await signOut({ redirect: false });
     window.location.assign(session.endSessionUrl ?? "/login");
   };

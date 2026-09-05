@@ -64,7 +64,7 @@ pnpm e2e:ui                               # Playwright UI mode
   redirect. `src/components/chat/ChatPanel.tsx` (`/chat`, `?target=<name>` preselects) fetches the targets, keeps
   those with `capability === "chat"` and `ready`, uses `useChat` with a `DefaultChatTransport` whose
   `prepareSendMessagesRequest` sends the target name as `model`, and keeps one conversation per target in
-  `localStorage` (`aiops.chat.<target name>`). The endpoint details page links to it with a "Chat" button using
+  `localStorage` (per user and target, `src/lib/chatStorage.ts`, cleared on sign-out; `aiops.chat.<target name>`). The endpoint details page links to it with a "Chat" button using
   `inferenceInstance.litellm_model_name` (falling back to `inst-<id8>` derived from the instance id).
   Since Phase 2b, `ChatTarget.provider_id` (`null` for instances and the mock target) tells the two apart;
   `ChatPanel.tsx` splits the target `Select` into two `SelectGroup`s, "Deployed" and "Hosted".

@@ -19,35 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { modelService } from "@/services/modelService";
+import { loadMessages, saveMessages } from "@/lib/chatStorage";
 import type { ChatTarget } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
-
-const STORAGE_PREFIX = "aiops.chat.";
-
-function loadMessages(target: string): UIMessage[] {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_PREFIX + target);
-    return raw ? (JSON.parse(raw) as UIMessage[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMessages(target: string, messages: UIMessage[]) {
-  try {
-    if (messages.length === 0) {
-      window.localStorage.removeItem(STORAGE_PREFIX + target);
-    } else {
-      window.localStorage.setItem(
-        STORAGE_PREFIX + target,
-        JSON.stringify(messages)
-      );
-    }
-  } catch {
-    // Storage can be unavailable (private mode); the chat still works.
-  }
-}
 
 function messageText(message: UIMessage): string {
   return message.parts
@@ -64,7 +39,7 @@ function messageReasoning(message: UIMessage): string {
     .join("");
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ userKey }: { userKey: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -116,17 +91,17 @@ export default function ChatPanel() {
   );
 
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
-    id: target || "no-target",
+    id: `${userKey}:${target || "no-target"}`,
     transport,
   });
 
   // History per target, in this browser only (design section 3.4).
   useEffect(() => {
-    if (target) setMessages(loadMessages(target));
-  }, [target, setMessages]);
+    if (target) setMessages(loadMessages(userKey, target));
+  }, [userKey, target, setMessages]);
   useEffect(() => {
-    if (target && status === "ready") saveMessages(target, messages);
-  }, [target, messages, status]);
+    if (target && status === "ready") saveMessages(userKey, target, messages);
+  }, [userKey, target, messages, status]);
 
   const busy = status === "submitted" || status === "streaming";
   const canSend = !!selected && !busy && input.trim().length > 0;
@@ -145,7 +120,7 @@ export default function ChatPanel() {
 
   const clear = () => {
     setMessages([]);
-    if (target) saveMessages(target, []);
+    if (target) saveMessages(userKey, target, []);
   };
 
   if (loaded && targets.length === 0) {
