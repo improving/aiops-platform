@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -151,13 +152,18 @@ export default function ProvidersPage({ admin }: ProvidersPageProps) {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Hosted providers</h2>
-          {admin ? (
-            <Button onClick={() => setAddOpen(true)}>Add provider</Button>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Only organization admins can add or change providers.
-            </p>
-          )}
+          <div className="flex items-center gap-4">
+            {admin ? (
+              <Button onClick={() => setAddOpen(true)}>Add provider</Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Only organization admins can add or change providers.
+              </p>
+            )}
+            <Button asChild variant="outline">
+              <Link href="/usage">Usage</Link>
+            </Button>
+          </div>
         </div>
 
         {providers.length === 0 ? (

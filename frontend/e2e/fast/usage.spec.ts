@@ -1,0 +1,50 @@
+import { test, expect } from "../fixtures";
+import { UsagePage } from "../pages/usage";
+
+// The TEST_MODE backend runs with AIOPS_CHAT_MOCK (playwright.config), which
+// serves three canned spend-log rows for "inst-mock": two for the caller
+// (dev@example.test, who is the dev admin in AUTH_MODE=disabled) and one for
+// "someone@example.com" (backend/api/organizations.py _mock_usage_rows).
+
+test.describe("usage page", () => {
+  test("shows totals, by-target and by-user tables from the mock rows", async ({
+    page,
+  }) => {
+    const usage = new UsagePage(page);
+    await usage.open();
+    await usage.expectHeading("Usage");
+
+    await expect(usage.requestsTotal).toHaveText("3");
+    await expect(usage.promptTokensTotal).toHaveText("40");
+    await expect(usage.completionTokensTotal).toHaveText("80");
+    await expect(usage.spendTotal).toHaveText("$0.06");
+
+    const targetRows = usage.byTargetTable.locator("tbody tr");
+    await expect(targetRows).toHaveCount(1);
+    await expect(targetRows.first()).toContainText("inst-mock");
+
+    const userRows = usage.byUserTable.locator("tbody tr");
+    await expect(userRows).toHaveCount(3);
+    await expect(usage.byUserTable).toContainText("dev@example.test");
+    await expect(usage.byUserTable).toContainText("someone@example.com");
+  });
+
+  test("switching the period reloads the tables", async ({ page }) => {
+    const usage = new UsagePage(page);
+    await usage.open();
+    await expect(usage.requestsTotal).toHaveText("3");
+
+    await usage.selectPeriod("Last 7 days");
+    await expect(usage.periodSelect).toContainText("Last 7 days");
+    // Mock mode serves the same three rows regardless of `days`.
+    await expect(usage.requestsTotal).toHaveText("3");
+  });
+
+  test("the header links to the Usage page", async ({ page }) => {
+    const usage = new UsagePage(page);
+    await usage.goto("/");
+    await usage.navLink("Usage").click();
+    await expect(page).toHaveURL(/\/usage$/);
+    await usage.expectHeading("Usage");
+  });
+});

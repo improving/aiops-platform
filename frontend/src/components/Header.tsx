@@ -16,6 +16,7 @@ import { UserMenu } from "./UserMenu";
 import { AUTH_DISABLED } from "@/constants";
 import { cn } from "@/lib/utils";
 import {
+  BarChartIcon,
   ChatBubbleIcon,
   CodeIcon,
   CubeIcon,
@@ -60,6 +61,11 @@ const menuItems = [
     label: "Providers",
     icon: <IdCardIcon className="mr-2 h-4 w-4" />,
     href: "/providers",
+  },
+  {
+    label: "Usage",
+    icon: <BarChartIcon className="mr-2 h-4 w-4" />,
+    href: "/usage",
   },
   {
     label: "Vector Databases",

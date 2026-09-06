@@ -71,6 +71,37 @@ interface OrgSpend {
   budget_usd: number | null;
 }
 
+// GET /v1alpha1/organizations/current/usage: LiteLLM spend logs aggregated
+// per target and per (user, target, day) (backend/api/organizations.py
+// current_org_usage). `user` is null for an admin-visible unattributed row.
+interface UsageTotals {
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  spend: number;
+}
+
+interface UsageByTarget extends UsageTotals {
+  target: string;
+  label: string;
+}
+
+interface UsageRow extends UsageByTarget {
+  user: string | null;
+  day: string;
+}
+
+interface OrgUsage {
+  days: number;
+  since: string;
+  until: string;
+  scope: "user" | "organization";
+  capped: boolean;
+  totals: UsageTotals;
+  by_target: UsageByTarget[];
+  rows: UsageRow[];
+}
+
 interface InferenceInstanceConfig {
   id: string;
   lora_adapters: Adapter[];
@@ -276,6 +307,10 @@ export type {
   ProviderModel,
   DiscoveredModel,
   OrgSpend,
+  OrgUsage,
+  UsageTotals,
+  UsageByTarget,
+  UsageRow,
   InferenceInstance,
   InferenceInstanceDashboard,
   Engine,

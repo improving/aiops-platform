@@ -278,6 +278,9 @@ export default function InferenceEndpointDetailsPage({
                       </Link>
                     </Button>
                   )}
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/usage">Usage</Link>
+                  </Button>
                 </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">

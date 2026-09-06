@@ -16,6 +16,7 @@ const pages = [
   { path: "/notebooks/new", heading: "Create New Notebook" },
   { path: "/chat", heading: "Chat" },
   { path: "/providers", heading: "Providers" },
+  { path: "/usage", heading: "Usage" },
 ];
 
 test.describe("header navigation", () => {

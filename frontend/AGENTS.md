@@ -80,6 +80,14 @@ pnpm e2e:ui                               # Playwright UI mode
   The "Monthly budget (USD)" field is a plain `type="text"` input (not `type="number"`), so it keeps the
   `textbox` accessible role the fast tier targets; the same is true of nothing else here, but keep it in mind
   when adding a numeric field a Playwright spec will locate by role.
+- Usage: `/usage` (`UsagePage.tsx`, `src/services/usageService.ts`) reads
+  `GET /v1alpha1/organizations/current/usage?days=` (a "Period" combobox, "Last 7 days"/"Last 30 days") and
+  renders four totals cards (Requests, Input tokens, Output tokens, Spend USD), a "By target" table and a "By
+  user and day" table (both located by their `<caption>`, the accessible table name); a member sees the note
+  "You see your own usage" when the response's `scope` is `"user"` (an admin's is `"organization"`), and a 503
+  or 502 from the endpoint replaces the tables with a card showing the detail. No session is needed on the
+  page: the backend scopes the response from the caller's bearer token. Linked from the header (after
+  "Providers"), the Providers page, and every inference endpoint's details page.
 - Forms use react-hook-form with zod (`@hookform/resolvers`). Gate submit buttons on reported errors, not on
   `formState.isValid`, which does not turn true reliably with coerced number fields. The notebook name rule
   mirrors the backend: DNS-1123 label, max 32 characters.
