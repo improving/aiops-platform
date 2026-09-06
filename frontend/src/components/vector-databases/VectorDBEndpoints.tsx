@@ -138,7 +138,7 @@ export default function VectorDBEndpoints() {
                       </a>
                       {instance.endpoint && (
                         <span className="ml-2">
-                          <CopyButton label="Endpoint" text={instance.endpoint} />
+                          <CopyButton label="endpoint" text={instance.endpoint} />
                         </span>
                       )}
                     </span>

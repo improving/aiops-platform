@@ -108,7 +108,7 @@ export default function UsagePage() {
 
         <Button
           variant="outline"
-          disabled={!usage || usage.rows.length === 0}
+          disabled={loading || !usage || usage.rows.length === 0}
           onClick={() => {
             if (!usage) return;
             const label =

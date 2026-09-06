@@ -104,9 +104,10 @@ pnpm e2e:ui                               # Playwright UI mode
   `AppShell.waitForLoaded()`. Never render the string "Loading...".
 - Drill-down pages pass `breadcrumbs` (`Crumb[]` from `src/components/Breadcrumbs.tsx`) to `Dashboard`;
   list pages pass none. The trail always starts at Home.
-- Copy actions use `src/components/CopyButton.tsx` (aria-label "Copy <label>", toast "Copied");
-  code examples use `src/components/CodeSnippet.tsx` (`<pre aria-label>` plus a copy button). Do not inline
-  `navigator.clipboard` calls in feature components.
+- Copy actions use `src/components/CopyButton.tsx` (aria-label `Copy ${label}`, label passed through
+  unchanged, no lowercasing, so callers pass a sentence-cased label such as "API key" or "notebook URL");
+  code examples use `src/components/CodeSnippet.tsx` (`<pre role="group" aria-label>` plus a copy button).
+  Do not inline `navigator.clipboard` calls in feature components.
 - `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) mirrors the model instance detail page:
   status, endpoints with copy, a curl example, credential reveal and delete; the list card title links to it.
 - Card lists (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`) share `src/components/ListControls.tsx`:

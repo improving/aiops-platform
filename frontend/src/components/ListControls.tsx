@@ -65,7 +65,7 @@ export function ListControls({ state, onChange }: { state: ListState; onChange: 
 }
 
 export function ShowMore({ hasMore, onClick, shown, total }: { hasMore: boolean; onClick: () => void; shown: number; total: number }) {
-  if (total === 0) return null;
+  if (total === 0 || !hasMore) return null;
   return (
     <div className="mt-6 flex justify-center">
       <Button variant="outline" onClick={onClick} disabled={!hasMore}>

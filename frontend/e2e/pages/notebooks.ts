@@ -9,7 +9,7 @@ export class NotebookListPage extends AppShell {
   constructor(page: Page) {
     super(page);
     this.cards = page.locator('main [data-slot="card"]');
-    this.emptyState = page.getByText("No notebooks available.");
+    this.emptyState = page.getByText("No notebooks yet.");
     this.newNotebookLink = page.getByRole("link", { name: "New Notebook" });
   }
 

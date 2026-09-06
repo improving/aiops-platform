@@ -214,7 +214,7 @@ export default function InferenceEndpoints() {
                         {endpoint.endpoint && (
                           <span className="ml-2">
                             <CopyButton
-                              label="Endpoint"
+                              label="endpoint"
                               text={endpoint.endpoint}
                             />
                           </span>

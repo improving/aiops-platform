@@ -170,7 +170,7 @@ export default function InferenceEndpointDetailsPage({
   }
 
   if (!inferenceInstance) {
-    return <div>No inference instance found</div>;
+    return <div>Model instance not found</div>;
   }
 
   return (
@@ -232,7 +232,7 @@ export default function InferenceEndpointDetailsPage({
                   {inferenceInstance.endpoint && (
                     <span className="ml-2">
                       <CopyButton
-                        label="Endpoint"
+                        label="endpoint"
                         text={inferenceInstance.endpoint}
                       />
                     </span>
@@ -515,7 +515,7 @@ print(client.chat.completions.create(
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Inference endpoint API key</DialogTitle>
+            <DialogTitle>Model instance API key</DialogTitle>
           </DialogHeader>
           {credential?.value ? (
             <div className="grid gap-4">

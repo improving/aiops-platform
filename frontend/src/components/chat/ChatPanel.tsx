@@ -31,7 +31,7 @@ function describeChatError(message: string): string {
     return "The instance is still starting. Wait until it is Ready and retry.";
   }
   if (/not reach|502|Connection error/.test(text)) {
-    return "The model did not answer: the instance or the provider is unreachable. Check the endpoint page and retry.";
+    return "The model did not answer: the instance or the provider is unreachable. Check the instance page and retry.";
   }
   if (/interrupted|terminated|network|Failed to process/.test(text)) {
     return "The answer stream was interrupted before it finished. Retry; a cold model needs a moment to load.";

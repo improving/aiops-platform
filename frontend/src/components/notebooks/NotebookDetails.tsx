@@ -78,7 +78,7 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
               <Label>Endpoint:</Label>
               <span className="flex items-center gap-2">
                 <span className="break-all">{notebook.endpoint}</span>
-                <CopyButton label="Notebook URL" text={notebook.endpoint} />
+                <CopyButton label="notebook URL" text={notebook.endpoint} />
               </span>
             </div>
           )}

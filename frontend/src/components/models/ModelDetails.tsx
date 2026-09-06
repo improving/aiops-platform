@@ -235,7 +235,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
                 <Label>Model ID</Label>
                 <span className="flex items-center gap-2">
                   {model.modelId}
-                  <CopyButton label="Model id" text={model.modelId} size="sm" />
+                  <CopyButton label="model id" text={model.modelId} size="sm" />
                 </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">

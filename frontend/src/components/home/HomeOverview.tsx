@@ -11,18 +11,24 @@ import { notebookService } from "@/services/notebookService";
 import { ChatBubbleIcon, PlusIcon, RocketIcon } from "@radix-ui/react-icons";
 
 type Stat = { ready: number; total: number };
-type Stats = { instances: Stat; vectordbs: Stat; notebooks: Stat; chat: Stat };
+type Stats = { instances: Stat | null; vectordbs: Stat | null; notebooks: Stat | null; chat: Stat | null };
 
-function count<T extends { ready?: boolean }>(items: T[]): Stat {
-  return { ready: items.filter((i) => i.ready).length, total: items.length };
+function count<T extends { ready?: boolean }>(items: T[] | null): Stat | null {
+  return items === null ? null : { ready: items.filter((i) => i.ready).length, total: items.length };
 }
 
-function StatTile({ id, title, stat, href }: { id: string; title: string; stat: Stat; href: string }) {
+function StatTile({ id, title, stat, href }: { id: string; title: string; stat: Stat | null; href: string }) {
   return (
     <Link href={href} className="rounded-xl border p-4 hover:bg-accent" data-testid={`home-stat-${id}`}>
       <p className="text-sm text-muted-foreground">{title}</p>
-      <p className="text-2xl font-bold">{stat.ready} ready</p>
-      {id !== "chat" && <p className="text-sm text-muted-foreground">{stat.total} total</p>}
+      {stat === null ? (
+        <p className="text-2xl font-bold">unavailable</p>
+      ) : (
+        <>
+          <p className="text-2xl font-bold">{stat.ready} ready</p>
+          {id !== "chat" && <p className="text-sm text-muted-foreground">{stat.total} total</p>}
+        </>
+      )}
     </Link>
   );
 }
@@ -38,13 +44,14 @@ export function HomeOverview() {
       notebookService.getNotebooks(),
       modelService.getChatTargets(),
     ]).then(([inst, vdb, nb, targets]) => {
-      const list = <T,>(r: PromiseSettledResult<T[]>) => (r.status === "fulfilled" ? r.value : []);
-      const chat = list(targets).filter((t) => t.capability === "chat");
+      const list = <T,>(r: PromiseSettledResult<T[]>) => (r.status === "fulfilled" ? r.value : null);
+      const targetsList = list(targets);
+      const chat = targetsList === null ? null : targetsList.filter((t) => t.capability === "chat");
       setStats({
         instances: count(list(inst)),
         vectordbs: count(list(vdb)),
         notebooks: count(list(nb)),
-        chat: { ready: chat.filter((t) => t.ready).length, total: chat.length },
+        chat: chat === null ? null : { ready: chat.filter((t) => t.ready).length, total: chat.length },
       });
     });
   }, []);

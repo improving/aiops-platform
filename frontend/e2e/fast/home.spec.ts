@@ -1,4 +1,4 @@
-import { test, expect } from "../fixtures";
+import { test, expect, FAILED_RESOURCE } from "../fixtures";
 import { HomePage } from "../pages/home";
 
 const cards = [
@@ -94,4 +94,21 @@ test.describe("home page", () => {
       });
     }
   }
+});
+
+test.describe("home page with a failing list", () => {
+  test.use({ allowedConsoleErrors: [FAILED_RESOURCE] });
+
+  test("shows unavailable on a tile whose list failed, without blanking the rest", async ({
+    page,
+  }) => {
+    await page.route("**/api/v1alpha1/notebooks", (route) =>
+      route.fulfill({ status: 503, json: { detail: "down" } })
+    );
+    const home = new HomePage(page);
+    await home.open();
+    await home.waitForLoaded();
+    await expect(home.stat("notebooks")).toContainText("unavailable");
+    await expect(home.stat("instances")).toContainText("0 total");
+  });
 });

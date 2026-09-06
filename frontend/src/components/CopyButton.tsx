@@ -32,7 +32,7 @@ export function CopyButton({
       type="button"
       variant="outline"
       size={size}
-      aria-label={`Copy ${label.toLowerCase()}`}
+      aria-label={`Copy ${label}`}
       onClick={copy}
       icon={<ClipboardCopyIcon className="w-4 h-4" />}
     />

@@ -22,5 +22,5 @@ export function downloadTextFile(filename: string, text: string, mime = "text/cs
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

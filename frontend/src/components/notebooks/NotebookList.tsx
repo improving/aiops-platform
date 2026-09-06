@@ -70,7 +70,7 @@ export default function NotebookList() {
     <>
       {notebooks.length === 0 ? (
         <div className="text-center">
-          <p className="mb-4">No notebooks available.</p>
+          <p className="mb-4">No notebooks yet.</p>
           <Link href="/notebooks/new">
             <Button icon={<RocketIcon className="mr-2 w-4 h-4" />}>
               New Notebook
@@ -154,7 +154,7 @@ export default function NotebookList() {
                       </Button>
                       {notebook.endpoint && (
                         <CopyButton
-                          label="Notebook URL"
+                          label="notebook URL"
                           text={notebook.endpoint}
                         />
                       )}

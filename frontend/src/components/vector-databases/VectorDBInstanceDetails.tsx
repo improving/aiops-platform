@@ -70,7 +70,7 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
             <span className={instance.ready ? "text-green-500" : "text-red-500"}>
               {instance.endpoint || "N/A"}
             </span>
-            {instance.endpoint && <CopyButton label="Endpoint" text={instance.endpoint} />}
+            {instance.endpoint && <CopyButton label="endpoint" text={instance.endpoint} />}
           </Row>
           <Row label="API endpoint">
             {instance.api_endpoint || "N/A"}

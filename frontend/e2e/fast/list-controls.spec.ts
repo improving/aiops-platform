@@ -1,4 +1,4 @@
-import { test, expect } from "../fixtures";
+import { test, expect, FAILED_RESOURCE } from "../fixtures";
 import { VectorDBEndpointsPage } from "../pages/vector-db-endpoints";
 
 function instance(i: number, ready: boolean) {
@@ -16,6 +16,10 @@ function instance(i: number, ready: boolean) {
 const MOCK = Array.from({ length: 15 }, (_, i) => instance(i, i % 3 !== 0));
 
 test.describe("list controls", () => {
+  // The card-title click-through below opens the detail page for a mocked
+  // id the fast backend does not know, so that fetch 404s.
+  test.use({ allowedConsoleErrors: [FAILED_RESOURCE] });
+
   test.beforeEach(async ({ page }) => {
     await page.route("**/api/v1alpha1/vectordb_instances", (route) =>
       route.fulfill({ json: MOCK })
@@ -39,5 +43,11 @@ test.describe("list controls", () => {
     await expect(list.cards.first()).toContainText("db-14");
     await list.sortBy("Name A-Z");
     await expect(list.cards.first()).toContainText("db-00");
+
+    await list.detailsLink(list.cards.first()).click();
+    await expect(page).toHaveURL(
+      /\/vector-databases\/endpoints\/00000000-0000-0000-0000-000000000000$/
+    );
+    await list.expectHeading("Vector Database Instance Details");
   });
 });
