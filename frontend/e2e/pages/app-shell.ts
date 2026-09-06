@@ -117,6 +117,15 @@ export class AppShell {
     return this.page.getByRole("dialog");
   }
 
+  /** Every skeleton placeholder; wait for count 0 before asserting data. */
+  loading(): Locator {
+    return this.page.getByRole("status", { name: "Loading", exact: true });
+  }
+
+  async waitForLoaded() {
+    await expect(this.loading()).toHaveCount(0);
+  }
+
   /**
    * Confirm the shared DeleteButton dialog. `timeout` bounds how long the
    * delete call may take (Helm uninstalls are slow).

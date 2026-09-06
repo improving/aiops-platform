@@ -18,6 +18,7 @@ import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { ShowCredentialButton } from "@/components/vector-databases/ShowCredentialButton";
+import { CardGridSkeleton } from "@/components/LoadingState";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
@@ -58,7 +59,7 @@ export default function VectorDBEndpoints() {
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <CardGridSkeleton />;
   }
 
   return (

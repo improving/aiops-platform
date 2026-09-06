@@ -12,6 +12,7 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
+import { DetailSkeleton } from "@/components/LoadingState";
 
 interface NotebookDetailsProps {
   notebookId: string;
@@ -52,7 +53,7 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   if (!notebook) {

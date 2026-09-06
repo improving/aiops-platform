@@ -20,7 +20,7 @@ test.describe("mobile layout", () => {
       const shell = new AppShell(page);
       await shell.goto(path);
       await expect(shell.heading).toBeVisible();
-      await expect(page.getByText("Loading...")).toHaveCount(0);
+      await shell.waitForLoaded();
       const overflow = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         clientWidth: document.documentElement.clientWidth,

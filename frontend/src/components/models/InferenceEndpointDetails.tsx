@@ -43,6 +43,7 @@ import {
 import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "../RefreshButton";
+import { DetailSkeleton } from "@/components/LoadingState";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -163,7 +164,7 @@ export default function InferenceEndpointDetailsPage({
   }, [selectedTimeRange]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   if (!inferenceInstance) {

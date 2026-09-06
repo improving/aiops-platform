@@ -9,6 +9,7 @@ import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
 import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { CardGridSkeleton } from "@/components/LoadingState";
 
 export default function VectorDBCatalog() {
   const [vectorDBs, setVectorDBs] = useState<VectorDBSchema[]>([]);
@@ -39,7 +40,7 @@ export default function VectorDBCatalog() {
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <CardGridSkeleton />;
   }
 
   return (

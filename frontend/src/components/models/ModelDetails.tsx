@@ -40,6 +40,7 @@ import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { DetailSkeleton } from "@/components/LoadingState";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -201,7 +202,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <DetailSkeleton />;
   }
 
   if (error) {

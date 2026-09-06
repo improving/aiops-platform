@@ -18,6 +18,7 @@ import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { GetModelIcon } from "@/lib/utils";
+import { CardGridSkeleton } from "@/components/LoadingState";
 import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 
@@ -74,7 +75,7 @@ export default function InferenceEndpoints() {
   });
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <CardGridSkeleton />;
   }
 
   return (

@@ -97,7 +97,7 @@ test.describe("every page renders without console errors", () => {
       await shell.expectHeading(heading);
       // Wait for the client-side fetches to render, then give late errors a
       // moment to surface before the console guard runs.
-      await expect(page.getByText("Loading...")).toHaveCount(0);
+      await shell.waitForLoaded();
       await page.waitForTimeout(500);
       expect(consoleErrors).toEqual([]);
     });

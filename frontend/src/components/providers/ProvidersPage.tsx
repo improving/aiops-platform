@@ -20,6 +20,7 @@ import type { Provider } from "@/types/models";
 import { DeleteButton } from "@/components/DeleteButton";
 import { AddProviderDialog } from "@/components/providers/AddProviderDialog";
 import { BudgetCard } from "@/components/providers/BudgetCard";
+import { TableSkeleton } from "@/components/LoadingState";
 
 const CAPABILITY_LABEL: Record<string, string> = {
   chat: "Chat",
@@ -140,7 +141,7 @@ export default function ProvidersPage({ admin }: ProvidersPageProps) {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <TableSkeleton rows={6} columns={5} />;
   }
 
   const columnCount = admin ? 6 : 5;

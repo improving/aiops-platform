@@ -99,6 +99,9 @@ pnpm e2e:ui                               # Playwright UI mode
   deprecated upstream but still used.
 - `Header.tsx` builds the navigation from one `menuItems` array shared with `MobileNav.tsx` (a `Sheet` below `md`).
   Top-level links use `NavigationMenuLink asChild` with `flex-row`, never `Link legacyBehavior`.
+- Loading placeholders come from `src/components/LoadingState.tsx` (`CardGridSkeleton`, `DetailSkeleton`,
+  `TableSkeleton`), each wrapped in `role="status" aria-label="Loading"`; specs wait with
+  `AppShell.waitForLoaded()`. Never render the string "Loading...".
 
 ## Authentication
 

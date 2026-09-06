@@ -27,6 +27,7 @@ import AddOllamaModelDialog from "@/components/registry/AddOllamaModelDialog";
 import AddHostedModelDialog from "@/components/registry/AddHostedModelDialog";
 import AddManuallyDialog from "@/components/registry/AddManuallyDialog";
 import EditEntryDialog from "@/components/registry/EditEntryDialog";
+import { TableSkeleton } from "@/components/LoadingState";
 
 const STATUS_BADGE: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800",
@@ -114,7 +115,7 @@ export default function RegistryPage({ admin }: RegistryPageProps) {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <TableSkeleton rows={6} columns={5} />;
   }
 
   return (

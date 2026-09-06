@@ -1,7 +1,7 @@
 import { Suspense } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { DetailSkeleton } from "@/components/LoadingState";
 
 interface DashboardProps {
   title: string;
@@ -41,7 +41,7 @@ export default function Dashboard({
             </a>
           )}
         </h1>
-        <Suspense fallback={<Skeleton className="w-full h-[200px]" />}>
+        <Suspense fallback={<DetailSkeleton rows={4} />}>
           {children}
         </Suspense>
       </main>

@@ -21,6 +21,7 @@ import {
 import { parseApiError } from "@/lib/utils";
 import { usageService } from "@/services/usageService";
 import type { OrgUsage } from "@/types/models";
+import { TableSkeleton } from "@/components/LoadingState";
 
 // Period select values are `days` for GET
 // /v1alpha1/organizations/current/usage?days= (backend/api/organizations.py,
@@ -102,7 +103,7 @@ export default function UsagePage() {
       </Select>
 
       {loading ? (
-        <div>Loading...</div>
+        <TableSkeleton rows={6} columns={6} />
       ) : error ? (
         <Card>
           <CardHeader>

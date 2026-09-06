@@ -12,6 +12,7 @@ import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
+import { CardGridSkeleton } from "@/components/LoadingState";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -48,7 +49,7 @@ export default function NotebookList() {
   );
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <CardGridSkeleton />;
   }
 
   return (

@@ -18,6 +18,7 @@ import { modelService } from "@/services/modelService";
 import { formatEnumLabel, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { GetModelIcon } from "@/lib/utils";
+import { CardGridSkeleton } from "@/components/LoadingState";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -34,6 +35,7 @@ export default function ModelCatalog() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedSubcategory, setSelectedSubcategory] = useState("all");
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   const fetchModels = useCallback(async () => {
@@ -42,6 +44,8 @@ export default function ModelCatalog() {
       setModels(data);
     } catch (error) {
       toast(parseApiError(error));
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
 
@@ -66,6 +70,10 @@ export default function ModelCatalog() {
   const subcategories = Array.from(
     new Set(models.map((model) => model.subcategory).filter(Boolean))
   );
+
+  if (loading) {
+    return <CardGridSkeleton />;
+  }
 
   return (
     <>
