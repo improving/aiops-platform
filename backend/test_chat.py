@@ -366,6 +366,11 @@ def test_target_labels_covers_instances_and_hosted_models(client):
         )
 
         labels = target_labels(db, _admin_user(org.id))
+        # Written directly, not through the router: clean it up here so it
+        # does not linger as an instance no controller/credential owns,
+        # which later list_inference_instances calls would try to poll.
+        db.delete(instance)
+        db.commit()
     finally:
         db.close()
 
