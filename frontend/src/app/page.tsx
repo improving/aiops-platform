@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import Dashboard from "@/components/Dashboard";
+import { HomeOverview } from "@/components/home/HomeOverview";
 import {
   CodeIcon,
   CubeIcon,
@@ -85,6 +86,7 @@ const homecatalogs: {
 export default function Home() {
   return (
     <Dashboard title="Welcome to AI Hub">
+      <HomeOverview />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {homecatalogs.map((catalog, index) => (
           <DisplayCard

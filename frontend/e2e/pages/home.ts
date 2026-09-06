@@ -25,4 +25,8 @@ export class HomePage extends AppShell {
   cardLink(title: string, text: string): Locator {
     return this.card(title).getByRole("link", { name: text, exact: true });
   }
+
+  stat(name: "instances" | "vectordbs" | "notebooks" | "chat"): Locator {
+    return this.page.getByTestId(`home-stat-${name}`);
+  }
 }
