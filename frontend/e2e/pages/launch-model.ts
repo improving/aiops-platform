@@ -34,7 +34,7 @@ export class LaunchModelPage extends AppShell {
       name: "Add Environment Variable",
     });
     this.createButton = page.getByRole("button", {
-      name: "Create Inference Endpoint",
+      name: "Create instance",
     });
     this.cpuHint = page.getByText("runs on CPU");
   }

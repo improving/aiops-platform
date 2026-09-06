@@ -616,7 +616,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                 icon={<RocketIcon className="mr-2 w-4 h-4" />}
                 loading={isSubmitting}
               >
-                {isSubmitting ? "Creating..." : "Create Inference Endpoint"}
+                {isSubmitting ? "Creating..." : "Create instance"}
               </Button>
             }
           />

@@ -14,7 +14,12 @@ import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { CardGridSkeleton } from "@/components/LoadingState";
 import { CopyButton } from "@/components/CopyButton";
-import { ListControls, ShowMore, applyListControls, useListState } from "@/components/ListControls";
+import {
+  ListControls,
+  ShowMore,
+  applyListControls,
+  useListState,
+} from "@/components/ListControls";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -94,67 +99,71 @@ export default function NotebookList() {
               <RefreshButton onRefresh={fetchNotebooks} />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visible.map((notebook) => (
-              <DisplayCard
-                key={notebook.id}
-                icon={`/notebooks/${notebook.type}.png`}
-                title={
-                  <Link
-                    href={`/notebooks/${notebook.id}`}
-                    className="hover:text-blue-500 underline"
-                  >
-                    {notebook.name}
-                  </Link>
-                }
-                description={`ID: ${notebook.id}`}
-                content={
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                      {notebook.type}
-                    </span>
-                    {notebook.type == "jupyter" && (
-                      <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
-                        {notebook.framework || "N/A"}
-                      </span>
-                    )}
-                    {notebook.nvidia_gpu && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                        GPUs: {notebook.resources_gpu}
-                      </span>
-                    )}
-                    {notebook.resources_cpu && (
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                        CPU: {notebook.resources_cpu}
-                      </span>
-                    )}
-                    {notebook.resources_memory && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                        Mem: {notebook.resources_memory}
-                      </span>
-                    )}
-                  </div>
-                }
-                footer={
-                  <div className="flex items-center gap-2">
-                    <Button
-                      disabled={!notebook.ready}
-                      onClick={() => window.open(notebook.endpoint, "_blank")}
-                      icon={<OpenInNewWindowIcon className="mr-2 w-4 h-4" />}
+          {total === 0 ? (
+            <p className="text-muted-foreground">No notebooks match.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {visible.map((notebook) => (
+                <DisplayCard
+                  key={notebook.id}
+                  icon={`/notebooks/${notebook.type}.png`}
+                  title={
+                    <Link
+                      href={`/notebooks/${notebook.id}`}
+                      className="hover:text-blue-500 underline"
                     >
-                      Connect
-                    </Button>
-                    {notebook.endpoint && (
-                      <CopyButton
-                        label="Notebook URL"
-                        text={notebook.endpoint}
-                      />
-                    )}
-                  </div>
-                }
-              />
-            ))}
-          </div>
+                      {notebook.name}
+                    </Link>
+                  }
+                  description={`ID: ${notebook.id}`}
+                  content={
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                        {notebook.type}
+                      </span>
+                      {notebook.type == "jupyter" && (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                          {notebook.framework || "N/A"}
+                        </span>
+                      )}
+                      {notebook.nvidia_gpu && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                          GPUs: {notebook.resources_gpu}
+                        </span>
+                      )}
+                      {notebook.resources_cpu && (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                          CPU: {notebook.resources_cpu}
+                        </span>
+                      )}
+                      {notebook.resources_memory && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                          Mem: {notebook.resources_memory}
+                        </span>
+                      )}
+                    </div>
+                  }
+                  footer={
+                    <div className="flex items-center gap-2">
+                      <Button
+                        disabled={!notebook.ready}
+                        onClick={() => window.open(notebook.endpoint, "_blank")}
+                        icon={<OpenInNewWindowIcon className="mr-2 w-4 h-4" />}
+                      >
+                        Connect
+                      </Button>
+                      {notebook.endpoint && (
+                        <CopyButton
+                          label="Notebook URL"
+                          text={notebook.endpoint}
+                        />
+                      )}
+                    </div>
+                  }
+                />
+              ))}
+            </div>
+          )}
           <ShowMore
             hasMore={hasMore}
             onClick={() => updateList({ page: listState.page + 1 })}

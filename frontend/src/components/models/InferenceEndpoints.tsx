@@ -22,7 +22,12 @@ import { GetModelIcon } from "@/lib/utils";
 import { CardGridSkeleton } from "@/components/LoadingState";
 import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
-import { ListControls, ShowMore, applyListControls, useListState } from "@/components/ListControls";
+import {
+  ListControls,
+  ShowMore,
+  applyListControls,
+  useListState,
+} from "@/components/ListControls";
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -154,66 +159,73 @@ export default function InferenceEndpoints() {
             </div>
             <RefreshButton onRefresh={fetchEndpoints} />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visible.map((endpoint) => (
-              <DisplayCard
-                key={endpoint.id}
-                icon={GetModelIcon(endpoint.model.modelId)}
-                title={
-                  <Link
-                    href={`/models/endpoints/${endpoint.id}`}
-                    className="hover:text-blue-500 underline"
-                  >
-                    {endpoint.model.name}
-                  </Link>
-                }
-                description={`ID: ${endpoint.id}`}
-                content={
-                  <>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                        {endpoint.engine.name}
-                      </span>
-                      {endpoint.host && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                          {endpoint.host}
+          {total === 0 ? (
+            <p className="text-muted-foreground">No instances match.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {visible.map((endpoint) => (
+                <DisplayCard
+                  key={endpoint.id}
+                  icon={GetModelIcon(endpoint.model.modelId)}
+                  title={
+                    <Link
+                      href={`/models/endpoints/${endpoint.id}`}
+                      className="hover:text-blue-500 underline"
+                    >
+                      {endpoint.model.name}
+                    </Link>
+                  }
+                  description={`ID: ${endpoint.id}`}
+                  content={
+                    <>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                          {endpoint.engine.name}
                         </span>
-                      )}
-                      {endpoint.ready ? (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                          Ready
+                        {endpoint.host && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                            {endpoint.host}
+                          </span>
+                        )}
+                        {endpoint.ready ? (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                            Ready
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
+                            {endpoint.status || "In Progress"}
+                          </span>
+                        )}
+                        {endpoint.config.lora_adapters.length > 0 && (
+                          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                            {endpoint.config.lora_adapters.length} Adapters
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong>Endpoint: </strong>
+                        <span
+                          className={
+                            endpoint.ready ? "text-green-500" : "text-red-500"
+                          }
+                        >
+                          {endpoint.endpoint || "N/A"}
                         </span>
-                      ) : (
-                        <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
-                          {endpoint.status || "In Progress"}
-                        </span>
-                      )}
-                      {endpoint.config.lora_adapters.length > 0 && (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
-                          {endpoint.config.lora_adapters.length} Adapters
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-600 mb-2">
-                      <strong>Endpoint: </strong>
-                      <span
-                        className={
-                          endpoint.ready ? "text-green-500" : "text-red-500"
-                        }
-                      >
-                        {endpoint.endpoint || "N/A"}
-                      </span>
-                      {endpoint.endpoint && (
-                        <span className="ml-2">
-                          <CopyButton label="Endpoint" text={endpoint.endpoint} />
-                        </span>
-                      )}
-                    </p>
-                  </>
-                }
-              />
-            ))}
-          </div>
+                        {endpoint.endpoint && (
+                          <span className="ml-2">
+                            <CopyButton
+                              label="Endpoint"
+                              text={endpoint.endpoint}
+                            />
+                          </span>
+                        )}
+                      </p>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+          )}
           <ShowMore
             hasMore={hasMore}
             onClick={() => updateList({ page: listState.page + 1 })}
