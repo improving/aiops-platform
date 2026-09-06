@@ -153,7 +153,7 @@ frontend/
     pages/                  page objects; one class per screen, accessible-name locators only
       app-shell.ts          header, theme menu, heading, toasts, delete confirmation
       home.ts  model-catalog.ts  model-details.ts  finetune-form.ts  launch-model.ts
-      vector-db-catalog.ts  vector-db-endpoints.ts  notebook-form.ts  notebooks.ts
+      vector-db-catalog.ts  vector-db-endpoints.ts (list page and `VectorDBInstanceDetailsPage`)  notebook-form.ts  notebooks.ts
       login.ts              the app's /login page and Keycloak's login form
       develop.ts            the Langflow iframe on /develop
     fast/                   one spec per scenario, hermetic
@@ -289,7 +289,11 @@ Durations are from a local run on Apple silicon; CI is slower.
 | Spec (fast tier)              | Covers                                                                                                  | Status                        | Time  |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------- | ----- |
 | `navigation.spec.ts`          | every header link and dropdown item, brand link, active section, no console errors on eight pages       | pass                          | 2 s   |
-| `home.spec.ts`                | the four cards and their links                                                                          | pass                          | 1 s   |
+| `home.spec.ts`                | the four cards and their links, the live count tiles                                                    | pass                          | 1 s   |
+| `loading.spec.ts`             | a held list response shows the skeleton (`role="status"`), which is gone once the data arrives          | pass                          | 2 s   |
+| `breadcrumbs.spec.ts`         | the trail on the new notebook and model pages links back, list pages have none                          | pass                          | 2 s   |
+| `snippets.spec.ts`            | the shared copy button on the model page writes the clipboard and confirms with a toast                 | pass                          | 1 s   |
+| `list-controls.spec.ts`       | a mocked list of 15 vector databases: 12 per page and "Show more", the status filter, sort by name       | pass                          | 2 s   |
 | `models-catalog.spec.ts`      | search, category and subcategory filters, combined filters, Import Model dialog, card link              | pass                          | 3 s   |
 | `model-details.spec.ts`       | Details tab content, `?tab=` reflects the tab and survives reload, deep link, Launch Model             | pass                          | 4 s   |
 | `finetune-form.spec.ts`       | sections and defaults, required fields block the submit, backend rejection toast, stubbed create/list/params/delete flow | pass | 3 s |
@@ -297,17 +301,17 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `chat.spec.ts`                | the mock target from `AIOPS_CHAT_MOCK`, streamed answer, history survives a reload, clear; `?target=` preselects; empty state links to the catalog | pass | 3 s |
 | `providers.spec.ts`           | add a provider with the two mock models, table and chat targets update, disable hides its models, remove one model, delete, set a budget (in-memory secret store) | pass | 4 s |
 | `registry.spec.ts`            | import `Qwen/Qwen3-0.6B-GGUF` from the fixture as a draft, its Ollama `hf.co/...` option, publish, catalog and wizard show it, deprecate, delete; add manually; add an Ollama tag from the manifest fixture | pass | 5 s |
-| `usage.spec.ts`               | the Usage page on the mock rows: totals, the per-target table, the per-user table, switching the period | pass | 2 s |
+| `usage.spec.ts`               | the Usage page on the mock rows: totals, the per-target table, the per-user table, switching the period, the CSV download | pass | 2 s |
 | `vector-db-catalog.spec.ts`   | three cards, Launch dialog, Cancel                                                                       | pass; service type `fixme` (no control in the dialog yet) | 1 s   |
 | `notebook-form.spec.ts`       | defaults, VS Code hides framework and GPU, GPU count, name rules, out-of-range storage, helper text     | pass                          | 2 s   |
-| `error-pages.spec.ts`         | unknown model, unknown notebook, unknown route shows the not-found page                                 | pass                          | 4 s   |
+| `error-pages.spec.ts`         | unknown model, unknown notebook, unknown vector database instance, unknown route shows the not-found page | pass                        | 4 s   |
 | `theme.spec.ts`               | system default, Light and Dark persist across reloads, back to System                                   | pass                          | 2 s   |
 | `develop.spec.ts`             | "Langflow is not configured" card                                                                       | pass                          | 1 s   |
 | `mobile.spec.ts`              | no horizontal overflow at 390 px, hamburger menu                                                        | pass                          | 2 s   |
 
 | Spec (cluster tier)           | Covers                                                                                                  | Time      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- | --------- |
-| `vector-db-lifecycle.spec.ts` | launch Qdrant from the catalog, endpoints page lists it, Ready with an endpoint, delete, Helm release gone | 40 s |
+| `vector-db-lifecycle.spec.ts` | launch Qdrant from the catalog, instances page lists it, Ready with an endpoint, the detail page shows it, delete, Helm release gone | 40 s |
 | `notebook-lifecycle.spec.ts`  | Jupyter and VS Code: create, details page, Running, delete, list empty                                  | 40 s each |
 | `finetune-lifecycle.spec.ts`  | create a job from the UI, Kubernetes Job exists, cluster-derived status, delete, Job gone               | 5 s |
 | `auth-login.spec.ts`          | fresh context: `/` redirects to `/login`, Keycloak login as alice, user menu shows name and email, `/develop` embeds Langflow from the gateway host, sign out lands on `/login` | 2 s |
