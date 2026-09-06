@@ -104,6 +104,9 @@ pnpm e2e:ui                               # Playwright UI mode
   `AppShell.waitForLoaded()`. Never render the string "Loading...".
 - Drill-down pages pass `breadcrumbs` (`Crumb[]` from `src/components/Breadcrumbs.tsx`) to `Dashboard`;
   list pages pass none. The trail always starts at Home.
+- Copy actions use `src/components/CopyButton.tsx` (aria-label "Copy <label>", toast "Copied");
+  code examples use `src/components/CodeSnippet.tsx` (`<pre aria-label>` plus a copy button). Do not inline
+  `navigator.clipboard` calls in feature components.
 
 ## Authentication
 

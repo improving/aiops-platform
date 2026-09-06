@@ -41,6 +41,7 @@ import { DeleteButton } from "@/components/DeleteButton";
 import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { DetailSkeleton } from "@/components/LoadingState";
+import { CopyButton } from "@/components/CopyButton";
 
 function formatSize(bytes: number): string {
   const MB = 1024 * 1024;
@@ -232,7 +233,10 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Model ID</Label>
-                <span>{model.modelId}</span>
+                <span className="flex items-center gap-2">
+                  {model.modelId}
+                  <CopyButton label="Model id" text={model.modelId} size="sm" />
+                </span>
               </div>
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label>Description</Label>

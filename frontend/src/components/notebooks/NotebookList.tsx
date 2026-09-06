@@ -13,6 +13,7 @@ import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { CardGridSkeleton } from "@/components/LoadingState";
+import { CopyButton } from "@/components/CopyButton";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -124,13 +125,21 @@ export default function NotebookList() {
                   </div>
                 }
                 footer={
-                  <Button
-                    disabled={!notebook.ready}
-                    onClick={() => window.open(notebook.endpoint, "_blank")}
-                    icon={<OpenInNewWindowIcon className="mr-2 w-4 h-4" />}
-                  >
-                    Connect
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      disabled={!notebook.ready}
+                      onClick={() => window.open(notebook.endpoint, "_blank")}
+                      icon={<OpenInNewWindowIcon className="mr-2 w-4 h-4" />}
+                    >
+                      Connect
+                    </Button>
+                    {notebook.endpoint && (
+                      <CopyButton
+                        label="Notebook URL"
+                        text={notebook.endpoint}
+                      />
+                    )}
+                  </div>
                 }
               />
             ))}

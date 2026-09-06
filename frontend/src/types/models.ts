@@ -10,6 +10,7 @@ interface InferenceInstance {
   status: string;
   config: InferenceInstanceConfig;
   litellm_model_name?: string | null;
+  reference?: string | null;
 }
 
 // GET /v1alpha1/chat/targets: what the caller may chat, embed or rerank

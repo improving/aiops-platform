@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RocketIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
+import { RocketIcon } from "@radix-ui/react-icons";
+import { CopyButton } from "@/components/CopyButton";
 import {
   Select,
   SelectContent,
@@ -193,14 +194,11 @@ export default function InferenceEndpoints() {
                       >
                         {endpoint.endpoint || "N/A"}
                       </span>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          navigator.clipboard.writeText(endpoint.endpoint || "")
-                        }
-                        className="ml-2"
-                        icon={<ClipboardCopyIcon className="w-4 h-4" />}
-                      ></Button>
+                      {endpoint.endpoint && (
+                        <span className="ml-2">
+                          <CopyButton label="Endpoint" text={endpoint.endpoint} />
+                        </span>
+                      )}
                     </p>
                   </>
                 }

@@ -11,9 +11,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/hooks/use-toast";
-import { ClipboardCopyIcon, LockClosedIcon } from "@radix-ui/react-icons";
+import { LockClosedIcon } from "@radix-ui/react-icons";
 import { vectorDBService } from "@/services/vectorDBService";
 import { parseApiError } from "@/lib/utils";
+import { CopyButton } from "@/components/CopyButton";
 import {
   VectorDBCredentialSchema,
   VectorDBInstanceSchema,
@@ -27,31 +28,6 @@ interface ShowCredentialButtonProps {
 function apiUrl(instance: VectorDBInstanceSchema, path: string) {
   const base = instance.api_endpoint?.replace(/\/$/, "");
   return base ? `${base}/${path}` : `<api endpoint>/${path}`;
-}
-
-function CopyButton({ label, text }: { label: string; text: string }) {
-  const { toast } = useToast();
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: "Copied", description: `${label} copied to clipboard` });
-    } catch {
-      toast({
-        title: "Copy failed",
-        description: "Select the text and copy it manually",
-        variant: "destructive",
-      });
-    }
-  };
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      aria-label={`Copy ${label.toLowerCase()}`}
-      onClick={copy}
-      icon={<ClipboardCopyIcon className="w-4 h-4" />}
-    />
-  );
 }
 
 function Field({

@@ -4,11 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
-import {
-  ClipboardCopyIcon,
-  OpenInNewWindowIcon,
-  RocketIcon,
-} from "@radix-ui/react-icons";
+import { OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
+import { CopyButton } from "@/components/CopyButton";
 import Link from "next/link";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
@@ -119,14 +116,11 @@ export default function VectorDBEndpoints() {
                       <a href={`${instance.endpoint}/docs`} target="_blank">
                         {instance.endpoint || "N/A"}
                       </a>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          navigator.clipboard.writeText(instance.endpoint || "")
-                        }
-                        className="ml-2"
-                        icon={<ClipboardCopyIcon className="w-4 h-4" />}
-                      ></Button>
+                      {instance.endpoint && (
+                        <span className="ml-2">
+                          <CopyButton label="Endpoint" text={instance.endpoint} />
+                        </span>
+                      )}
                     </span>
                   </p>
                   <p className="text-sm text-gray-600 mb-2">
@@ -135,17 +129,12 @@ export default function VectorDBEndpoints() {
                       {instance.api_endpoint || "N/A"}
                     </span>
                     {instance.api_endpoint && (
-                      <Button
-                        variant="outline"
-                        aria-label="Copy API endpoint"
-                        onClick={() =>
-                          navigator.clipboard.writeText(
-                            instance.api_endpoint || ""
-                          )
-                        }
-                        className="ml-2"
-                        icon={<ClipboardCopyIcon className="w-4 h-4" />}
-                      ></Button>
+                      <span className="ml-2">
+                        <CopyButton
+                          label="API endpoint"
+                          text={instance.api_endpoint}
+                        />
+                      </span>
                     )}
                   </p>
                 </>

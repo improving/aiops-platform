@@ -13,6 +13,7 @@ import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { DetailSkeleton } from "@/components/LoadingState";
+import { CopyButton } from "@/components/CopyButton";
 
 interface NotebookDetailsProps {
   notebookId: string;
@@ -72,6 +73,15 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
             <Label>Type:</Label>
             <span>{notebook.type || "N/A"}</span>
           </div>
+          {notebook.endpoint && (
+            <div className="grid grid-cols-2 items-center gap-4">
+              <Label>Endpoint:</Label>
+              <span className="flex items-center gap-2">
+                <span className="break-all">{notebook.endpoint}</span>
+                <CopyButton label="Notebook URL" text={notebook.endpoint} />
+              </span>
+            </div>
+          )}
           {notebook.type === "jupyter" && (
             <div className="grid grid-cols-2 items-center gap-4">
               <Label>Framework:</Label>

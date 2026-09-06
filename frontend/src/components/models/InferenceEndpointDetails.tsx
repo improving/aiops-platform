@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ChevronDownIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
+import { ChevronDownIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
@@ -44,6 +44,8 @@ import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { RefreshButton } from "../RefreshButton";
 import { DetailSkeleton } from "@/components/LoadingState";
+import { CopyButton } from "@/components/CopyButton";
+import { CodeSnippet } from "@/components/CodeSnippet";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -227,16 +229,14 @@ export default function InferenceEndpointDetailsPage({
                   >
                     {inferenceInstance.endpoint || "N/A"}
                   </span>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        inferenceInstance.endpoint || ""
-                      )
-                    }
-                    className="ml-2"
-                    icon={<ClipboardCopyIcon className="w-4 h-4" />}
-                  ></Button>
+                  {inferenceInstance.endpoint && (
+                    <span className="ml-2">
+                      <CopyButton
+                        label="Endpoint"
+                        text={inferenceInstance.endpoint}
+                      />
+                    </span>
+                  )}
                 </span>
               </div>
               {inferenceInstance.endpoint && (
@@ -250,9 +250,26 @@ export default function InferenceEndpointDetailsPage({
                       OpenAI-compatible client pointed at{" "}
                       <code>{`${inferenceInstance.endpoint}/v1`}</code>.
                     </p>
-                    <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
-                      {`curl ${inferenceInstance.endpoint}/v1/models -H "x-api-key: <api key>"`}
-                    </pre>
+                    <CodeSnippet
+                      label="curl example"
+                      code={`curl ${inferenceInstance.endpoint}/v1/chat/completions \\
+  -H "x-api-key: <api key>" -H "content-type: application/json" \\
+  -d '{"model":"${inferenceInstance.reference ?? inferenceInstance.model.modelId}","messages":[{"role":"user","content":"Hello"}]}'`}
+                    />
+                    <CodeSnippet
+                      label="Python example"
+                      code={`from openai import OpenAI
+
+client = OpenAI(
+    base_url="${inferenceInstance.endpoint}/v1",
+    api_key="unused",
+    default_headers={"x-api-key": "<api key>"},
+)
+print(client.chat.completions.create(
+    model="${inferenceInstance.reference ?? inferenceInstance.model.modelId}",
+    messages=[{"role": "user", "content": "Hello"}],
+).choices[0].message.content)`}
+                    />
                   </div>
                 </div>
               )}
@@ -508,14 +525,7 @@ export default function InferenceEndpointDetailsPage({
                   value={credential.value}
                   className="font-mono"
                 />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() =>
-                    navigator.clipboard.writeText(credential.value || "")
-                  }
-                  icon={<ClipboardCopyIcon className="w-4 h-4" />}
-                ></Button>
+                <CopyButton label="API key" text={credential.value || ""} />
               </div>
               <p className="text-sm text-muted-foreground">
                 This key is shown only once. Copy it now — admins can view it
