@@ -146,6 +146,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   };
 
   const clear = () => {
+    clearError();
     setMessages([]);
     if (target) saveMessages(userKey, target, []);
   };

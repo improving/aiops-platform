@@ -64,6 +64,11 @@ UPSTREAM_TIMEOUT = httpx.Timeout(
     connect=10.0, read=None, write=30.0, pool=10.0
 )
 SSE_HEADERS = {"cache-control": "no-cache", "x-accel-buffering": "no"}
+SSE_DONE = b"data: [DONE]\n\n"
+
+
+def _sse_frame(payload: dict) -> bytes:
+    return f"data: {json.dumps(payload)}\n\n".encode()
 
 
 def chat_mock_enabled() -> bool:
@@ -370,9 +375,26 @@ def _mock_rerank(body: dict):
 
 def _stream_error_chunk(message: str) -> bytes:
     """An OpenAI-style error event for a stream that broke after the
-    200 went out; the AI SDK turns it into a visible error."""
+    200 went out; the AI SDK turns it into a visible error. It starts on
+    a fresh line so a cut half-way through an event cannot swallow it."""
     payload = {"error": {"message": message, "type": "stream_error"}}
-    return f"data: {json.dumps(payload)}\n\ndata: [DONE]\n\n".encode()
+    return b"\n\n" + _sse_frame(payload) + SSE_DONE
+
+
+async def _relay_until_broken(
+    chunks: AsyncIterator[bytes], source: str
+) -> AsyncIterator[bytes]:
+    """Relay the upstream SSE bytes; when the stream breaks after the
+    200 went out, end it with an error event instead of a cut body."""
+    try:
+        async for chunk in chunks:
+            yield chunk
+    except httpx.HTTPError as e:
+        logger.warning(f"chat stream from {source} broke: {e}")
+        yield _stream_error_chunk(
+            f"The answer stream was interrupted "
+            f"({e.__class__.__name__}: {e}). Try again."
+        )
 
 
 def _upstream_error(response: httpx.Response, detail: bytes) -> HTTPException:
@@ -418,13 +440,10 @@ async def _relay_direct(url: str, body: dict, api_key: str | None):
 
     async def relay() -> AsyncIterator[bytes]:
         try:
-            async for chunk in upstream.aiter_bytes():
+            async for chunk in _relay_until_broken(
+                upstream.aiter_bytes(), "the instance"
+            ):
                 yield chunk
-        except httpx.HTTPError as e:
-            logger.warning(f"chat stream from the instance broke: {e}")
-            yield _stream_error_chunk(
-                f"The answer stream was interrupted ({e.__class__.__name__}: {e}). Try again."
-            )
         finally:
             await upstream.aclose()
             await client.aclose()
@@ -460,13 +479,10 @@ async def _relay_litellm(litellm, path: str, body: dict, key: str):
 
     async def relay() -> AsyncIterator[bytes]:
         try:
-            async for chunk in iterate_in_threadpool(response.iter_bytes()):
+            async for chunk in _relay_until_broken(
+                iterate_in_threadpool(response.iter_bytes()), "LiteLLM"
+            ):
                 yield chunk
-        except httpx.HTTPError as e:
-            logger.warning(f"chat stream from LiteLLM broke: {e}")
-            yield _stream_error_chunk(
-                f"The answer stream was interrupted ({e.__class__.__name__}: {e}). Try again."
-            )
         finally:
             response.close()
             response.extensions["aiops_client"].close()

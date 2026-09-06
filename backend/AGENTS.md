@@ -59,7 +59,8 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   objects for every deployed instance:
   browser hosts (`nb-<id8>`, `vdb-<id8>`) join the shared `add_oidc_target`/`remove_oidc_target` policy
   `aiops-workloads-oidc`, SDK hosts (`vdb-<id8>-api`, `inf-<id8>`) get their own `apikey` policy once a
-  credential Secret exists, notebook routes also get a `BackendTrafficPolicy` for long-lived WebSockets,
+  credential Secret exists, notebook routes get a `BackendTrafficPolicy` for long-lived WebSockets and `inf-` routes one with
+  `INFERENCE_TIMEOUTS` (no request timeout, 10 min idle) because Envoy's default 15 s cut streamed answers,
   and `ensure_reference_grant`/`ensure_gateway_client_secret` extend the cross-namespace `ReferenceGrant`s
   and copy the OIDC client Secret when `AIOPS_NAMESPACE` points somewhere other than `ai-stack`.
   Every function is a no-op without `AIOPS_PARENT_DOMAIN`.

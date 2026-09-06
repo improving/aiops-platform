@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import NotConfigured from "@/components/NotConfigured";
 
 interface JaegerEmbedProps {
@@ -20,26 +20,23 @@ const JaegerEmbed: React.FC<JaegerEmbedProps> = ({
   lookback,
   height = "600px",
 }) => {
-  const [iframeUrl, setIframeUrl] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      const url = new URL(`${jaegerEndpoint}/search`);
-      url.searchParams.append("service", serviceName);
-      // start timestamp in microseconds
-      url.searchParams.append("start", (start * 1000).toString());
-      url.searchParams.append("end", (end * 1000).toString());
-      url.searchParams.append("limit", limit.toString());
-      url.searchParams.append("lookback", lookback);
-      url.searchParams.append("uiEmbed", "v0");
-
-      setIframeUrl(url.toString());
-    } catch (err) {
-      console.error("Error constructing Jaeger URL:", err);
-      setError("Failed to construct Jaeger URL");
-    }
-  }, [jaegerEndpoint, serviceName, start, end, limit, lookback]);
+  // Computed synchronously: an iframe must never render with an empty
+  // src (the browser would load the page itself into the frame).
+  let iframeUrl: string | null = null;
+  try {
+    const url = new URL(`${jaegerEndpoint}/search`);
+    url.searchParams.append("service", serviceName);
+    // start timestamp in microseconds
+    url.searchParams.append("start", (start * 1000).toString());
+    url.searchParams.append("end", (end * 1000).toString());
+    url.searchParams.append("limit", limit.toString());
+    url.searchParams.append("lookback", lookback);
+    url.searchParams.append("uiEmbed", "v0");
+    iframeUrl = url.toString();
+  } catch {
+    iframeUrl = null;
+  }
 
   if (!jaegerEndpoint) {
     return <NotConfigured name="Jaeger" envVar="NEXT_PUBLIC_JAEGER_URL" />;
@@ -47,6 +44,10 @@ const JaegerEmbed: React.FC<JaegerEmbedProps> = ({
 
   if (error) {
     return <div className="error">{error}</div>;
+  }
+
+  if (!iframeUrl) {
+    return <div className="error">Failed to construct Jaeger URL</div>;
   }
 
   return (

@@ -1,7 +1,9 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
+  APICallError,
   convertToModelMessages,
   createUIMessageStreamResponse,
+  RetryError,
   streamText,
   toUIMessageStream,
   type UIMessage,
@@ -69,8 +71,23 @@ export async function POST(req: Request) {
       stream: result.stream,
       // Show the backend's detail (503 no endpoint, 502 unreachable) in
       // the chat instead of the generic "An error occurred".
-      onError: (error) =>
-        error instanceof Error ? error.message : String(error),
+      onError: (error) => {
+        // The SDK keeps only `{"error":{"message"}}` bodies, so read
+        // FastAPI's `detail` back from the response body, through the
+        // retry wrapper, and prefix the status for the chat page.
+        const inner = RetryError.isInstance(error) ? error.lastError : error;
+        if (APICallError.isInstance(inner) && inner.responseBody) {
+          try {
+            const detail = JSON.parse(inner.responseBody)?.detail;
+            if (typeof detail === "string") {
+              return `${inner.statusCode}: ${detail}`;
+            }
+          } catch {
+            // Not JSON: fall through to the message.
+          }
+        }
+        return error instanceof Error ? error.message : String(error);
+      },
     }),
   });
 }

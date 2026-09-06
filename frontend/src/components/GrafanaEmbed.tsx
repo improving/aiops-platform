@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import NotConfigured from "@/components/NotConfigured";
 
 interface GrafanaEmbedProps {
@@ -46,9 +46,12 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
   const [error, setError] = useState<string | null>(null);
   // Computed synchronously: an iframe must never render with an empty
   // src (the browser would load the page itself into the frame).
-  const iframeUrl = useMemo(
-    () => panelUrl(grafanaEndpoint, dashboardID, panelID, orgID, queryParams),
-    [grafanaEndpoint, dashboardID, panelID, orgID, queryParams]
+  const iframeUrl = panelUrl(
+    grafanaEndpoint,
+    dashboardID,
+    panelID,
+    orgID,
+    queryParams
   );
 
   if (!grafanaEndpoint) {

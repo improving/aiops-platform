@@ -748,15 +748,25 @@ def test_ensure_apikey_policy_only_when_secret_exists(gateway_env):
     ]
 
 
-def test_ensure_backend_traffic_policy_inference_timeouts(gateway_env):
+@pytest.mark.parametrize(
+    ("timeouts", "expected"),
+    [
+        (None, {"http": {"requestTimeout": "0s", "streamIdleTimeout": "1h"}}),
+        (
+            gateway.INFERENCE_TIMEOUTS,
+            {"http": {"requestTimeout": "0s", "streamIdleTimeout": "10m"}},
+        ),
+    ],
+)
+def test_ensure_backend_traffic_policy_timeouts(
+    gateway_env, timeouts, expected
+):
     api_instance = _api()
     gateway.ensure_backend_traffic_policy(
         "ai-stack",
         "ollama-abcdef12",
         api_instance=api_instance,
-        timeouts=gateway.INFERENCE_TIMEOUTS,
+        timeouts=timeouts,
     )
     args, _ = api_instance.create_namespaced_custom_object.call_args
-    assert args[4]["spec"]["timeout"] == {
-        "http": {"requestTimeout": "0s", "streamIdleTimeout": "10m"}
-    }
+    assert args[4]["spec"]["timeout"] == expected

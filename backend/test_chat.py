@@ -595,6 +595,34 @@ def test_litellm_stream_break_becomes_an_error_event(client):
     assert response.status_code == 200
     text = response.text
     assert '"content":"hel"' in text
-    assert '"type": "stream_error"' in text or '"type":"stream_error"' in text
+    assert '"type": "stream_error"' in text
     assert "interrupted" in text
     assert text.rstrip().endswith("data: [DONE]")
+
+
+def test_direct_stream_break_becomes_an_error_event(client):
+    class Broken(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n'
+            raise httpx.RemoteProtocolError("peer closed connection")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=Broken(),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    target = _target(litellm_model_id=None)
+    with (
+        mock.patch("api.chat.find_target", return_value=target),
+        mock.patch("api.chat.litellm_client", return_value=None),
+        mock.patch("api.chat.instance_api_key", return_value="k3y"),
+        mock_upstream(handler),
+    ):
+        response = client.post(
+            "/v1alpha1/chat/completions", json={**BODY, "model": TARGET}
+        )
+    assert response.status_code == 200
+    assert '"type": "stream_error"' in response.text
+    assert response.text.rstrip().endswith("data: [DONE]")

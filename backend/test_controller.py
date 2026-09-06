@@ -744,6 +744,11 @@ async def test_inference_controller_single_route_and_apikey_policy(
     await controller.install(instance, chart)
 
     routes = _created(api_instance, "HTTPRoute")
+    traffic = _created(api_instance, "BackendTrafficPolicy")
+    assert [t["metadata"]["name"] for t in traffic] == [release]
+    assert traffic[0]["spec"]["timeout"] == {
+        "http": {"requestTimeout": "0s", "streamIdleTimeout": "10m"}
+    }
     assert [r["metadata"]["name"] for r in routes] == [release]
     assert routes[0]["spec"]["hostnames"] == [
         f"inf-{instance.id.hex[-8:]}.127.0.0.1.nip.io"
