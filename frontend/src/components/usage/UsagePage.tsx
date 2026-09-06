@@ -148,6 +148,7 @@ export default function UsagePage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Target</TableHead>
+                <TableHead>Model</TableHead>
                 <TableHead>Requests</TableHead>
                 <TableHead>Tokens in</TableHead>
                 <TableHead>Tokens out</TableHead>
@@ -157,7 +158,7 @@ export default function UsagePage() {
             <TableBody>
               {usage.by_target.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground">
+                  <TableCell colSpan={6} className="text-muted-foreground">
                     No usage in this period.
                   </TableCell>
                 </TableRow>
@@ -165,6 +166,7 @@ export default function UsagePage() {
                 usage.by_target.map((entry) => (
                   <TableRow key={entry.target}>
                     <TableCell>{entry.label}</TableCell>
+                    <TableCell>{entry.model}</TableCell>
                     <TableCell>{entry.requests.toLocaleString()}</TableCell>
                     <TableCell>
                       {entry.prompt_tokens.toLocaleString()}
@@ -186,6 +188,7 @@ export default function UsagePage() {
                 <TableHead>Day</TableHead>
                 <TableHead>User</TableHead>
                 <TableHead>Target</TableHead>
+                <TableHead>Model</TableHead>
                 <TableHead>Requests</TableHead>
                 <TableHead>Tokens</TableHead>
                 <TableHead>Spend</TableHead>
@@ -194,7 +197,7 @@ export default function UsagePage() {
             <TableBody>
               {usage.rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground">
+                  <TableCell colSpan={7} className="text-muted-foreground">
                     No usage in this period.
                   </TableCell>
                 </TableRow>
@@ -204,6 +207,7 @@ export default function UsagePage() {
                     <TableCell>{row.day}</TableCell>
                     <TableCell>{row.user ?? "Unattributed"}</TableCell>
                     <TableCell>{row.label}</TableCell>
+                    <TableCell>{row.model}</TableCell>
                     <TableCell>{row.requests.toLocaleString()}</TableCell>
                     <TableCell>
                       {(

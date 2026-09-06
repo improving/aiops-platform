@@ -164,6 +164,13 @@ def _row_target(row: dict) -> str:
     return row.get("model_group") or row.get("model") or ""
 
 
+def _row_model(row: dict) -> str:
+    """The upstream model id without LiteLLM's provider prefix
+    (``openai/qwen3:0.6b`` -> ``qwen3:0.6b``)."""
+    model = row.get("model") or ""
+    return model.split("/", 1)[1] if "/" in model else model
+
+
 def _row_day(row: dict) -> str:
     return (row.get("startTime") or "")[:10]
 
@@ -177,10 +184,11 @@ def _visible_to(user: CurrentUser):
     return visible
 
 
-def _new_bucket(target: str, label: str, **extra) -> dict:
+def _new_bucket(target: str, label: str, model: str = "", **extra) -> dict:
     return {
         "target": target,
         "label": label,
+        "model": model,
         "requests": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -210,20 +218,31 @@ def _aggregate_usage(
         user = _row_user(row)
         target = _row_target(row)
         day = _row_day(row)
-        label = labels.get(target, target)
+        model = _row_model(row)
+        # A deleted instance has no label any more; its model still tells
+        # what ran there.
+        label = labels.get(target) or (
+            f"{model} (deleted)"
+            if model and target.startswith("inst-")
+            else target
+        )
 
         _add_row(totals, row)
-        _add_row(by_target.setdefault(target, _new_bucket(target, label)), row)
+        _add_row(
+            by_target.setdefault(target, _new_bucket(target, label, model)),
+            row,
+        )
         _add_row(
             by_key.setdefault(
                 (user, target, day),
-                _new_bucket(target, label, user=user, day=day),
+                _new_bucket(target, label, model, user=user, day=day),
             ),
             row,
         )
 
     del totals["target"]
     del totals["label"]
+    del totals["model"]
 
     targets = sorted(
         by_target.values(), key=lambda e: (-e["spend"], -e["requests"])
@@ -245,6 +264,7 @@ def _mock_usage_rows(user: CurrentUser, now: datetime) -> list[dict]:
     return [
         {
             "model_group": MOCK_USAGE_TARGET,
+            "model": "mock/mock-model",
             "end_user": me,
             "startTime": today,
             "prompt_tokens": 12,
@@ -253,6 +273,7 @@ def _mock_usage_rows(user: CurrentUser, now: datetime) -> list[dict]:
         },
         {
             "model_group": MOCK_USAGE_TARGET,
+            "model": "mock/mock-model",
             "end_user": me,
             "startTime": yesterday,
             "prompt_tokens": 8,
@@ -261,6 +282,7 @@ def _mock_usage_rows(user: CurrentUser, now: datetime) -> list[dict]:
         },
         {
             "model_group": MOCK_USAGE_TARGET,
+            "model": "mock/mock-model",
             "end_user": MOCK_USAGE_OTHER_USER,
             "startTime": today,
             "prompt_tokens": 20,

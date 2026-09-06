@@ -82,6 +82,7 @@ interface UsageTotals {
 }
 
 interface UsageByTarget extends UsageTotals {
+  model: string;
   target: string;
   label: string;
 }
