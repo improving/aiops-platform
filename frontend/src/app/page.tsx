@@ -31,7 +31,7 @@ const homecatalogs: {
       },
       {
         link: "/models/endpoints",
-        text: "View Endpoints",
+        text: "View Instances",
         variant: "secondary",
       },
     ],
@@ -49,7 +49,7 @@ const homecatalogs: {
       },
       {
         link: "/vector-databases/endpoints",
-        text: "View Endpoints",
+        text: "View Instances",
         variant: "secondary",
       },
     ],

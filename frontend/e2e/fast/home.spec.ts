@@ -11,9 +11,9 @@ const cards = [
         heading: "Model Catalog",
       },
       {
-        text: "View Endpoints",
+        text: "View Instances",
         href: "/models/endpoints",
-        heading: "Inference Endpoints",
+        heading: "Model Instances",
       },
     ],
   },
@@ -26,9 +26,9 @@ const cards = [
         heading: "Vector Database Catalog",
       },
       {
-        text: "View Endpoints",
+        text: "View Instances",
         href: "/vector-databases/endpoints",
-        heading: "Vector Databases Endpoints",
+        heading: "Vector Database Instances",
       },
     ],
   },

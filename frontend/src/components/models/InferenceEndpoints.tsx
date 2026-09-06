@@ -81,7 +81,7 @@ export default function InferenceEndpoints() {
     <>
       {endpoints.length === 0 ? (
         <div className="text-center">
-          <p className="mb-4">No inference endpoints available.</p>
+          <p className="mb-4">No model instances yet.</p>
           <Link href="/models/catalog">
             <Button icon={<RocketIcon className="mr-2 h-4 w-4" />}>
               Launch

@@ -5,7 +5,7 @@ import Dashboard from '@/components/Dashboard';
 
 export default function VectorDatabasesEndpoints() {
   return (
-    <Dashboard title="Vector Databases Endpoints">
+    <Dashboard title="Vector Database Instances">
       <VectorDBEndpoints />
     </Dashboard>
   );

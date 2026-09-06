@@ -10,7 +10,7 @@ export class VectorDBEndpointsPage extends AppShell {
     super(page);
     this.search = page.getByPlaceholder("Search by name...");
     this.cards = page.locator('main [data-slot="card"]');
-    this.emptyState = page.getByText("No vector databases available.");
+    this.emptyState = page.getByText("No vector database instances yet.");
   }
 
   async open() {

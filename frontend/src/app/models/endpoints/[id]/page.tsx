@@ -9,7 +9,7 @@ export default function InferenceEndpointDetailsPage() {
   const { id } = useParams<{ id: string }>();
 
   return (
-    <Dashboard title="Inference Endpoint Details">
+    <Dashboard title="Model Instance Details">
       <Suspense fallback={null}>
         <InferenceEndpointDetails params={{ id }} />
       </Suspense>

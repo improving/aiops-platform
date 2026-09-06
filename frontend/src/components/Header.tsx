@@ -79,7 +79,7 @@ const menuItems = [
       {
         label: "Instances",
         href: "/vector-databases/endpoints",
-        description: "Manage your vector database deployments",
+        description: "Manage your deployed vector database instances",
       },
     ],
   },

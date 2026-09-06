@@ -6,11 +6,11 @@ const pages = [
   { path: "/notebooks", heading: "Notebooks" },
   { path: "/models/catalog", heading: "Model Catalog" },
   { path: "/models/registry", heading: "Model Registry" },
-  { path: "/models/endpoints", heading: "Inference Endpoints" },
+  { path: "/models/endpoints", heading: "Model Instances" },
   { path: "/vector-databases/catalog", heading: "Vector Database Catalog" },
   {
     path: "/vector-databases/endpoints",
-    heading: "Vector Databases Endpoints",
+    heading: "Vector Database Instances",
   },
   { path: "/develop", heading: "Interactively Develop AI Applications" },
   { path: "/notebooks/new", heading: "Create New Notebook" },
@@ -50,7 +50,7 @@ test.describe("header navigation", () => {
 
     await shell.clickDropdownItem("Models", "Instances");
     await expect(page).toHaveURL(/\/models\/endpoints$/);
-    await shell.expectHeading("Inference Endpoints");
+    await shell.expectHeading("Model Instances");
   });
 
   test("Vector Databases dropdown items navigate to catalog and instances", async ({
@@ -65,7 +65,7 @@ test.describe("header navigation", () => {
 
     await shell.clickDropdownItem("Vector Databases", "Instances");
     await expect(page).toHaveURL(/\/vector-databases\/endpoints$/);
-    await shell.expectHeading("Vector Databases Endpoints");
+    await shell.expectHeading("Vector Database Instances");
   });
 
   test("the brand link returns home", async ({ page }) => {
