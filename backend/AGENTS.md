@@ -209,12 +209,16 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   answers a canned `spend`/`budget_reset_at` alongside the real `budget_usd`.
 - Usage: `GET /v1alpha1/organizations/current/usage?days=30` (any member, `days` clamped `1..90`, 422 outside
   it) reads `LiteLLMClient.spend_logs` for the caller's organization team since `days - 1` days ago at 00:00
-  UTC through now, then aggregates by `(end_user, model_group, day)`. Members keep only their own rows
+  UTC through now, then aggregates by `(display name, model_group, day)`.
+  Rows written while `user_key` returned the email (before `4f7a7f2` switched it to the user id) and rows written after both resolve to the same display name and land in one row.
+  Members keep only their own rows
   (`spend_logs(..., end_user=user_key(user))` asks LiteLLM for just those; `_visible_to` is the backstop)
   and never see an unattributed row (empty `end_user`,
   made before this endpoint's `user` field shipped, or with the master key); admins see every row, including
   the unattributed ones as `user: null`; each row's `user` is the email (else name, else subject) from the `users`
-  table for the ids LiteLLM stored (`_user_names`), or the raw `end_user` value when no user row matches. Response: `scope` (`"organization"` for an admin, `"user"` for a
+  table for the ids LiteLLM stored (`_user_names`), or the raw `end_user` value when no user row matches.
+  A member's request is filtered server-side by user id, so a member does not see their own email-keyed rows merged in (a known asymmetry, follow-up).
+  Response: `scope` (`"organization"` for an admin, `"user"` for a
   member), `capped` (from `spend_logs`), `totals` (`requests`, `prompt_tokens`, `completion_tokens`, `spend`),
   `by_target` (one entry per target, sorted by spend then requests, both descending) and `rows` (one entry per
   `(user, target, day)`, sorted by day descending, then user, then target — a stable sort by `(user, target)`

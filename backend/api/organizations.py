@@ -198,7 +198,10 @@ def _user_names(db: Session, keys: set[str]) -> dict[str, str]:
     """Map the ``end_user`` values LiteLLM stores (platform user ids,
     see ``user_key``) to something a person recognizes: the user's
     email, else name, else token subject. Values that are not user ids
-    (rows written by other clients) stay as they are."""
+    (rows written by other clients, or by this platform while
+    ``user_key`` returned the email) stay as they are;
+    ``_aggregate_usage`` relies on that to merge one person's old and
+    new rows."""
     ids = []
     for key in keys:
         try:
@@ -237,7 +240,10 @@ def _aggregate_usage(
     """Aggregate visible spend-log rows by ``(display name, model_group,
     day)`` for the per-user-and-day table, and by target for the
     by-target table; return ``(totals, by_target, rows)``. ``names``
-    maps ``end_user`` values to display names (``_user_names``)."""
+    maps ``end_user`` values to display names (``_user_names``). This
+    merge is what an admin sees: a member's rows are filtered
+    server-side by user id (``current_org_usage``), so a member never
+    receives their own email-keyed rows to merge in the first place."""
     totals = _new_bucket("", "")
     by_target: dict[str, dict] = {}
     by_key: dict[tuple, dict] = {}
@@ -261,9 +267,11 @@ def _aggregate_usage(
             row,
         )
         # Key by the display name, not the raw ``end_user``: rows written
-        # before per-user attribution carry the email, later ones the
-        # user id, and both are the same person. The UI keys its table
-        # rows by (user, target, day), so one person must be one row.
+        # while ``user_key`` returned the email (before 4f7a7f2 switched
+        # it to the user id) and rows written after both belong to one
+        # person. The UI keys its table rows by (user, target, day), so
+        # one person must land in one row. Rows with no ``end_user`` at
+        # all (before attribution shipped) stay unattributed.
         display = names.get(user, user) if user else None
         _add_row(
             by_key.setdefault(

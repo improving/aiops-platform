@@ -255,10 +255,11 @@ def test_usage_mock_mode_serves_canned_rows(client, monkeypatch):
 def test_usage_merges_rows_of_one_person_under_two_end_user_values(
     client, monkeypatch
 ):
-    """Rows written before per-user attribution carry the email as
-    ``end_user``; later rows carry the user id. Both resolve to the
-    same display name, so they must land in one row per target and
-    day: the UI keys its table rows by (user, target, day)."""
+    """Rows written while ``user_key`` returned the email carry it as
+    ``end_user``; rows written after the switch to user ids carry the
+    id. Both map to the same display name, so they must land in one
+    row per target and day: the UI keys its table rows by (user,
+    target, day)."""
     rows = [
         {
             "model_group": "inst-aaaaaaaa",
@@ -290,3 +291,90 @@ def test_usage_merges_rows_of_one_person_under_two_end_user_values(
     assert keys == [("alice@example.com", "inst-aaaaaaaa", "2026-09-06")]
     assert body["rows"][0]["requests"] == 2
     assert body["rows"][0]["spend"] == pytest.approx(0.15)
+
+
+def test_usage_keeps_two_people_apart_on_one_target_and_day(
+    client, monkeypatch
+):
+    """Two different users on the same target and day must stay two
+    rows: only rows that resolve to the same display name merge."""
+    rows = [
+        {
+            "model_group": "inst-aaaaaaaa",
+            "end_user": ALICE_ID,
+            "startTime": "2026-09-06T10:00:00Z",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "spend": 0.05,
+        },
+        {
+            "model_group": "inst-aaaaaaaa",
+            "end_user": BOB_ID,
+            "startTime": "2026-09-06T11:00:00Z",
+            "prompt_tokens": 20,
+            "completion_tokens": 10,
+            "spend": 0.10,
+        },
+    ]
+    litellm = _mock_litellm(rows)
+    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
+    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    _add_user(ALICE_ID, "alice@example.com")
+    _add_user(BOB_ID, "bob@example.com")
+
+    response = client.get("/v1alpha1/organizations/current/usage")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    by_user = {r["user"]: r for r in body["rows"]}
+    assert set(by_user) == {"alice@example.com", "bob@example.com"}
+    assert by_user["alice@example.com"]["requests"] == 1
+    assert by_user["bob@example.com"]["requests"] == 1
+
+
+def test_usage_member_does_not_see_their_email_keyed_rows(client, monkeypatch):
+    """Pins the current asymmetry: an admin merges a member's
+    email-keyed and id-keyed rows into one (see the test above and
+    ``test_usage_merges_rows_of_one_person_under_two_end_user_values``),
+    but a member's own request only ever asks LiteLLM for their user
+    id, so their email-keyed rows never come back. A change in either
+    direction should be deliberate, not accidental."""
+    rows = [
+        {
+            "model_group": "inst-aaaaaaaa",
+            "end_user": BOB_ID,
+            "startTime": "2026-09-06T10:00:00Z",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "spend": 0.05,
+        },
+        {
+            "model_group": "inst-aaaaaaaa",
+            "end_user": "bob@example.com",
+            "startTime": "2026-09-06T11:00:00Z",
+            "prompt_tokens": 20,
+            "completion_tokens": 10,
+            "spend": 0.10,
+        },
+    ]
+    # The mock ignores the ``end_user`` filter argument and always
+    # returns both rows, so the backstop ``_visible_to`` is what drops
+    # the email-keyed one.
+    litellm = _mock_litellm(rows)
+    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
+    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    _add_user(BOB_ID, "bob@example.com")
+    bob = _member("bob@example.com", _default_org().id, BOB_ID)
+
+    app = client.app
+    app.dependency_overrides[get_current_user] = lambda: bob
+    try:
+        response = client.get("/v1alpha1/organizations/current/usage")
+    finally:
+        del app.dependency_overrides[get_current_user]
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["rows"]) == 1
+    assert body["rows"][0]["requests"] == 1
+    assert litellm.spend_logs.call_args.args[3] == BOB_ID
