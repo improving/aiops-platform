@@ -104,6 +104,46 @@ test.describe("registry page", () => {
     }
   });
 
+  test("cancelling an edit discards the change on the next reopen", async ({
+    page,
+    api,
+  }) => {
+    const registry = new RegistryPage(page);
+    await registry.open();
+
+    const name = `Manual Model ${shortId()}`;
+    await registry.addManually({
+      name,
+      modelId: `org/manual-${shortId()}`,
+      category: "llm",
+      servingOptions: [
+        { engine: "HuggingFace", reference: "org/manual-model" },
+      ],
+    });
+    await expect(registry.entryRow(name)).toBeVisible();
+
+    const entries = await api.registryEntries();
+    const entry = entries.find((e) => e.name === name);
+    try {
+      // Open, change the name, Cancel: the row (and the backend entry)
+      // keep the original name.
+      await registry.openEdit(name);
+      await expect(registry.editNameInput()).toHaveValue(name);
+      await registry.editNameInput().fill(`${name} edited`);
+      await registry.cancelEdit();
+      await expect(registry.entryRow(name)).toBeVisible();
+
+      // Reopening the same row must show the original name, not the
+      // abandoned edit (EditEntryDialog.tsx must reset its prefilled
+      // fields even on an X -> null -> X model transition).
+      await registry.openEdit(name);
+      await expect(registry.editNameInput()).toHaveValue(name);
+      await registry.cancelEdit();
+    } finally {
+      if (entry) await api.deleteRegistryEntry(entry.id);
+    }
+  });
+
   test("add an Ollama model from the manifest fixture", async ({
     page,
     api,

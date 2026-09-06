@@ -134,6 +134,11 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const [appliedDefaultsKey, setAppliedDefaultsKey] = useState<string | null>(
     null
   );
+  if (!selectedOption && appliedDefaultsKey !== null) {
+    // Guards a selectedOption transition of set -> undefined -> the same
+    // value, which would otherwise skip the reset below.
+    setAppliedDefaultsKey(null);
+  }
   if (selectedOption && defaultsKey !== appliedDefaultsKey) {
     const selectedEngine = engines.find(
       (engine) => engine.id === selectedOption.engine_id

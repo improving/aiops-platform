@@ -49,6 +49,12 @@ export default function EditEntryDialog({
   // https://react.dev/learn/you-might-not-need-an-effect, rather than in an
   // effect, since the fields must stay editable afterwards.
   const [prefilledFor, setPrefilledFor] = useState<Model | null>(null);
+  if (!model && prefilledFor !== null) {
+    // The dialog closes with model set back to null (RegistryPage.tsx); clear
+    // the tracked model so the fields re-prefill on the next open, even when
+    // the caller reopens the same model object (X -> null -> X).
+    setPrefilledFor(null);
+  }
   if (model && model !== prefilledFor) {
     setPrefilledFor(model);
     setName(model.name ?? "");

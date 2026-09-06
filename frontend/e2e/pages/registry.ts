@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { AppShell } from "./app-shell";
 
 export class RegistryPage extends AppShell {
@@ -64,6 +64,27 @@ export class RegistryPage extends AppShell {
   async deleteEntry(name: string) {
     await this.deleteEntryButton(name).click();
     await this.confirmDelete();
+  }
+
+  /** The "Edit entry" dialog. */
+  editDialog(): Locator {
+    return this.page.getByRole("dialog", { name: "Edit entry" });
+  }
+
+  /** Open "Edit entry" for a row and wait for its dialog to appear. */
+  async openEdit(name: string) {
+    await this.editButton(name).click();
+    await expect(this.editDialog()).toBeVisible();
+  }
+
+  editNameInput(): Locator {
+    return this.editDialog().getByRole("textbox", { name: "Name" });
+  }
+
+  /** Cancel the "Edit entry" dialog and wait for it to close. */
+  async cancelEdit() {
+    await this.editDialog().getByRole("button", { name: "Cancel" }).click();
+    await expect(this.editDialog()).toBeHidden();
   }
 
   /**

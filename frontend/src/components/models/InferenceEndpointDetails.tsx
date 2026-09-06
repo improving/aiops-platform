@@ -135,8 +135,7 @@ export default function InferenceEndpointDetailsPage({
 
   useEffect(() => {
     (async () => {
-      await fetchInferenceInstance();
-      await fetchDashboards();
+      await Promise.all([fetchInferenceInstance(), fetchDashboards()]);
     })();
   }, [fetchInferenceInstance, fetchDashboards]);
 

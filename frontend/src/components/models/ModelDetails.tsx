@@ -113,9 +113,11 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
     };
 
     (async () => {
-      await fetchModelDetails();
-      await fetchAdapters();
-      await fetchFineTuneJobs();
+      await Promise.all([
+        fetchModelDetails(),
+        fetchAdapters(),
+        fetchFineTuneJobs(),
+      ]);
     })();
   }, [params.id, toast, fetchAdapters]);
 
