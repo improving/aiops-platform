@@ -222,9 +222,7 @@ def _aggregate_usage(
         # A deleted instance has no label any more; its model still tells
         # what ran there.
         label = labels.get(target) or (
-            f"{model} (deleted)"
-            if model and target.startswith("inst-")
-            else target
+            f"{target} (deleted)" if target.startswith("inst-") else target
         )
 
         _add_row(totals, row)
