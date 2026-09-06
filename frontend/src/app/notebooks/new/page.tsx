@@ -5,7 +5,10 @@ import Dashboard from "@/components/Dashboard";
 
 export default function NewNotebookPage() {
   return (
-    <Dashboard title="Create New Notebook">
+    <Dashboard
+      title="Create New Notebook"
+      breadcrumbs={[{ label: "Notebooks", href: "/notebooks" }, { label: "New" }]}
+    >
       <NewNotebookForm />
     </Dashboard>
   );

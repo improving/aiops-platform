@@ -122,6 +122,11 @@ export class AppShell {
     return this.page.getByRole("status", { name: "Loading", exact: true });
   }
 
+  /** The breadcrumb trail; each crumb but the last is a link. */
+  breadcrumbs(): Locator {
+    return this.page.getByRole("navigation", { name: "Breadcrumb" });
+  }
+
   async waitForLoaded() {
     await expect(this.loading()).toHaveCount(0);
   }

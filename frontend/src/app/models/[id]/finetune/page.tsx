@@ -8,7 +8,14 @@ export default function ModelFineTunePage() {
   const { id } = useParams<{ id: string }>();
 
   return (
-    <Dashboard title="Fine-tune Model">
+    <Dashboard
+      title="Fine-tune Model"
+      breadcrumbs={[
+        { label: "Models" },
+        { label: "Catalog", href: "/models/catalog" },
+        { label: "Fine-tune" },
+      ]}
+    >
       <ModelFineTune params={{ id }} />
     </Dashboard>
   );

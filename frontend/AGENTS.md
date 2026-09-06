@@ -102,6 +102,8 @@ pnpm e2e:ui                               # Playwright UI mode
 - Loading placeholders come from `src/components/LoadingState.tsx` (`CardGridSkeleton`, `DetailSkeleton`,
   `TableSkeleton`), each wrapped in `role="status" aria-label="Loading"`; specs wait with
   `AppShell.waitForLoaded()`. Never render the string "Loading...".
+- Drill-down pages pass `breadcrumbs` (`Crumb[]` from `src/components/Breadcrumbs.tsx`) to `Dashboard`;
+  list pages pass none. The trail always starts at Home.
 
 ## Authentication
 

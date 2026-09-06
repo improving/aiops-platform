@@ -2,22 +2,26 @@ import { Suspense } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { DetailSkeleton } from "@/components/LoadingState";
+import { Breadcrumbs, type Crumb } from "@/components/Breadcrumbs";
 
 interface DashboardProps {
   title: string;
   children: React.ReactNode;
   iconUrl?: string; // Optional prop for the icon URL
+  breadcrumbs?: Crumb[];
 }
 
 export default function Dashboard({
   title,
   children,
   iconUrl,
+  breadcrumbs,
 }: DashboardProps) {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="grow container mx-auto px-4 py-8">
+        {breadcrumbs && <Breadcrumbs items={breadcrumbs} />}
         <h1 className="text-3xl font-bold mb-8 flex items-center">
           <span>{title}</span>
           {iconUrl && (

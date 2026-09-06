@@ -9,7 +9,10 @@ export default function NotebookDetailsPage() {
   const notebookId = params.notebookId as string;
 
   return (
-    <Dashboard title="Notebook Details">
+    <Dashboard
+      title="Notebook Details"
+      breadcrumbs={[{ label: "Notebooks", href: "/notebooks" }, { label: "Details" }]}
+    >
       <NotebookDetails notebookId={notebookId} />
     </Dashboard>
   );
