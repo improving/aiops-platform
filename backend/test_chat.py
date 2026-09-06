@@ -601,8 +601,8 @@ def test_litellm_stream_break_becomes_an_error_event(client):
 
 
 def test_direct_stream_break_becomes_an_error_event(client):
-    class Broken(httpx.SyncByteStream):
-        def __iter__(self):
+    class Broken(httpx.AsyncByteStream):
+        async def __aiter__(self):
             yield b'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n'
             raise httpx.RemoteProtocolError("peer closed connection")
 
