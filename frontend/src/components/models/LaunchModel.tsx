@@ -124,7 +124,10 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   );
 
   // Reset the CLI args and env vars to the selected engine's defaults
-  // whenever the picked serving option (or the loaded engines) change.
+  // whenever the picked serving option changes, or the engine list is
+  // reloaded with a different number of entries. The key is the engine
+  // list's length, not its contents, so a reload that comes back with the
+  // same count does not reset the user's edits.
   // Adjusted during render, per https://react.dev/learn/you-might-not-need-an-effect,
   // rather than in an effect, because args/envVars must stay editable
   // afterwards (a plain derived value would not allow the user's edits).

@@ -34,10 +34,12 @@ function Field({
   label,
   value,
   ariaLabel,
+  copyLabel,
 }: {
   label: string;
   value: string;
   ariaLabel: string;
+  copyLabel?: string;
 }) {
   return (
     <div>
@@ -49,7 +51,7 @@ function Field({
         >
           {value}
         </code>
-        <CopyButton label={label} text={value} />
+        <CopyButton label={copyLabel ?? label} text={value} />
       </div>
     </div>
   );
@@ -116,7 +118,12 @@ export function ShowCredentialButton({ instance }: ShowCredentialButtonProps) {
                 value={instance.api_endpoint || "N/A"}
                 ariaLabel="API endpoint"
               />
-              <Field label="Usage" value={usageHint} ariaLabel="Usage hint" />
+              <Field
+                label="Usage"
+                value={usageHint}
+                ariaLabel="Usage hint"
+                copyLabel="usage hint"
+              />
               <p className="text-sm text-muted-foreground">
                 Send the key in the <code>{credential.key}</code> header on the
                 API endpoint; requests without it are rejected by the gateway.

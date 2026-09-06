@@ -60,6 +60,61 @@ test.describe("usage page", () => {
     expect(text).toContain("dev@example.test");
   });
 
+  test("Download CSV quotes a target label with a comma and a quote", async ({
+    page,
+  }) => {
+    const row = {
+      day: "2026-01-01",
+      user: "dev@example.test",
+      target: "inst-mock",
+      label: 'a, "b"',
+      model: "mock-model",
+      requests: 1,
+      prompt_tokens: 10,
+      completion_tokens: 20,
+      spend: 0.01,
+    };
+    await page.route("**/api/v1alpha1/organizations/current/usage**", (route) =>
+      route.fulfill({
+        json: {
+          days: 30,
+          since: "2026-01-01T00:00:00Z",
+          until: "2026-01-31T00:00:00Z",
+          scope: "organization",
+          capped: false,
+          totals: {
+            requests: row.requests,
+            prompt_tokens: row.prompt_tokens,
+            completion_tokens: row.completion_tokens,
+            spend: row.spend,
+          },
+          by_target: [
+            {
+              target: row.target,
+              label: row.label,
+              model: row.model,
+              requests: row.requests,
+              prompt_tokens: row.prompt_tokens,
+              completion_tokens: row.completion_tokens,
+              spend: row.spend,
+            },
+          ],
+          rows: [row],
+        },
+      })
+    );
+    const usage = new UsagePage(page);
+    await usage.open();
+    await expect(usage.requestsTotal).toHaveText("1");
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      usage.downloadButton.click(),
+    ]);
+    const path = await download.path();
+    const text = readFileSync(path!, "utf8");
+    expect(text).toContain('"a, ""b"""');
+  });
+
   test("the header links to the Usage page", async ({ page }) => {
     const usage = new UsagePage(page);
     await usage.goto("/");

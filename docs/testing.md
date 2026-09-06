@@ -151,7 +151,7 @@ frontend/
     fixtures.ts             `test` with the console guard, the `api` fixture, `asUser`, `userApi`, helm/kubectl helpers, `fixme()`
     auth.setup.ts            logs alice, bob and admin into Keycloak; the `setup` project
     pages/                  page objects; one class per screen, accessible-name locators only
-      app-shell.ts          header, theme menu, heading, toasts, delete confirmation
+      app-shell.ts          header, theme menu, heading, toasts, delete confirmation, loading skeletons, breadcrumbs
       home.ts  model-catalog.ts  model-details.ts  finetune-form.ts  launch-model.ts
       vector-db-catalog.ts  vector-db-endpoints.ts (list page and `VectorDBInstanceDetailsPage`)  notebook-form.ts  notebooks.ts
       login.ts              the app's /login page and Keycloak's login form
@@ -289,11 +289,11 @@ Durations are from a local run on Apple silicon; CI is slower.
 | Spec (fast tier)              | Covers                                                                                                  | Status                        | Time  |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------- | ----- |
 | `navigation.spec.ts`          | every header link and dropdown item, brand link, active section, no console errors on eight pages       | pass                          | 2 s   |
-| `home.spec.ts`                | the four cards and their links, the live count tiles                                                    | pass                          | 1 s   |
-| `loading.spec.ts`             | a held list response shows the skeleton (`role="status"`), which is gone once the data arrives          | pass                          | 2 s   |
+| `home.spec.ts`                | the four cards and their links, the live count tiles; a failing list shows unavailable on its tile only | pass                          | 1 s   |
+| `loading.spec.ts`             | a held response (instance list, usage report) shows the skeleton (`role="status"`), which is gone once the data arrives | pass                          | 2 s   |
 | `breadcrumbs.spec.ts`         | the trail on the new notebook and model pages links back, list pages have none                          | pass                          | 2 s   |
 | `snippets.spec.ts`            | the shared copy button on the model page writes the clipboard and confirms with a toast                 | pass                          | 1 s   |
-| `list-controls.spec.ts`       | a mocked list of 15 vector databases: 12 per page and "Show more", the status filter, sort by name       | pass                          | 2 s   |
+| `list-controls.spec.ts`       | a mocked list of 15 vector databases: 12 per page and "Show more", the status filter, sort by name, card title opens the detail page | pass                          | 2 s   |
 | `models-catalog.spec.ts`      | search, category and subcategory filters, combined filters, Import Model dialog, card link              | pass                          | 3 s   |
 | `model-details.spec.ts`       | Details tab content, `?tab=` reflects the tab and survives reload, deep link, Launch Model             | pass                          | 4 s   |
 | `finetune-form.spec.ts`       | sections and defaults, required fields block the submit, backend rejection toast, stubbed create/list/params/delete flow | pass | 3 s |

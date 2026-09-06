@@ -175,3 +175,9 @@ export const modelService = {
     return response.data;
   },
 };
+
+// The picked serving option's reference is what upstream API calls (curl,
+// Python snippets) must send as `model`; instances launched before Phase 3
+// have no reference, so fall back to the catalog model id.
+export const upstreamModel = (i: InferenceInstance) =>
+  i.reference ?? i.model.modelId;

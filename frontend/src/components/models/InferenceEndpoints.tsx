@@ -35,7 +35,7 @@ export default function InferenceEndpoints() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterValue, setFilterValue] = useState("");
-  const [listState, updateList] = useListState();
+  const [listState, updateList, nextPage] = useListState();
   const { toast } = useToast();
 
   const fetchEndpoints = useCallback(
@@ -216,7 +216,7 @@ export default function InferenceEndpoints() {
                         {endpoint.endpoint && (
                           <span className="ml-2">
                             <CopyButton
-                              label="endpoint"
+                              label={`${endpoint.model.name} endpoint`}
                               text={endpoint.endpoint}
                             />
                           </span>
@@ -230,7 +230,7 @@ export default function InferenceEndpoints() {
           )}
           <ShowMore
             hasMore={hasMore}
-            onClick={() => updateList({ page: listState.page + 1 })}
+            onClick={nextPage}
             shown={visible.length}
             total={total}
           />

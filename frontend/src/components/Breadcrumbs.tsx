@@ -3,7 +3,10 @@ import { ChevronRightIcon } from "@radix-ui/react-icons";
 
 export type Crumb = { label: string; href?: string };
 
-/** A trail above the page title; the last crumb is the current page. */
+/**
+ * A trail above the page title; the last crumb is the current page.
+ * Crumbs with an href are links; section crumbs and the last crumb are plain text.
+ */
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   if (items.length === 0) return null;
   return (

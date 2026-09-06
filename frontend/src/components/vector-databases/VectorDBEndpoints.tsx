@@ -27,7 +27,7 @@ export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [listState, updateList] = useListState();
+  const [listState, updateList, nextPage] = useListState();
   const { toast } = useToast();
 
   const fetchInstances = useCallback(
@@ -146,7 +146,7 @@ export default function VectorDBEndpoints() {
                       {instance.endpoint && (
                         <span className="ml-2">
                           <CopyButton
-                            label="endpoint"
+                            label={`${instance.vectorDB.name} endpoint`}
                             text={instance.endpoint}
                           />
                         </span>
@@ -161,7 +161,7 @@ export default function VectorDBEndpoints() {
                     {instance.api_endpoint && (
                       <span className="ml-2">
                         <CopyButton
-                          label="API endpoint"
+                          label={`${instance.vectorDB.name} API endpoint`}
                           text={instance.api_endpoint}
                         />
                       </span>
@@ -184,7 +184,7 @@ export default function VectorDBEndpoints() {
       )}
       <ShowMore
         hasMore={hasMore}
-        onClick={() => updateList({ page: listState.page + 1 })}
+        onClick={nextPage}
         shown={visible.length}
         total={total}
       />

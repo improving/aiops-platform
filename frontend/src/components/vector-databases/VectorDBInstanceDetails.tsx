@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { Label } from "@/components/ui/label";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
@@ -33,6 +34,7 @@ function Row({
 export default function VectorDBInstanceDetails({ id }: { id: string }) {
   const [instance, setInstance] = useState<VectorDBInstanceSchema | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -41,7 +43,10 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
       try {
         setInstance(await vectorDBService.getVectorDBInstance(id));
       } catch (error) {
-        if (!options?.silent) toast(parseApiError(error));
+        if (!options?.silent) {
+          toast(parseApiError(error));
+          setLoadError(error);
+        }
       } finally {
         setLoading(false);
       }
@@ -62,7 +67,20 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
   usePolling(poll, instance ? isNonTerminal(instance) : false);
 
   if (loading) return <DetailSkeleton />;
-  if (!instance) return <div>Vector database instance not found</div>;
+  if (!instance) {
+    if (loadError instanceof AxiosError && loadError.response?.status === 404) {
+      return <div>Vector database instance not found</div>;
+    }
+    if (loadError) {
+      return (
+        <div>
+          Could not load this vector database instance:{" "}
+          {parseApiError(loadError).description}
+        </div>
+      );
+    }
+    return <div>Vector database instance not found</div>;
+  }
 
   const apiBase = instance.api_endpoint?.replace(/\/$/, "") ?? "<api endpoint>";
   const configEntries = Object.entries(instance.configParams ?? {});

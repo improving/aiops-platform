@@ -5,14 +5,18 @@ export class VectorDBEndpointsPage extends AppShell {
   readonly search: Locator;
   readonly cards: Locator;
   readonly emptyState: Locator;
+  readonly noMatch: Locator;
   readonly showMore: Locator;
+  readonly launchButton: Locator;
 
   constructor(page: Page) {
     super(page);
     this.search = page.getByPlaceholder("Search by name...");
     this.cards = page.locator('main [data-slot="card"]');
     this.emptyState = page.getByText("No vector database instances yet.");
+    this.noMatch = page.getByText("No instances match.", { exact: true });
     this.showMore = page.getByRole("button", { name: /Show more/ });
+    this.launchButton = page.getByRole("button", { name: "Launch" });
   }
 
   async open() {
@@ -79,6 +83,7 @@ export class VectorDBInstanceDetailsPage extends AppShell {
   readonly notFound: Locator;
   readonly deleteButton: Locator;
   readonly showCredentialButton: Locator;
+  readonly curlExample: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -92,6 +97,7 @@ export class VectorDBInstanceDetailsPage extends AppShell {
     this.showCredentialButton = page
       .locator("main")
       .getByRole("button", { name: "Show credential" });
+    this.curlExample = page.getByRole("group", { name: "curl example" });
   }
 
   async open(id: string) {
@@ -103,5 +109,10 @@ export class VectorDBInstanceDetailsPage extends AppShell {
     return this.page
       .getByText(label, { exact: true })
       .locator("xpath=following-sibling::*[1]");
+  }
+
+  /** A copy button by its plain (non-compound) label, as used on this page. */
+  copyButton(label: string): Locator {
+    return this.page.getByRole("button", { name: `Copy ${label}` });
   }
 }

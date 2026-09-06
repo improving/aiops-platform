@@ -101,9 +101,9 @@ export default function NewNotebookForm() {
     },
   });
 
-  // react-hook-form's `watch()` returns a function the React Compiler
-  // cannot memoize (`react-hooks/incompatible-library`); `useWatch` is its
-  // compiler-compatible equivalent, subscribing to the same field values.
+  // `form.watch()` reads mutable form state during render, which the React
+  // Compiler cannot memoize (`react-hooks/incompatible-library`); `useWatch`
+  // subscribes to the same field values through `control`.
   const notebookType = useWatch({ control: form.control, name: "type" });
   const nvidiaGpu = useWatch({ control: form.control, name: "nvidia_gpu" });
 

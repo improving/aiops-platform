@@ -70,7 +70,10 @@ export function DetailSkeleton({ rows = 8 }: { rows?: number }) {
   );
 }
 
-/** Placeholder for stat tiles plus a table (Usage, Registry, Providers). */
+/**
+ * Placeholder for a table page (Usage, Registry, Providers);
+ * it stands in for whatever sits above the table too.
+ */
 export function TableSkeleton({
   rows = 5,
   columns = 4,

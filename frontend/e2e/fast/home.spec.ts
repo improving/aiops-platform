@@ -1,4 +1,4 @@
-import { test, expect, FAILED_RESOURCE } from "../fixtures";
+import { test, expect } from "../fixtures";
 import { HomePage } from "../pages/home";
 
 const cards = [
@@ -103,7 +103,11 @@ test.describe("home page", () => {
 });
 
 test.describe("home page with a failing list", () => {
-  test.use({ allowedConsoleErrors: [FAILED_RESOURCE] });
+  test.use({
+    allowedConsoleErrors: [
+      /Failed to load resource|home overview: notebooks failed/,
+    ],
+  });
 
   test("shows unavailable on a tile whose list failed, without blanking the rest", async ({
     page,

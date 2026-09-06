@@ -19,7 +19,11 @@ test.describe("error pages", () => {
 
   test("an unknown notebook shows the not-found message", async ({ page }) => {
     const details = new NotebookDetailsPage(page);
-    await details.open("does-not-exist");
+    // A syntactically valid id that does not exist, not a malformed one:
+    // the notebook route's uuid.UUID path param rejects a non-UUID string
+    // with a 422 before the handler runs, which is a different failure mode
+    // from "not found" (see NotebookDetails.tsx's loadError handling).
+    await details.open("00000000-0000-0000-0000-000000000000");
     await details.expectHeading("Notebook Details");
     await expect(details.notFound).toBeVisible();
     await expect(details.toast(/API Error/)).toBeVisible();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Notebook } from "@/types/notebook";
@@ -22,6 +23,7 @@ interface NotebookDetailsProps {
 export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   const [notebook, setNotebook] = useState<Notebook | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -31,7 +33,10 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
         const data = await notebookService.getNotebookById(notebookId);
         setNotebook(data);
       } catch (error) {
-        if (!options?.silent) toast(parseApiError(error));
+        if (!options?.silent) {
+          toast(parseApiError(error));
+          setLoadError(error);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -60,6 +65,16 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   }
 
   if (!notebook) {
+    if (loadError instanceof AxiosError && loadError.response?.status === 404) {
+      return <div>Notebook not found</div>;
+    }
+    if (loadError) {
+      return (
+        <div>
+          Could not load this notebook: {parseApiError(loadError).description}
+        </div>
+      );
+    }
     return <div>Notebook not found</div>;
   }
 

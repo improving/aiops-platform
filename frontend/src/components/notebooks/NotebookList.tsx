@@ -25,7 +25,7 @@ export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [listState, updateList] = useListState();
+  const [listState, updateList, nextPage] = useListState();
   const { toast } = useToast();
 
   const fetchNotebooks = useCallback(
@@ -156,7 +156,7 @@ export default function NotebookList() {
                       </Button>
                       {notebook.endpoint && (
                         <CopyButton
-                          label="notebook URL"
+                          label={`${notebook.name} notebook URL`}
                           text={notebook.endpoint}
                         />
                       )}
@@ -168,7 +168,7 @@ export default function NotebookList() {
           )}
           <ShowMore
             hasMore={hasMore}
-            onClick={() => updateList({ page: listState.page + 1 })}
+            onClick={nextPage}
             shown={visible.length}
             total={total}
           />

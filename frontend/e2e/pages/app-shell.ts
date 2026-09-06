@@ -122,7 +122,7 @@ export class AppShell {
     return this.page.getByRole("status", { name: "Loading", exact: true });
   }
 
-  /** The breadcrumb trail; each crumb but the last is a link. */
+  /** The breadcrumb trail. Crumbs with an href are links; section crumbs and the last crumb are plain text. */
   breadcrumbs(): Locator {
     return this.page.getByRole("navigation", { name: "Breadcrumb" });
   }

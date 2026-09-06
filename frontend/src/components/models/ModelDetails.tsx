@@ -59,7 +59,6 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   const [model, setModel] = useState<Model | null>(null);
   const [adapters, setAdapters] = useState<Adapter[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [newAdapterName, setNewAdapterName] = useState("");
@@ -208,10 +207,6 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
 
   if (loading) {
     return <DetailSkeleton />;
-  }
-
-  if (error) {
-    return <div>Error: {error}</div>;
   }
 
   if (!model) {

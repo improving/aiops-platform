@@ -10,14 +10,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type StatusFilter = "all" | "ready" | "pending";
-export type SortKey = "name-asc" | "name-desc" | "status";
+export const STATUS_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "ready", label: "Ready" },
+  { value: "pending", label: "Not ready" },
+] as const;
+export const SORT_OPTIONS = [
+  { value: "name-asc", label: "Name A-Z" },
+  { value: "name-desc", label: "Name Z-A" },
+  { value: "status", label: "Status" },
+] as const;
+
+export type StatusFilter = (typeof STATUS_OPTIONS)[number]["value"];
+export type SortKey = (typeof SORT_OPTIONS)[number]["value"];
 export type ListState = { status: StatusFilter; sort: SortKey; page: number };
 export const PAGE_SIZE = 12;
 
 export function useListState(): [
   ListState,
   (patch: Partial<ListState>) => void,
+  () => void,
 ] {
   const [state, setState] = useState<ListState>({
     status: "all",
@@ -27,7 +39,8 @@ export function useListState(): [
   // Any filter or sort change goes back to the first page.
   const update = (patch: Partial<ListState>) =>
     setState((s) => ({ ...s, ...patch, page: patch.page ?? 1 }));
-  return [state, update];
+  const nextPage = () => setState((s) => ({ ...s, page: s.page + 1 }));
+  return [state, update, nextPage];
 }
 
 export function applyListControls<T>(
@@ -69,28 +82,38 @@ export function ListControls({
     <div className="flex flex-wrap gap-2">
       <Select
         value={state.status}
-        onValueChange={(v) => onChange({ status: v as StatusFilter })}
+        onValueChange={(v) => {
+          const option = STATUS_OPTIONS.find((o) => o.value === v);
+          if (option) onChange({ status: option.value });
+        }}
       >
         <SelectTrigger className="w-[150px]" aria-label="Status">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All</SelectItem>
-          <SelectItem value="ready">Ready</SelectItem>
-          <SelectItem value="pending">Not ready</SelectItem>
+          {STATUS_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <Select
         value={state.sort}
-        onValueChange={(v) => onChange({ sort: v as SortKey })}
+        onValueChange={(v) => {
+          const option = SORT_OPTIONS.find((o) => o.value === v);
+          if (option) onChange({ sort: option.value });
+        }}
       >
         <SelectTrigger className="w-[150px]" aria-label="Sort">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="name-asc">Name A-Z</SelectItem>
-          <SelectItem value="name-desc">Name Z-A</SelectItem>
-          <SelectItem value="status">Status</SelectItem>
+          {SORT_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>

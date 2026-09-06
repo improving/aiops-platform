@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { AxiosError } from "axios";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ import {
 import JaegerEmbed from "@/components/JaegerEmbed";
 import { Input } from "@/components/ui/input";
 import { GRAFANA_URL, JAEGER_URL } from "@/constants";
-import { modelService } from "@/services/modelService";
+import { modelService, upstreamModel } from "@/services/modelService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import {
@@ -68,6 +69,7 @@ export default function InferenceEndpointDetailsPage({
   const [inferenceInstance, setInferenceInstance] =
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [dashboards, setDashboards] = useState<InferenceInstanceDashboard[]>(
     []
   );
@@ -117,8 +119,10 @@ export default function InferenceEndpointDetailsPage({
     try {
       const data = await modelService.getInferenceInstance(params.id);
       setInferenceInstance(data);
+      setNow(Date.now());
     } catch (error) {
       toast(parseApiError(error));
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -148,6 +152,7 @@ export default function InferenceEndpointDetailsPage({
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
+    setNow(Date.now());
     router.push(`/models/endpoints/${params.id}?tab=${value}`, {
       scroll: false,
     });
@@ -167,6 +172,17 @@ export default function InferenceEndpointDetailsPage({
   }
 
   if (!inferenceInstance) {
+    if (loadError instanceof AxiosError && loadError.response?.status === 404) {
+      return <div>Model instance not found</div>;
+    }
+    if (loadError) {
+      return (
+        <div>
+          Could not load this model instance:{" "}
+          {parseApiError(loadError).description}
+        </div>
+      );
+    }
     return <div>Model instance not found</div>;
   }
 
@@ -251,7 +267,7 @@ export default function InferenceEndpointDetailsPage({
                       label="curl example"
                       code={`curl ${inferenceInstance.endpoint}/v1/chat/completions \\
   -H "x-api-key: <api key>" -H "content-type: application/json" \\
-  -d '{"model":"${inferenceInstance.reference ?? inferenceInstance.model.modelId}","messages":[{"role":"user","content":"Hello"}]}'`}
+  -d '{"model":"${upstreamModel(inferenceInstance)}","messages":[{"role":"user","content":"Hello"}]}'`}
                     />
                     <CodeSnippet
                       label="Python example"
@@ -263,7 +279,7 @@ client = OpenAI(
     default_headers={"x-api-key": "<api key>"},
 )
 print(client.chat.completions.create(
-    model="${inferenceInstance.reference ?? inferenceInstance.model.modelId}",
+    model="${upstreamModel(inferenceInstance)}",
     messages=[{"role": "user", "content": "Hello"}],
 ).choices[0].message.content)`}
                     />

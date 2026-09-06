@@ -36,6 +36,8 @@ pnpm e2e:ui                               # Playwright UI mode
   `toast(parseApiError(error))`.
 - Lists that wait on Kubernetes (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`, notebook details) refresh
   through `src/hooks/usePolling.ts` every 5 s while any item is non-terminal; refreshes are silent (no spinner, no toast).
+- Mount effects call their fetcher through an inline async wrapper, `(async () => { await fetchX(); })()`; it keeps
+  the effect body synchronous and satisfies `react-hooks/set-state-in-effect`. Do not shorten it to a bare call.
 - Model registry (Phase 3): `/models/registry` (`RegistryPage.tsx`, `src/services/registryService.ts`) is the admin
   surface over `GET/POST/PATCH/DELETE /v1alpha1/registry` (members get the same page read-only, gated the same way
   as `ProvidersPage.tsx`). `ImportFromHuggingFaceDialog.tsx`/`AddOllamaModelDialog.tsx`/`AddHostedModelDialog.tsx`
@@ -101,15 +103,18 @@ pnpm e2e:ui                               # Playwright UI mode
   Top-level links use `NavigationMenuLink asChild` with `flex-row`, never `Link legacyBehavior`.
 - Loading placeholders come from `src/components/LoadingState.tsx` (`CardGridSkeleton`, `DetailSkeleton`,
   `TableSkeleton`), each wrapped in `role="status" aria-label="Loading"`; specs wait with
-  `AppShell.waitForLoaded()`. Never render the string "Loading...".
+  `AppShell.waitForLoaded()`. Never render the string "Loading...", except the fine-tune logs dialog's
+  "Loading logs..." button label, the one exception.
 - Drill-down pages pass `breadcrumbs` (`Crumb[]` from `src/components/Breadcrumbs.tsx`) to `Dashboard`;
   list pages pass none. The trail always starts at Home.
 - Copy actions use `src/components/CopyButton.tsx` (aria-label `Copy ${label}`, label passed through
-  unchanged, no lowercasing, so callers pass a sentence-cased label such as "API key" or "notebook URL");
-  code examples use `src/components/CodeSnippet.tsx` (`<pre role="group" aria-label>` plus a copy button).
+  unchanged, no lowercasing): the label reads naturally after the word Copy, a lowercase phrase with
+  acronyms and proper nouns kept, e.g. `endpoint`, `model id`, `API key`, `notebook URL`.
+  Code examples use `src/components/CodeSnippet.tsx` (`<pre role="group" aria-label>` plus a copy button).
   Do not inline `navigator.clipboard` calls in feature components.
-- `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) mirrors the model instance detail page:
-  status, endpoints with copy, a curl example, credential reveal and delete; the list card title links to it.
+- `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) follows the same layout as the model
+  instance detail page: status, endpoints with copy, a curl example, credential reveal and delete; the list
+  card title links to it. The header name there is `api-key` (the model instance page's is `x-api-key`).
 - Card lists (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`) share `src/components/ListControls.tsx`:
   `useListState` + `applyListControls` (status filter, name/status sort, 12 per page with "Show more").
   The empty-state call to action is keyed on the raw list, not the filtered one.

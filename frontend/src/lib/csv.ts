@@ -1,14 +1,20 @@
-function cell(value: string | number | null | undefined): string {
+export type Cell = string | number | null | undefined;
+
+function cell(value: Cell): string {
   if (value === null || value === undefined) return "";
   const text = String(value);
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 /** RFC 4180: comma separated, CRLF line ends, quotes doubled. */
-export function toCsv(
-  headers: string[],
-  rows: (string | number | null | undefined)[][]
-): string {
+export function toCsv(headers: string[], rows: Cell[][]): string {
+  rows.forEach((row, i) => {
+    if (row.length !== headers.length) {
+      throw new Error(
+        `toCsv: row ${i} has ${row.length} cells, expected ${headers.length}`
+      );
+    }
+  });
   return (
     [headers, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n"
   );
