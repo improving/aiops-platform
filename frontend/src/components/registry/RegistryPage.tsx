@@ -75,7 +75,9 @@ export default function RegistryPage({ admin }: RegistryPageProps) {
   }, [source, capability, status, admin, toast]);
 
   useEffect(() => {
-    fetchEntries();
+    (async () => {
+      await fetchEntries();
+    })();
   }, [fetchEntries]);
 
   const upsert = (model: Model) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Input } from "@/components/ui/input";
@@ -101,9 +101,11 @@ export default function NewNotebookForm() {
     },
   });
 
-  const { watch } = form;
-  const notebookType = watch("type");
-  const nvidiaGpu = watch("nvidia_gpu");
+  // react-hook-form's `watch()` returns a function the React Compiler
+  // cannot memoize (`react-hooks/incompatible-library`); `useWatch` is its
+  // compiler-compatible equivalent, subscribing to the same field values.
+  const notebookType = useWatch({ control: form.control, name: "type" });
+  const nvidiaGpu = useWatch({ control: form.control, name: "nvidia_gpu" });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 

@@ -42,7 +42,6 @@ import {
 } from "@/components/ui/dialog";
 import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
-import { RefreshButton } from "../RefreshButton";
 import { DetailSkeleton } from "@/components/LoadingState";
 import { CopyButton } from "@/components/CopyButton";
 import { CodeSnippet } from "@/components/CodeSnippet";
@@ -80,8 +79,8 @@ export default function InferenceEndpointDetailsPage({
     searchParams.get("tab") || "details"
   );
   const [selectedAdapter, setSelectedAdapter] = useState<Adapter | null>(null);
-  const [serviceName, setServiceName] = useState<string | null>(null);
   const [jaegerLimit, setJaegerLimit] = useState(20);
+  const [now, setNow] = useState(() => Date.now());
   const [credential, setCredential] = useState<Credential | null>(null);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
   const [credentialLoading, setCredentialLoading] = useState(false);
@@ -135,17 +134,17 @@ export default function InferenceEndpointDetailsPage({
   }, [params.id, toast]);
 
   useEffect(() => {
-    fetchInferenceInstance();
-    fetchDashboards();
+    (async () => {
+      await fetchInferenceInstance();
+      await fetchDashboards();
+    })();
   }, [fetchInferenceInstance, fetchDashboards]);
 
-  useEffect(() => {
+  const serviceName = useMemo(() => {
     if (dashboards.length > 0) {
-      const serviceParam = dashboards[0].query_params["var-service"];
-      if (serviceParam) {
-        setServiceName(serviceParam);
-      }
+      return dashboards[0].query_params["var-service"] || null;
     }
+    return null;
   }, [dashboards]);
 
   const handleTabChange = (value: string) => {
@@ -160,10 +159,9 @@ export default function InferenceEndpointDetailsPage({
   };
 
   const timeRangeParams = useMemo(() => {
-    const to = Date.now();
-    const from = to - selectedTimeRange.value;
-    return { from: from.toString(), to: to.toString() };
-  }, [selectedTimeRange]);
+    const from = now - selectedTimeRange.value;
+    return { from: from.toString(), to: now.toString() };
+  }, [now, selectedTimeRange]);
 
   if (loading) {
     return <DetailSkeleton />;
@@ -379,6 +377,7 @@ print(client.chat.completions.create(
                             value={option.value.toString()}
                             onSelect={() => {
                               setSelectedTimeRange(option);
+                              setNow(Date.now());
                               setOpen(false);
                             }}
                           >
@@ -442,6 +441,7 @@ print(client.chat.completions.create(
                             value={option.value.toString()}
                             onSelect={() => {
                               setSelectedTimeRange(option);
+                              setNow(Date.now());
                               setOpen(false);
                             }}
                           >
@@ -472,8 +472,8 @@ print(client.chat.completions.create(
               <JaegerEmbed
                 jaegerEndpoint={JAEGER_URL}
                 serviceName={serviceName}
-                start={Date.now() - selectedTimeRange.value}
-                end={Date.now()}
+                start={now - selectedTimeRange.value}
+                end={now}
                 limit={jaegerLimit}
                 lookback={
                   (selectedTimeRange.value / (60 * 1000)).toString() + "m"

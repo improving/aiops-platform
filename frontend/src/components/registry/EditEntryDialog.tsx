@@ -44,8 +44,13 @@ export default function EditEntryDialog({
   const [servingOptions, setServingOptions] = useState<ServingOptionRow[]>([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!model) return;
+  // Reset the editable fields from the model prop whenever the dialog opens
+  // for a (new) model. Adjusted during render, per
+  // https://react.dev/learn/you-might-not-need-an-effect, rather than in an
+  // effect, since the fields must stay editable afterwards.
+  const [prefilledFor, setPrefilledFor] = useState<Model | null>(null);
+  if (model && model !== prefilledFor) {
+    setPrefilledFor(model);
     setName(model.name ?? "");
     setDescription(model.description ?? "");
     setLicense(model.license ?? "");
@@ -53,14 +58,20 @@ export default function EditEntryDialog({
       model.context_length != null ? String(model.context_length) : ""
     );
     setCapabilities((model.capabilities ?? []).join(", "));
-    modelService
-      .getModelServingOptions(model.id)
-      .then((options) =>
+  }
+
+  useEffect(() => {
+    if (!model) return;
+    (async () => {
+      try {
+        const options = await modelService.getModelServingOptions(model.id);
         setServingOptions(
           options.map((o) => ({ engine: o.engine, reference: o.reference }))
-        )
-      )
-      .catch((error) => toast(parseApiError(error)));
+        );
+      } catch (error) {
+        toast(parseApiError(error));
+      }
+    })();
   }, [model, toast]);
 
   const updateOption = (

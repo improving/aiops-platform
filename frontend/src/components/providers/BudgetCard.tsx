@@ -39,7 +39,9 @@ export function BudgetCard({ admin }: BudgetCardProps) {
   }, [toast]);
 
   useEffect(() => {
-    fetchSpend();
+    (async () => {
+      await fetchSpend();
+    })();
   }, [fetchSpend]);
 
   const handleSave = async () => {

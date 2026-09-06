@@ -50,7 +50,9 @@ export default function ModelCatalog() {
   }, [toast]);
 
   useEffect(() => {
-    fetchModels();
+    (async () => {
+      await fetchModels();
+    })();
   }, [fetchModels]);
 
   const filteredModels = models.filter(

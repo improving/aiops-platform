@@ -53,7 +53,9 @@ export default function InferenceEndpoints() {
   );
 
   useEffect(() => {
-    fetchEndpoints();
+    (async () => {
+      await fetchEndpoints();
+    })();
   }, [fetchEndpoints]);
 
   const pollEndpoints = useCallback(

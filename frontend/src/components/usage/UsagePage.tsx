@@ -87,7 +87,9 @@ export default function UsagePage() {
   }, []);
 
   useEffect(() => {
-    fetchUsage(days);
+    (async () => {
+      await fetchUsage(days);
+    })();
   }, [days, fetchUsage]);
 
   return (

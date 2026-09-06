@@ -59,7 +59,7 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
   const [model, setModel] = useState<Model | null>(null);
   const [adapters, setAdapters] = useState<Adapter[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [newAdapterName, setNewAdapterName] = useState("");
@@ -112,9 +112,11 @@ export default function ModelDetails({ params }: { params: { id: string } }) {
       }
     };
 
-    fetchModelDetails();
-    fetchAdapters();
-    fetchFineTuneJobs();
+    (async () => {
+      await fetchModelDetails();
+      await fetchAdapters();
+      await fetchFineTuneJobs();
+    })();
   }, [params.id, toast, fetchAdapters]);
 
   const handleTabChange = (value: string) => {

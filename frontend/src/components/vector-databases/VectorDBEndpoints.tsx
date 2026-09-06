@@ -45,7 +45,9 @@ export default function VectorDBEndpoints() {
   );
 
   useEffect(() => {
-    fetchInstances();
+    (async () => {
+      await fetchInstances();
+    })();
   }, [fetchInstances]);
 
   const pollInstances = useCallback(

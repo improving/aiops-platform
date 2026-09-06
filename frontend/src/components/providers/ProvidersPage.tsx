@@ -65,7 +65,9 @@ export default function ProvidersPage({ admin }: ProvidersPageProps) {
   }, [toast]);
 
   useEffect(() => {
-    fetchProviders();
+    (async () => {
+      await fetchProviders();
+    })();
   }, [fetchProviders]);
 
   const toggleExpanded = (id: string) => {

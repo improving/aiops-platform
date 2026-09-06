@@ -32,8 +32,6 @@ function cpuOnly(options: ServingOption[]): boolean {
   return options.length > 0 && options.every((option) => option.cpu);
 }
 
-const tabs = ["accelerators", "deployConfig", "envVars"];
-
 type EnvVar = {
   name: string;
   value: string;
@@ -125,37 +123,46 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     (option) => option.id === formData.servingOptionId
   );
 
-  useEffect(() => {
-    if (selectedOption) {
-      const selectedEngine = engines.find(
-        (engine) => engine.id === selectedOption.engine_id
+  // Reset the CLI args and env vars to the selected engine's defaults
+  // whenever the picked serving option (or the loaded engines) change.
+  // Adjusted during render, per https://react.dev/learn/you-might-not-need-an-effect,
+  // rather than in an effect, because args/envVars must stay editable
+  // afterwards (a plain derived value would not allow the user's edits).
+  const defaultsKey = selectedOption
+    ? `${selectedOption.id}:${engines.length}`
+    : null;
+  const [appliedDefaultsKey, setAppliedDefaultsKey] = useState<string | null>(
+    null
+  );
+  if (selectedOption && defaultsKey !== appliedDefaultsKey) {
+    const selectedEngine = engines.find(
+      (engine) => engine.id === selectedOption.engine_id
+    );
+    if (selectedEngine) {
+      setAppliedDefaultsKey(defaultsKey);
+
+      const defaultArgs: CLIArg[] = selectedEngine.default_args.map((arg) => ({
+        name: arg.name,
+        value: arg.defaultValue,
+        editable: arg.editable,
+        new: false,
+        updated: false,
+      }));
+
+      const defaultEnvVars: EnvVar[] = selectedEngine.default_config.map(
+        (env) => ({
+          name: env.name,
+          value: env.defaultValue,
+          editable: env.editable,
+          new: false,
+          updated: false,
+        })
       );
-      if (selectedEngine) {
-        const defaultArgs: CLIArg[] = selectedEngine.default_args.map(
-          (arg) => ({
-            name: arg.name,
-            value: arg.defaultValue,
-            editable: arg.editable,
-            new: false,
-            updated: false,
-          })
-        );
 
-        const defaultEnvVars: EnvVar[] = selectedEngine.default_config.map(
-          (env) => ({
-            name: env.name,
-            value: env.defaultValue,
-            editable: env.editable,
-            new: false,
-            updated: false,
-          })
-        );
-
-        setArgs(defaultArgs);
-        setEnvVars(defaultEnvVars);
-      }
+      setArgs(defaultArgs);
+      setEnvVars(defaultEnvVars);
     }
-  }, [selectedOption, engines]);
+  }
 
   const handleArgChange = (
     index: number,
@@ -256,13 +263,6 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleTabChange = (value: string) => {

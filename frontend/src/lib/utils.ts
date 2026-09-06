@@ -98,7 +98,7 @@ export function GetModelIcon(modelId: string) {
       default:
         return "/models/pixtide.png";
     }
-  } catch (error) {
+  } catch {
     return "/models/pixtide.png";
   }
 }
@@ -136,7 +136,7 @@ export function GetVectorDBIcon(vectorDBId: string) {
       default:
         return "/models/pixtide.png";
     }
-  } catch (error) {
+  } catch {
     return "/models/pixtide.png";
   }
 }

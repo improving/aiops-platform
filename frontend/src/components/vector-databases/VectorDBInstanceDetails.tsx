@@ -50,7 +50,9 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    fetchInstance();
+    (async () => {
+      await fetchInstance();
+    })();
   }, [fetchInstance]);
 
   const poll = useCallback(

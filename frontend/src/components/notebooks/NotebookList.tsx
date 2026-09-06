@@ -43,7 +43,9 @@ export default function NotebookList() {
   );
 
   useEffect(() => {
-    fetchNotebooks();
+    (async () => {
+      await fetchNotebooks();
+    })();
   }, [fetchNotebooks]);
 
   const pollNotebooks = useCallback(

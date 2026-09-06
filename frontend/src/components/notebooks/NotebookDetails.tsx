@@ -7,7 +7,7 @@ import { Notebook } from "@/types/notebook";
 import { OpenInNewWindowIcon } from "@radix-ui/react-icons";
 import { Label } from "@/components/ui/label";
 import { notebookService } from "@/services/notebookService";
-import { toast, useToast } from "@/components/hooks/use-toast";
+import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
@@ -40,7 +40,9 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
   );
 
   useEffect(() => {
-    fetchNotebookDetails();
+    (async () => {
+      await fetchNotebookDetails();
+    })();
   }, [fetchNotebookDetails]);
 
   const pollNotebookDetails = useCallback(
