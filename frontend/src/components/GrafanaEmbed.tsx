@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import NotConfigured from "@/components/NotConfigured";
 
 interface GrafanaEmbedProps {
@@ -12,6 +12,29 @@ interface GrafanaEmbedProps {
   height?: string;
 }
 
+/** The d-solo URL of one panel, or null when it cannot be built. */
+function panelUrl(
+  grafanaEndpoint: string,
+  dashboardID: string,
+  panelID: string,
+  orgID: string,
+  queryParams: { [key: string]: string }
+): string | null {
+  if (!grafanaEndpoint || !dashboardID || !panelID) return null;
+  try {
+    const url = new URL(`${grafanaEndpoint}/d-solo/${dashboardID}`);
+    url.searchParams.append("orgId", orgID);
+    url.searchParams.append("panelId", panelID);
+    url.searchParams.append("theme", "light");
+    Object.entries(queryParams).forEach(([key, value]) => {
+      url.searchParams.append(key, value);
+    });
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
   grafanaEndpoint,
   dashboardID,
@@ -20,25 +43,13 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
   queryParams = {},
   height = "300px",
 }) => {
-  const [iframeUrl, setIframeUrl] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      const url = new URL(`${grafanaEndpoint}/d-solo/${dashboardID}`);
-      url.searchParams.append("orgId", orgID);
-      url.searchParams.append("panelId", panelID);
-      url.searchParams.append("theme", "light");
-
-      Object.entries(queryParams).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
-      });
-
-      setIframeUrl(url.toString());
-    } catch (err) {
-      setError("Failed to construct dashboard URL");
-    }
-  }, [grafanaEndpoint, dashboardID, panelID, orgID, queryParams]);
+  // Computed synchronously: an iframe must never render with an empty
+  // src (the browser would load the page itself into the frame).
+  const iframeUrl = useMemo(
+    () => panelUrl(grafanaEndpoint, dashboardID, panelID, orgID, queryParams),
+    [grafanaEndpoint, dashboardID, panelID, orgID, queryParams]
+  );
 
   if (!grafanaEndpoint) {
     return <NotConfigured name="Grafana" envVar="NEXT_PUBLIC_GRAFANA_URL" />;
@@ -46,6 +57,14 @@ const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
 
   if (error) {
     return <div className="error">{error}</div>;
+  }
+
+  if (!iframeUrl) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        This panel has no dashboard reference.
+      </div>
+    );
   }
 
   return (
