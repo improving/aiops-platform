@@ -16,11 +16,13 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { ShowCredentialButton } from "@/components/vector-databases/ShowCredentialButton";
 import { CardGridSkeleton } from "@/components/LoadingState";
+import { ListControls, ShowMore, applyListControls, useListState } from "@/components/ListControls";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [listState, updateList] = useListState();
   const { toast } = useToast();
 
   const fetchInstances = useCallback(
@@ -51,6 +53,12 @@ export default function VectorDBEndpoints() {
     instance.vectorDB.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const { visible, total, hasMore } = applyListControls(
+    filteredInstances,
+    listState,
+    { name: (i) => i.vectorDB.name, ready: (i) => i.ready }
+  );
+
   const handleDelete = async (id: string) => {
     await vectorDBService.deleteVectorDBInstance(id);
   };
@@ -61,18 +69,21 @@ export default function VectorDBEndpoints() {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-4">
-        <Input
-          type="text"
-          placeholder="Search by name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-xs"
-        />
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <Input
+            type="text"
+            placeholder="Search by name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="max-w-xs"
+          />
+          <ListControls state={listState} onChange={updateList} />
+        </div>
         <RefreshButton onRefresh={fetchInstances} />
       </div>
 
-      {filteredInstances.length === 0 ? (
+      {instances.length === 0 ? (
         <div className="text-center">
           <p className="mb-4">No vector database instances yet.</p>
           <Link href="/vector-databases/catalog">
@@ -81,9 +92,11 @@ export default function VectorDBEndpoints() {
             </Button>
           </Link>
         </div>
+      ) : total === 0 ? (
+        <p className="text-muted-foreground">No instances match.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredInstances.map((instance) => (
+          {visible.map((instance) => (
             <DisplayCard
               key={instance.id}
               icon={GetVectorDBIcon(instance.vectorDB.chart_name)}
@@ -159,6 +172,12 @@ export default function VectorDBEndpoints() {
           ))}
         </div>
       )}
+      <ShowMore
+        hasMore={hasMore}
+        onClick={() => updateList({ page: listState.page + 1 })}
+        shown={visible.length}
+        total={total}
+      />
     </>
   );
 }

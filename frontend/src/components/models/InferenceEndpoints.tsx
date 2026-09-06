@@ -22,6 +22,7 @@ import { GetModelIcon } from "@/lib/utils";
 import { CardGridSkeleton } from "@/components/LoadingState";
 import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
+import { ListControls, ShowMore, applyListControls, useListState } from "@/components/ListControls";
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -29,6 +30,7 @@ export default function InferenceEndpoints() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterValue, setFilterValue] = useState("");
+  const [listState, updateList] = useListState();
   const { toast } = useToast();
 
   const fetchEndpoints = useCallback(
@@ -74,6 +76,12 @@ export default function InferenceEndpoints() {
     }
     return matchesSearch; // For "all"
   });
+
+  const { visible, total, hasMore } = applyListControls(
+    filteredEndpoints,
+    listState,
+    { name: (e) => e.model.name, ready: (e) => e.ready }
+  );
 
   if (loading) {
     return <CardGridSkeleton />;
@@ -142,11 +150,12 @@ export default function InferenceEndpoints() {
                   </SelectContent>
                 </Select>
               )}
+              <ListControls state={listState} onChange={updateList} />
             </div>
             <RefreshButton onRefresh={fetchEndpoints} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredEndpoints.map((endpoint) => (
+            {visible.map((endpoint) => (
               <DisplayCard
                 key={endpoint.id}
                 icon={GetModelIcon(endpoint.model.modelId)}
@@ -205,6 +214,12 @@ export default function InferenceEndpoints() {
               />
             ))}
           </div>
+          <ShowMore
+            hasMore={hasMore}
+            onClick={() => updateList({ page: listState.page + 1 })}
+            shown={visible.length}
+            total={total}
+          />
         </>
       )}
     </>

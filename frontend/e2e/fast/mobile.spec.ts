@@ -10,6 +10,7 @@ test.use({
 const paths = [
   "/",
   "/models/catalog",
+  "/models/endpoints",
   "/notebooks/new",
   "/vector-databases/catalog",
 ];

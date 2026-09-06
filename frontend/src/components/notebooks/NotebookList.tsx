@@ -14,11 +14,13 @@ import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { CardGridSkeleton } from "@/components/LoadingState";
 import { CopyButton } from "@/components/CopyButton";
+import { ListControls, ShowMore, applyListControls, useListState } from "@/components/ListControls";
 
 export default function NotebookList() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [listState, updateList] = useListState();
   const { toast } = useToast();
 
   const fetchNotebooks = useCallback(
@@ -49,6 +51,12 @@ export default function NotebookList() {
     notebook.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const { visible, total, hasMore } = applyListControls(
+    filteredNotebooks,
+    listState,
+    { name: (n) => n.name, ready: (n) => n.ready }
+  );
+
   if (isLoading) {
     return <CardGridSkeleton />;
   }
@@ -66,15 +74,18 @@ export default function NotebookList() {
         </div>
       ) : (
         <>
-          <div className="mb-4 flex justify-between items-center">
-            <Input
-              type="text"
-              placeholder="Search notebooks"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-            <div className="flex gap-2">
+          <div className="mb-4 flex flex-wrap justify-between items-center gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Input
+                type="text"
+                placeholder="Search notebooks"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="max-w-sm"
+              />
+              <ListControls state={listState} onChange={updateList} />
+            </div>
+            <div className="flex flex-wrap gap-2">
               <Link href="/notebooks/new" passHref>
                 <Button icon={<RocketIcon className="mr-2 w-4 h-4" />}>
                   New Notebook
@@ -84,7 +95,7 @@ export default function NotebookList() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredNotebooks.map((notebook) => (
+            {visible.map((notebook) => (
               <DisplayCard
                 key={notebook.id}
                 icon={`/notebooks/${notebook.type}.png`}
@@ -144,6 +155,12 @@ export default function NotebookList() {
               />
             ))}
           </div>
+          <ShowMore
+            hasMore={hasMore}
+            onClick={() => updateList({ page: listState.page + 1 })}
+            shown={visible.length}
+            total={total}
+          />
         </>
       )}
     </>

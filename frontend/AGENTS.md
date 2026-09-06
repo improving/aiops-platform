@@ -109,6 +109,9 @@ pnpm e2e:ui                               # Playwright UI mode
   `navigator.clipboard` calls in feature components.
 - `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) mirrors the model instance detail page:
   status, endpoints with copy, a curl example, credential reveal and delete; the list card title links to it.
+- Card lists (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`) share `src/components/ListControls.tsx`:
+  `useListState` + `applyListControls` (status filter, name/status sort, 12 per page with "Show more").
+  The empty-state call to action is keyed on the raw list, not the filtered one.
 
 ## Authentication
 

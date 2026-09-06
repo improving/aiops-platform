@@ -5,16 +5,28 @@ export class VectorDBEndpointsPage extends AppShell {
   readonly search: Locator;
   readonly cards: Locator;
   readonly emptyState: Locator;
+  readonly showMore: Locator;
 
   constructor(page: Page) {
     super(page);
     this.search = page.getByPlaceholder("Search by name...");
     this.cards = page.locator('main [data-slot="card"]');
     this.emptyState = page.getByText("No vector database instances yet.");
+    this.showMore = page.getByRole("button", { name: /Show more/ });
   }
 
   async open() {
     await this.goto("/vector-databases/endpoints");
+  }
+
+  async filterStatus(label: "All" | "Ready" | "Not ready") {
+    await this.page.getByRole("combobox", { name: "Status" }).click();
+    await this.page.getByRole("option", { name: label, exact: true }).click();
+  }
+
+  async sortBy(label: "Name A-Z" | "Name Z-A" | "Status") {
+    await this.page.getByRole("combobox", { name: "Sort" }).click();
+    await this.page.getByRole("option", { name: label, exact: true }).click();
   }
 
   /** The card for the instance with this id. */
