@@ -234,7 +234,7 @@ def _add_row(bucket: dict, row: dict) -> None:
 def _aggregate_usage(
     rows: list[dict], labels: dict[str, str], names: dict[str, str]
 ) -> tuple[dict, list[dict], list[dict]]:
-    """Aggregate visible spend-log rows by ``(end_user, model_group,
+    """Aggregate visible spend-log rows by ``(display name, model_group,
     day)`` for the per-user-and-day table, and by target for the
     by-target table; return ``(totals, by_target, rows)``. ``names``
     maps ``end_user`` values to display names (``_user_names``)."""
@@ -260,16 +260,15 @@ def _aggregate_usage(
             by_target.setdefault(target, _new_bucket(target, label, model)),
             row,
         )
+        # Key by the display name, not the raw ``end_user``: rows written
+        # before per-user attribution carry the email, later ones the
+        # user id, and both are the same person. The UI keys its table
+        # rows by (user, target, day), so one person must be one row.
+        display = names.get(user, user) if user else None
         _add_row(
             by_key.setdefault(
-                (user, target, day),
-                _new_bucket(
-                    target,
-                    label,
-                    model,
-                    user=names.get(user, user) if user else None,
-                    day=day,
-                ),
+                (display, target, day),
+                _new_bucket(target, label, model, user=display, day=day),
             ),
             row,
         )

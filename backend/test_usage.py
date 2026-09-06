@@ -250,3 +250,43 @@ def test_usage_mock_mode_serves_canned_rows(client, monkeypatch):
     assert [(t["target"], t["label"]) for t in body["by_target"]] == [
         ("inst-mock", "Mock model · Mock")
     ]
+
+
+def test_usage_merges_rows_of_one_person_under_two_end_user_values(
+    client, monkeypatch
+):
+    """Rows written before per-user attribution carry the email as
+    ``end_user``; later rows carry the user id. Both resolve to the
+    same display name, so they must land in one row per target and
+    day: the UI keys its table rows by (user, target, day)."""
+    rows = [
+        {
+            "model_group": "inst-aaaaaaaa",
+            "end_user": ALICE_ID,
+            "startTime": "2026-09-06T10:00:00Z",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "spend": 0.05,
+        },
+        {
+            "model_group": "inst-aaaaaaaa",
+            "end_user": "alice@example.com",
+            "startTime": "2026-09-06T11:00:00Z",
+            "prompt_tokens": 20,
+            "completion_tokens": 10,
+            "spend": 0.10,
+        },
+    ]
+    litellm = _mock_litellm(rows)
+    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
+    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    _add_user(ALICE_ID, "alice@example.com")
+
+    response = client.get("/v1alpha1/organizations/current/usage")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    keys = [(r["user"], r["target"], r["day"]) for r in body["rows"]]
+    assert keys == [("alice@example.com", "inst-aaaaaaaa", "2026-09-06")]
+    assert body["rows"][0]["requests"] == 2
+    assert body["rows"][0]["spend"] == pytest.approx(0.15)
