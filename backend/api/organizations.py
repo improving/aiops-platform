@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from api.chat import (
     HOSTED_PREFIX,
+    MOCK_TARGET,
     TARGET_PREFIX,
     chat_mock_enabled,
     target_labels,
@@ -35,7 +36,7 @@ logger = setup_logger(__name__)
 
 # The mock target and second user for AIOPS_CHAT_MOCK usage rows, so
 # the fast tier can exercise the Usage page without a LiteLLM proxy.
-MOCK_USAGE_TARGET = "inst-mock"
+MOCK_USAGE_TARGET = MOCK_TARGET
 MOCK_USAGE_LABEL = "Mock model · Mock"
 MOCK_USAGE_OTHER_USER = "someone@example.com"
 
@@ -369,10 +370,12 @@ async def current_org_usage(
 
     # Backstop for the server-side ``end_user`` filter above.
     visible = list(filter(_visible_to(user), rows))
-    labels = target_labels(db, user)
+    labels = await asyncio.to_thread(target_labels, db, user)
     if chat_mock_enabled():
         labels[MOCK_USAGE_TARGET] = MOCK_USAGE_LABEL
-    names = _user_names(db, {u for u in map(_row_user, visible) if u})
+    names = await asyncio.to_thread(
+        _user_names, db, {u for u in map(_row_user, visible) if u}
+    )
     totals, by_target, entries = _aggregate_usage(visible, labels, names)
     return {
         "days": days,
