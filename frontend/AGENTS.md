@@ -107,6 +107,8 @@ pnpm e2e:ui                               # Playwright UI mode
 - Copy actions use `src/components/CopyButton.tsx` (aria-label "Copy <label>", toast "Copied");
   code examples use `src/components/CodeSnippet.tsx` (`<pre aria-label>` plus a copy button). Do not inline
   `navigator.clipboard` calls in feature components.
+- `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) mirrors the model instance detail page:
+  status, endpoints with copy, a curl example, credential reveal and delete; the list card title links to it.
 
 ## Authentication
 

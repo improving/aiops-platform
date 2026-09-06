@@ -87,7 +87,14 @@ export default function VectorDBEndpoints() {
             <DisplayCard
               key={instance.id}
               icon={GetVectorDBIcon(instance.vectorDB.chart_name)}
-              title={instance.vectorDB.name}
+              title={
+                <Link
+                  href={`/vector-databases/endpoints/${instance.id}`}
+                  className="hover:text-blue-500 underline"
+                >
+                  {instance.vectorDB.name}
+                </Link>
+              }
               description={`ID: ${instance.id}`}
               content={
                 <>

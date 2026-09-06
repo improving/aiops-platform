@@ -5,7 +5,7 @@ import {
   waitForHelmReleaseGone,
 } from "../fixtures";
 import { VectorDBCatalogPage } from "../pages/vector-db-catalog";
-import { VectorDBEndpointsPage } from "../pages/vector-db-endpoints";
+import { VectorDBEndpointsPage, VectorDBInstanceDetailsPage } from "../pages/vector-db-endpoints";
 
 const CREATE_TIMEOUT = 3 * 60_000;
 const READY_TIMEOUT = 5 * 60_000;
@@ -77,6 +77,16 @@ test.describe("vector database lifecycle", { tag: "@cluster" }, () => {
     await expect(
       card.getByRole("link", { name: ready.endpoint! })
     ).toHaveAttribute("href", `${ready.endpoint}/docs`);
+
+    // The detail page shows the same instance, then back to the list.
+    const details = new VectorDBInstanceDetailsPage(page);
+    await details.open(id);
+    await details.waitForLoaded();
+    await expect(details.field("Status")).toHaveText("Ready");
+    await expect(details.field("Endpoint")).toContainText(ready.endpoint!);
+    await expect(details.showCredentialButton).toBeVisible();
+    await endpoints.open();
+    await expect(card).toBeVisible();
 
     // Delete through the confirmation dialog.
     await endpoints.deleteButton(card).click();

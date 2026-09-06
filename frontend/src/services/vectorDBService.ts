@@ -18,6 +18,13 @@ export const vectorDBService = {
     return response.data;
   },
 
+  getVectorDBInstance: async (id: string) => {
+    const response = await api.get<VectorDBInstanceSchema>(
+      `/api/v1alpha1/vectordb_instances/${id}`
+    );
+    return response.data;
+  },
+
   createVectorDBInstance: async (data: {
     vectorDB: { id: string };
     configParams: Record<string, unknown>;

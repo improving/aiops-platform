@@ -32,7 +32,7 @@ export class NotebookDetailsPage extends AppShell {
     super(page);
     this.connectButton = page.getByRole("button", { name: "Connect" });
     this.deleteButton = page.getByRole("button", { name: "Delete" });
-    this.notFound = page.getByText("Notebook not found");
+    this.notFound = page.locator("main").getByText("Notebook not found", { exact: true });
   }
 
   async open(id: string) {

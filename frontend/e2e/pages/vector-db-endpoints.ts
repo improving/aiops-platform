@@ -22,6 +22,11 @@ export class VectorDBEndpointsPage extends AppShell {
     return this.cards.filter({ hasText: `ID: ${id}` });
   }
 
+  /** The title link of the instance card, which opens the detail page. */
+  detailsLink(card: Locator): Locator {
+    return card.getByRole("link").first();
+  }
+
   deleteButton(card: Locator): Locator {
     return card.getByRole("button", { name: "Delete" });
   }
@@ -55,5 +60,32 @@ export class VectorDBEndpointsPage extends AppShell {
     // The footer button; the dialog's corner "X" is also named "Close".
     await dialog.getByRole("button", { name: "Close" }).first().click();
     await expect(dialog).toBeHidden();
+  }
+}
+
+export class VectorDBInstanceDetailsPage extends AppShell {
+  readonly notFound: Locator;
+  readonly deleteButton: Locator;
+  readonly showCredentialButton: Locator;
+
+  constructor(page: Page) {
+    super(page);
+    // Scoped to main and exact: the 404 toast repeats the same words.
+    this.notFound = page
+      .locator("main")
+      .getByText("Vector database instance not found", { exact: true });
+    this.deleteButton = page.locator("main").getByRole("button", { name: "Delete", exact: true });
+    this.showCredentialButton = page.locator("main").getByRole("button", { name: "Show credential" });
+  }
+
+  async open(id: string) {
+    await this.goto(`/vector-databases/endpoints/${id}`);
+  }
+
+  /** The value shown next to a "Label" in the details grid. */
+  field(label: string): Locator {
+    return this.page
+      .getByText(label, { exact: true })
+      .locator("xpath=following-sibling::*[1]");
   }
 }

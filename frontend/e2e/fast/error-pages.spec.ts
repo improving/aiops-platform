@@ -1,6 +1,7 @@
 import { test, expect, FAILED_RESOURCE } from "../fixtures";
 import { AppShell } from "../pages/app-shell";
 import { NotebookDetailsPage } from "../pages/notebooks";
+import { VectorDBInstanceDetailsPage } from "../pages/vector-db-endpoints";
 
 // These pages request ids the backend rejects; the failed fetch is expected.
 test.use({ allowedConsoleErrors: [FAILED_RESOURCE] });
@@ -20,6 +21,16 @@ test.describe("error pages", () => {
     const details = new NotebookDetailsPage(page);
     await details.open("does-not-exist");
     await details.expectHeading("Notebook Details");
+    await expect(details.notFound).toBeVisible();
+    await expect(details.toast(/API Error/)).toBeVisible();
+  });
+
+  test("an unknown vector database instance shows the not-found message", async ({
+    page,
+  }) => {
+    const details = new VectorDBInstanceDetailsPage(page);
+    await details.open("00000000-0000-0000-0000-000000000000");
+    await details.expectHeading("Vector Database Instance Details");
     await expect(details.notFound).toBeVisible();
     await expect(details.toast(/API Error/)).toBeVisible();
   });
