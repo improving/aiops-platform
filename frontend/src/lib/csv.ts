@@ -9,11 +9,17 @@ export function toCsv(
   headers: string[],
   rows: (string | number | null | undefined)[][]
 ): string {
-  return [headers, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
+  return (
+    [headers, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n"
+  );
 }
 
 /** Triggers a browser download of `text` as `filename`. */
-export function downloadTextFile(filename: string, text: string, mime = "text/csv") {
+export function downloadTextFile(
+  filename: string,
+  text: string,
+  mime = "text/csv"
+) {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

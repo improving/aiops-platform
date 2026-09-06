@@ -5,7 +5,10 @@ import {
   waitForHelmReleaseGone,
 } from "../fixtures";
 import { VectorDBCatalogPage } from "../pages/vector-db-catalog";
-import { VectorDBEndpointsPage, VectorDBInstanceDetailsPage } from "../pages/vector-db-endpoints";
+import {
+  VectorDBEndpointsPage,
+  VectorDBInstanceDetailsPage,
+} from "../pages/vector-db-endpoints";
 
 const CREATE_TIMEOUT = 3 * 60_000;
 const READY_TIMEOUT = 5 * 60_000;

@@ -53,7 +53,9 @@ test.describe("usage page", () => {
     const path = await download.path();
     const text = readFileSync(path!, "utf8");
     const lines = text.trim().split(/\r?\n/);
-    expect(lines[0]).toBe("day,user,target,model,requests,prompt_tokens,completion_tokens,spend_usd");
+    expect(lines[0]).toBe(
+      "day,user,target,model,requests,prompt_tokens,completion_tokens,spend_usd"
+    );
     expect(lines).toHaveLength(4);
     expect(text).toContain("dev@example.test");
   });

@@ -16,7 +16,12 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { ShowCredentialButton } from "@/components/vector-databases/ShowCredentialButton";
 import { CardGridSkeleton } from "@/components/LoadingState";
-import { ListControls, ShowMore, applyListControls, useListState } from "@/components/ListControls";
+import {
+  ListControls,
+  ShowMore,
+  applyListControls,
+  useListState,
+} from "@/components/ListControls";
 
 export default function VectorDBEndpoints() {
   const [instances, setInstances] = useState<VectorDBInstanceSchema[]>([]);
@@ -138,7 +143,10 @@ export default function VectorDBEndpoints() {
                       </a>
                       {instance.endpoint && (
                         <span className="ml-2">
-                          <CopyButton label="endpoint" text={instance.endpoint} />
+                          <CopyButton
+                            label="endpoint"
+                            text={instance.endpoint}
+                          />
                         </span>
                       )}
                     </span>

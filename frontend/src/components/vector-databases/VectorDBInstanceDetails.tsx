@@ -15,7 +15,13 @@ import { GetVectorDBIcon, parseApiError } from "@/lib/utils";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { ShowCredentialButton } from "@/components/vector-databases/ShowCredentialButton";
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="grid grid-cols-2 items-center gap-4">
       <Label>{label}</Label>
@@ -47,7 +53,10 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
     fetchInstance();
   }, [fetchInstance]);
 
-  const poll = useCallback(() => fetchInstance({ silent: true }), [fetchInstance]);
+  const poll = useCallback(
+    () => fetchInstance({ silent: true }),
+    [fetchInstance]
+  );
   usePolling(poll, instance ? isNonTerminal(instance) : false);
 
   if (loading) return <DetailSkeleton />;
@@ -65,16 +74,24 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
       content={
         <div className="grid gap-4">
           <Row label="Chart">{instance.vectorDB.chart_name}</Row>
-          <Row label="Status">{instance.ready ? "Ready" : instance.status || "In progress"}</Row>
+          <Row label="Status">
+            {instance.ready ? "Ready" : instance.status || "In progress"}
+          </Row>
           <Row label="Endpoint">
-            <span className={instance.ready ? "text-green-500" : "text-red-500"}>
+            <span
+              className={instance.ready ? "text-green-500" : "text-red-500"}
+            >
               {instance.endpoint || "N/A"}
             </span>
-            {instance.endpoint && <CopyButton label="endpoint" text={instance.endpoint} />}
+            {instance.endpoint && (
+              <CopyButton label="endpoint" text={instance.endpoint} />
+            )}
           </Row>
           <Row label="API endpoint">
             {instance.api_endpoint || "N/A"}
-            {instance.api_endpoint && <CopyButton label="API endpoint" text={instance.api_endpoint} />}
+            {instance.api_endpoint && (
+              <CopyButton label="API endpoint" text={instance.api_endpoint} />
+            )}
           </Row>
           {configEntries.length > 0 && (
             <Row label="Configuration">
@@ -87,8 +104,8 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
             <Label>Access</Label>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                The API endpoint is protected at the gateway; send the instance API key in the
-                header shown by &quot;Show credential&quot;.
+                The API endpoint is protected at the gateway; send the instance
+                API key in the header shown by &quot;Show credential&quot;.
               </p>
               <CodeSnippet
                 label="curl example"

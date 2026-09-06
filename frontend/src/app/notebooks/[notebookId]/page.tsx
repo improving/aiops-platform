@@ -11,7 +11,10 @@ export default function NotebookDetailsPage() {
   return (
     <Dashboard
       title="Notebook Details"
-      breadcrumbs={[{ label: "Notebooks", href: "/notebooks" }, { label: "Details" }]}
+      breadcrumbs={[
+        { label: "Notebooks", href: "/notebooks" },
+        { label: "Details" },
+      ]}
     >
       <NotebookDetails notebookId={notebookId} />
     </Dashboard>

@@ -86,8 +86,12 @@ export class VectorDBInstanceDetailsPage extends AppShell {
     this.notFound = page
       .locator("main")
       .getByText("Vector database instance not found", { exact: true });
-    this.deleteButton = page.locator("main").getByRole("button", { name: "Delete", exact: true });
-    this.showCredentialButton = page.locator("main").getByRole("button", { name: "Show credential" });
+    this.deleteButton = page
+      .locator("main")
+      .getByRole("button", { name: "Delete", exact: true });
+    this.showCredentialButton = page
+      .locator("main")
+      .getByRole("button", { name: "Show credential" });
   }
 
   async open(id: string) {

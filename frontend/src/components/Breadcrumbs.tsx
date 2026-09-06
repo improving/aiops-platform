@@ -17,14 +17,20 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
         {items.map((item, index) => {
           const last = index === items.length - 1;
           return (
-            <li key={`${item.label}-${index}`} className="flex items-center gap-1">
+            <li
+              key={`${item.label}-${index}`}
+              className="flex items-center gap-1"
+            >
               <ChevronRightIcon className="h-3 w-3" aria-hidden="true" />
               {item.href && !last ? (
                 <Link href={item.href} className="hover:text-foreground">
                   {item.label}
                 </Link>
               ) : (
-                <span aria-current={last ? "page" : undefined} className="text-foreground">
+                <span
+                  aria-current={last ? "page" : undefined}
+                  className="text-foreground"
+                >
                   {item.label}
                 </span>
               )}

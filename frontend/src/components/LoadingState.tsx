@@ -85,7 +85,9 @@ export function TableSkeleton({
           <div
             key={r}
             className="grid gap-4"
-            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            }}
           >
             {Array.from({ length: columns }).map((_, c) => (
               <Skeleton key={c} className="h-4 w-full" />

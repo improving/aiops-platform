@@ -27,10 +27,13 @@ test.describe("loading skeletons", () => {
     const shell = new AppShell(page);
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
-    await page.route("**/api/v1alpha1/organizations/current/usage**", async (route) => {
-      await gate;
-      await route.continue();
-    });
+    await page.route(
+      "**/api/v1alpha1/organizations/current/usage**",
+      async (route) => {
+        await gate;
+        await route.continue();
+      }
+    );
     await page.goto("/usage");
     await expect(shell.loading()).toHaveCount(1);
     release();

@@ -73,9 +73,15 @@ test.describe("home page", () => {
     const instances = await api.inferenceInstances();
     const vectorDbs = await api.vectorDBInstances();
     const notebooks = await api.notebooks();
-    await expect(home.stat("instances")).toContainText(`${instances.length} total`);
-    await expect(home.stat("vectordbs")).toContainText(`${vectorDbs.length} total`);
-    await expect(home.stat("notebooks")).toContainText(`${notebooks.length} total`);
+    await expect(home.stat("instances")).toContainText(
+      `${instances.length} total`
+    );
+    await expect(home.stat("vectordbs")).toContainText(
+      `${vectorDbs.length} total`
+    );
+    await expect(home.stat("notebooks")).toContainText(
+      `${notebooks.length} total`
+    );
     // providers.spec.ts adds and removes hosted models in parallel, so the
     // chat count can change between the page read and this API read.
     await expect(home.stat("chat")).toContainText(/\d+ ready/);

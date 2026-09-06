@@ -45,9 +45,7 @@ export default function Dashboard({
             </a>
           )}
         </h1>
-        <Suspense fallback={<DetailSkeleton rows={4} />}>
-          {children}
-        </Suspense>
+        <Suspense fallback={<DetailSkeleton rows={4} />}>{children}</Suspense>
       </main>
       <Footer />
     </div>

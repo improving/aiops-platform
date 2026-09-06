@@ -2,15 +2,28 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type StatusFilter = "all" | "ready" | "pending";
 export type SortKey = "name-asc" | "name-desc" | "status";
 export type ListState = { status: StatusFilter; sort: SortKey; page: number };
 export const PAGE_SIZE = 12;
 
-export function useListState(): [ListState, (patch: Partial<ListState>) => void] {
-  const [state, setState] = useState<ListState>({ status: "all", sort: "name-asc", page: 1 });
+export function useListState(): [
+  ListState,
+  (patch: Partial<ListState>) => void,
+] {
+  const [state, setState] = useState<ListState>({
+    status: "all",
+    sort: "name-asc",
+    page: 1,
+  });
   // Any filter or sort change goes back to the first page.
   const update = (patch: Partial<ListState>) =>
     setState((s) => ({ ...s, ...patch, page: patch.page ?? 1 }));
@@ -23,7 +36,11 @@ export function applyListControls<T>(
   opts: { name: (item: T) => string; ready: (item: T) => boolean }
 ): { visible: T[]; total: number; hasMore: boolean } {
   const filtered = items.filter((i) =>
-    state.status === "all" ? true : state.status === "ready" ? opts.ready(i) : !opts.ready(i)
+    state.status === "all"
+      ? true
+      : state.status === "ready"
+        ? opts.ready(i)
+        : !opts.ready(i)
   );
   const sorted = [...filtered].sort((a, b) => {
     if (state.sort === "status") {
@@ -34,13 +51,26 @@ export function applyListControls<T>(
     return state.sort === "name-desc" ? -cmp : cmp;
   });
   const visible = sorted.slice(0, state.page * PAGE_SIZE);
-  return { visible, total: sorted.length, hasMore: visible.length < sorted.length };
+  return {
+    visible,
+    total: sorted.length,
+    hasMore: visible.length < sorted.length,
+  };
 }
 
-export function ListControls({ state, onChange }: { state: ListState; onChange: (patch: Partial<ListState>) => void }) {
+export function ListControls({
+  state,
+  onChange,
+}: {
+  state: ListState;
+  onChange: (patch: Partial<ListState>) => void;
+}) {
   return (
     <div className="flex flex-wrap gap-2">
-      <Select value={state.status} onValueChange={(v) => onChange({ status: v as StatusFilter })}>
+      <Select
+        value={state.status}
+        onValueChange={(v) => onChange({ status: v as StatusFilter })}
+      >
         <SelectTrigger className="w-[150px]" aria-label="Status">
           <SelectValue />
         </SelectTrigger>
@@ -50,7 +80,10 @@ export function ListControls({ state, onChange }: { state: ListState; onChange: 
           <SelectItem value="pending">Not ready</SelectItem>
         </SelectContent>
       </Select>
-      <Select value={state.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
+      <Select
+        value={state.sort}
+        onValueChange={(v) => onChange({ sort: v as SortKey })}
+      >
         <SelectTrigger className="w-[150px]" aria-label="Sort">
           <SelectValue />
         </SelectTrigger>
@@ -64,7 +97,17 @@ export function ListControls({ state, onChange }: { state: ListState; onChange: 
   );
 }
 
-export function ShowMore({ hasMore, onClick, shown, total }: { hasMore: boolean; onClick: () => void; shown: number; total: number }) {
+export function ShowMore({
+  hasMore,
+  onClick,
+  shown,
+  total,
+}: {
+  hasMore: boolean;
+  onClick: () => void;
+  shown: number;
+  total: number;
+}) {
   if (total === 0 || !hasMore) return null;
   return (
     <div className="mt-6 flex justify-center">

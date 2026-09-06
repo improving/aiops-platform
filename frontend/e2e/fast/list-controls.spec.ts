@@ -4,7 +4,13 @@ import { VectorDBEndpointsPage } from "../pages/vector-db-endpoints";
 function instance(i: number, ready: boolean) {
   return {
     id: `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
-    vectorDB: { id: "v", name: `db-${String(i).padStart(2, "0")}`, description: "", chart_name: "qdrant", chart_description: "" },
+    vectorDB: {
+      id: "v",
+      name: `db-${String(i).padStart(2, "0")}`,
+      description: "",
+      chart_name: "qdrant",
+      chart_description: "",
+    },
     configParams: {},
     endpoint: ready ? `http://vdb-${i}.example` : null,
     api_endpoint: null,
