@@ -764,7 +764,11 @@ async def test_inference_controller_single_route_and_apikey_policy(
         (c.args[3], c.args[4])
         for c in api_instance.delete_namespaced_custom_object.call_args_list
     ]
-    assert deletes == [("securitypolicies", release), ("httproutes", release)]
+    assert deletes == [
+        ("backendtrafficpolicies", release),
+        ("securitypolicies", release),
+        ("httproutes", release),
+    ]
 
 
 # --- Task 14: inference endpoint keys ---------------------------------------

@@ -16,3 +16,21 @@ spec:
     - backendRefs:
         - name: litellm
           port: 4000
+---
+# Envoy's default route timeout is 15 s, which cuts streamed answers that
+# take longer (a cold model, a long generation). No overall timeout, an
+# idle timeout in case a stream hangs.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: litellm
+  namespace: litellm
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: litellm
+  timeout:
+    http:
+      requestTimeout: 0s
+      streamIdleTimeout: 10m

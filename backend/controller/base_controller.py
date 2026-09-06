@@ -16,10 +16,13 @@ from paths import TEMPLATES_DIR
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
 from utils.gateway import (
+    INFERENCE_TIMEOUTS,
     apikey_secret_name,
+    delete_backend_traffic_policy,
     delete_http_route,
     delete_security_policy,
     ensure_apikey_policy,
+    ensure_backend_traffic_policy,
     ensure_http_route,
     instance_hostname,
 )
@@ -298,12 +301,27 @@ class Controller(ABC):
             api_instance=self.api_instance,
             core_v1_api=self.core_v1_api,
         )
+        self._safe_gateway_call(
+            f"Failed to ensure the traffic policy for {route_name}",
+            ensure_backend_traffic_policy,
+            self.namespace,
+            route_name,
+            api_instance=self.api_instance,
+            timeouts=INFERENCE_TIMEOUTS,
+        )
 
     def _delete_gateway_routes(self, instance: InferenceInstanceSchema):
         """Policy first, then the route it targets. Called from a
         `finally`, where a new exception would silently replace the one
         already being propagated; see _safe_gateway_call."""
         route_name = self._gateway_route_name(instance)
+        self._safe_gateway_call(
+            f"Failed to delete the traffic policy for {route_name}",
+            delete_backend_traffic_policy,
+            self.namespace,
+            route_name,
+            api_instance=self.api_instance,
+        )
         self._safe_gateway_call(
             f"Failed to delete the API-key policy for {route_name}",
             delete_security_policy,

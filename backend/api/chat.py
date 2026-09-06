@@ -368,6 +368,13 @@ def _mock_rerank(body: dict):
     return JSONResponse({"id": "rerank-mock", "results": results})
 
 
+def _stream_error_chunk(message: str) -> bytes:
+    """An OpenAI-style error event for a stream that broke after the
+    200 went out; the AI SDK turns it into a visible error."""
+    payload = {"error": {"message": message, "type": "stream_error"}}
+    return f"data: {json.dumps(payload)}\n\ndata: [DONE]\n\n".encode()
+
+
 def _upstream_error(response: httpx.Response, detail: bytes) -> HTTPException:
     text = detail.decode("utf-8", errors="replace")[:500]
     return HTTPException(
@@ -413,6 +420,11 @@ async def _relay_direct(url: str, body: dict, api_key: str | None):
         try:
             async for chunk in upstream.aiter_bytes():
                 yield chunk
+        except httpx.HTTPError as e:
+            logger.warning(f"chat stream from the instance broke: {e}")
+            yield _stream_error_chunk(
+                f"The answer stream was interrupted ({e.__class__.__name__}: {e}). Try again."
+            )
         finally:
             await upstream.aclose()
             await client.aclose()
@@ -450,6 +462,11 @@ async def _relay_litellm(litellm, path: str, body: dict, key: str):
         try:
             async for chunk in iterate_in_threadpool(response.iter_bytes()):
                 yield chunk
+        except httpx.HTTPError as e:
+            logger.warning(f"chat stream from LiteLLM broke: {e}")
+            yield _stream_error_chunk(
+                f"The answer stream was interrupted ({e.__class__.__name__}: {e}). Try again."
+            )
         finally:
             response.close()
             response.extensions["aiops_client"].close()

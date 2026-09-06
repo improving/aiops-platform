@@ -560,3 +560,41 @@ def test_chat_mock_mode_echoes_the_last_user_message(client, monkeypatch):
     assert response.status_code == 200
     content = response.json()["choices"][0]["message"]["content"]
     assert content == "You said: hello"
+
+
+def test_litellm_stream_break_becomes_an_error_event(client):
+    """A stream cut after the 200 (the gateway's timeout, a dropped
+    connection) ends with an OpenAI-style error event and [DONE]."""
+
+    class Broken(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n'
+            raise httpx.RemoteProtocolError("peer closed connection")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=Broken(),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    target = _target()
+    with (
+        mock.patch("api.chat.find_target", return_value=target),
+        mock.patch("api.chat.org_key", return_value="sk-virtual"),
+        mock.patch(
+            "api.chat.litellm_client",
+            return_value=ll.LiteLLMClient(
+                SETTINGS, transport=httpx.MockTransport(handler)
+            ),
+        ),
+    ):
+        response = client.post(
+            "/v1alpha1/chat/completions", json={**BODY, "model": TARGET}
+        )
+    assert response.status_code == 200
+    text = response.text
+    assert '"content":"hel"' in text
+    assert '"type": "stream_error"' in text or '"type":"stream_error"' in text
+    assert "interrupted" in text
+    assert text.rstrip().endswith("data: [DONE]")

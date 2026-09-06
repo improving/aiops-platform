@@ -475,6 +475,15 @@ existed -- see `backend/utils/kubernetes_utils.py::get_service_endpoint`.
 they remain useful only if you want a real `LoadBalancer` IP for some
 other, unrelated Service.
 
+### Timeouts
+
+Envoy's default route timeout is 15 seconds, which cuts a streamed answer that takes longer
+(a cold model loading, a long generation) with "peer closed connection" in the backend and a broken stream in the chat.
+Routes that stream get a `BackendTrafficPolicy` with no request timeout and a 10-minute idle timeout:
+the LiteLLM route (`infra/local/litellm/gateway.yaml`) and every `inf-<id8>` route the backend creates
+(`INFERENCE_TIMEOUTS` in `backend/utils/gateway.py`); notebook routes keep their one-hour WebSocket policy.
+When a stream still breaks, the backend ends it with an OpenAI-style error event and the chat page shows the reason with a Retry button.
+
 ## Workload access
 
 Every route above is protected at the gateway

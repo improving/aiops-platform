@@ -24,6 +24,24 @@ import type { ChatTarget } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 
+/** Turn the raw stream error into something a user can act on. */
+function describeChatError(message: string): string {
+  const text = message || "";
+  if (/no endpoint yet|503/.test(text)) {
+    return "The instance is still starting. Wait until it is Ready and retry.";
+  }
+  if (/not reach|502|Connection error/.test(text)) {
+    return "The model did not answer: the instance or the provider is unreachable. Check the endpoint page and retry.";
+  }
+  if (/interrupted|terminated|network|Failed to process/.test(text)) {
+    return "The answer stream was interrupted before it finished. Retry; a cold model needs a moment to load.";
+  }
+  if (/401|Not signed in/.test(text)) {
+    return "Your session has expired. Sign in again.";
+  }
+  return text;
+}
+
 function messageText(message: UIMessage): string {
   return message.parts
     .filter((part) => part.type === "text")
@@ -90,7 +108,16 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     [target, system, temperature]
   );
 
-  const { messages, sendMessage, setMessages, status, error, stop } = useChat({
+  const {
+    messages,
+    sendMessage,
+    setMessages,
+    status,
+    error,
+    stop,
+    regenerate,
+    clearError,
+  } = useChat({
     id: `${userKey}:${target || "no-target"}`,
     transport,
   });
@@ -229,7 +256,40 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
               {messageText(message)}
             </div>
           ))}
-          {error && <p className="text-sm text-destructive">{error.message}</p>}
+          {error && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+            >
+              <p className="font-medium text-destructive">
+                The answer did not arrive.
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {describeChatError(error.message)}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    clearError();
+                    regenerate();
+                  }}
+                >
+                  Retry
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => clearError()}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
         <form onSubmit={submit} className="mt-4 flex items-end gap-2">
           <div className="flex-1 space-y-2">

@@ -94,6 +94,12 @@ REFERENCE_GRANTS = (
 WEBSOCKET_TIMEOUTS = {
     "http": {"requestTimeout": "0s", "streamIdleTimeout": "1h"}
 }
+# Envoy's default route timeout is 15 s, which cuts streamed answers of
+# a cold or slow model: no overall timeout, an idle timeout for hung
+# streams.
+INFERENCE_TIMEOUTS = {
+    "http": {"requestTimeout": "0s", "streamIdleTimeout": "10m"}
+}
 
 OIDC_CONFLICT_RETRIES = 5
 
@@ -457,17 +463,20 @@ def ensure_backend_traffic_policy(
     route_name: str,
     *,
     api_instance: client.CustomObjectsApi | None = None,
+    timeouts: dict | None = None,
 ) -> None:
-    """Give a WebSocket route (notebooks) long timeouts; named after it."""
+    """Give a route long timeouts (WebSocket notebooks by default,
+    ``INFERENCE_TIMEOUTS`` for streamed answers); named after it."""
     if gateway_settings() is None:
         return
+    timeouts = timeouts or WEBSOCKET_TIMEOUTS
     body = {
         "apiVersion": f"{POLICY_GROUP}/{POLICY_VERSION}",
         "kind": "BackendTrafficPolicy",
         "metadata": _policy_metadata(route_name, namespace),
         "spec": {
             "targetRefs": [_route_ref(route_name)],
-            "timeout": {k: dict(v) for k, v in WEBSOCKET_TIMEOUTS.items()},
+            "timeout": {k: dict(v) for k, v in timeouts.items()},
         },
     }
     _ensure_custom_object(
