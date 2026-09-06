@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -9,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DownloadIcon } from "@radix-ui/react-icons";
 import {
   Table,
   TableBody,
@@ -18,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { downloadTextFile, toCsv } from "@/lib/csv";
 import { parseApiError } from "@/lib/utils";
 import { usageService } from "@/services/usageService";
 import type { OrgUsage } from "@/types/models";
@@ -89,18 +92,58 @@ export default function UsagePage() {
 
   return (
     <div className="space-y-6">
-      <Select value={days} onValueChange={setDays}>
-        <SelectTrigger className="w-[180px]" aria-label="Period">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {PERIODS.map((period) => (
-            <SelectItem key={period.value} value={period.value}>
-              {period.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={days} onValueChange={setDays}>
+          <SelectTrigger className="w-[180px]" aria-label="Period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PERIODS.map((period) => (
+              <SelectItem key={period.value} value={period.value}>
+                {period.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button
+          variant="outline"
+          disabled={!usage || usage.rows.length === 0}
+          onClick={() => {
+            if (!usage) return;
+            const label =
+              PERIODS.find((p) => p.value === days)?.label ?? `${days} days`;
+            downloadTextFile(
+              `usage-${label.toLowerCase().replace(/\s+/g, "-")}.csv`,
+              toCsv(
+                [
+                  "day",
+                  "user",
+                  "target",
+                  "model",
+                  "requests",
+                  "prompt_tokens",
+                  "completion_tokens",
+                  "spend_usd",
+                ],
+                usage.rows.map((r) => [
+                  r.day,
+                  r.user ?? "",
+                  r.label,
+                  r.model,
+                  r.requests,
+                  r.prompt_tokens,
+                  r.completion_tokens,
+                  r.spend.toFixed(4),
+                ])
+              )
+            );
+          }}
+          icon={<DownloadIcon className="w-4 h-4" />}
+        >
+          Download CSV
+        </Button>
+      </div>
 
       {loading ? (
         <TableSkeleton rows={6} columns={6} />

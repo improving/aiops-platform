@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test, expect } from "../fixtures";
 import { UsagePage } from "../pages/usage";
 
@@ -38,6 +39,23 @@ test.describe("usage page", () => {
     await expect(usage.periodSelect).toContainText("Last 7 days");
     // Mock mode serves the same three rows regardless of `days`.
     await expect(usage.requestsTotal).toHaveText("3");
+  });
+
+  test("Download CSV saves the by-user rows", async ({ page }) => {
+    const usage = new UsagePage(page);
+    await usage.open();
+    await expect(usage.requestsTotal).toHaveText("3");
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      usage.downloadButton.click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("usage-last-30-days.csv");
+    const path = await download.path();
+    const text = readFileSync(path!, "utf8");
+    const lines = text.trim().split(/\r?\n/);
+    expect(lines[0]).toBe("day,user,target,model,requests,prompt_tokens,completion_tokens,spend_usd");
+    expect(lines).toHaveLength(4);
+    expect(text).toContain("dev@example.test");
   });
 
   test("the header links to the Usage page", async ({ page }) => {

@@ -9,10 +9,12 @@ export class UsagePage extends AppShell {
   readonly promptTokensTotal: Locator;
   readonly completionTokensTotal: Locator;
   readonly spendTotal: Locator;
+  readonly downloadButton: Locator;
 
   constructor(page: Page) {
     super(page);
     this.periodSelect = page.getByRole("combobox", { name: "Period" });
+    this.downloadButton = page.getByRole("button", { name: "Download CSV" });
     this.byTargetTable = page.getByRole("table", { name: "By target" });
     this.byUserTable = page.getByRole("table", { name: "By user and day" });
     this.requestsTotal = page.getByTestId("usage-total-requests");
