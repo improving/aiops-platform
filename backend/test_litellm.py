@@ -300,6 +300,24 @@ def test_spend_logs_pages_until_the_last_page():
     assert capped is False
 
 
+def test_spend_logs_filters_by_end_user_only_when_asked():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params.get("end_user"))
+        return httpx.Response(
+            200,
+            json={"data": [], "total_pages": 1, "total_is_capped": False},
+        )
+
+    client = _client(handler)
+    client.spend_logs("t-1", datetime(2026, 9, 1), datetime(2026, 9, 7))
+    client.spend_logs(
+        "t-1", datetime(2026, 9, 1), datetime(2026, 9, 7), end_user="u-1"
+    )
+    assert seen == [None, "u-1"]
+
+
 def test_spend_logs_stops_at_the_page_cap():
     def handler(request: httpx.Request) -> httpx.Response:
         page = int(request.url.params["page"])

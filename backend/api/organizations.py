@@ -3,6 +3,7 @@ for hosted providers (Phase 2b) and per-user usage from the spend logs
 (Task 2 of the usage-and-metrics plan)."""
 
 import asyncio
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,7 +11,13 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from api.chat import chat_mock_enabled, target_labels, user_key
+from api.chat import (
+    HOSTED_PREFIX,
+    TARGET_PREFIX,
+    chat_mock_enabled,
+    target_labels,
+    user_key,
+)
 from auth.current_user import (
     ROLE_ADMIN,
     CurrentUser,
@@ -20,6 +27,7 @@ from auth.current_user import (
 from db.database import get_db
 from logger import setup_logger
 from models.organization import Organization
+from models.user import User
 from utils.litellm import LiteLLMError, ensure_org_key, get_client
 
 router = APIRouter()
@@ -28,6 +36,7 @@ logger = setup_logger(__name__)
 # The mock target and second user for AIOPS_CHAT_MOCK usage rows, so
 # the fast tier can exercise the Usage page without a LiteLLM proxy.
 MOCK_USAGE_TARGET = "inst-mock"
+MOCK_USAGE_LABEL = "Mock model · Mock"
 MOCK_USAGE_OTHER_USER = "someone@example.com"
 
 # The canned spend document for AIOPS_CHAT_MOCK, so the fast tier can
@@ -184,6 +193,23 @@ def _visible_to(user: CurrentUser):
     return visible
 
 
+def _user_names(db: Session, keys: set[str]) -> dict[str, str]:
+    """Map the ``end_user`` values LiteLLM stores (platform user ids,
+    see ``user_key``) to something a person recognizes: the user's
+    email, else name, else token subject. Values that are not user ids
+    (rows written by other clients) stay as they are."""
+    ids = []
+    for key in keys:
+        try:
+            ids.append(uuid.UUID(key))
+        except ValueError:
+            continue
+    if not ids:
+        return {}
+    users = db.query(User).filter(User.id.in_(ids)).all()
+    return {str(u.id): u.email or u.name or u.sub for u in users}
+
+
 def _new_bucket(target: str, label: str, model: str = "", **extra) -> dict:
     return {
         "target": target,
@@ -205,11 +231,12 @@ def _add_row(bucket: dict, row: dict) -> None:
 
 
 def _aggregate_usage(
-    rows: list[dict], labels: dict[str, str]
+    rows: list[dict], labels: dict[str, str], names: dict[str, str]
 ) -> tuple[dict, list[dict], list[dict]]:
     """Aggregate visible spend-log rows by ``(end_user, model_group,
     day)`` for the per-user-and-day table, and by target for the
-    by-target table; return ``(totals, by_target, rows)``."""
+    by-target table; return ``(totals, by_target, rows)``. ``names``
+    maps ``end_user`` values to display names (``_user_names``)."""
     totals = _new_bucket("", "")
     by_target: dict[str, dict] = {}
     by_key: dict[tuple, dict] = {}
@@ -219,10 +246,12 @@ def _aggregate_usage(
         target = _row_target(row)
         day = _row_day(row)
         model = _row_model(row)
-        # A deleted instance has no label any more; its model still tells
-        # what ran there.
+        # A deleted instance or provider model has no label any more;
+        # its model still tells what ran there.
         label = labels.get(target) or (
-            f"{target} (deleted)" if target.startswith("inst-") else target
+            f"{target} (deleted)"
+            if target.startswith((TARGET_PREFIX, HOSTED_PREFIX))
+            else target
         )
 
         _add_row(totals, row)
@@ -233,7 +262,13 @@ def _aggregate_usage(
         _add_row(
             by_key.setdefault(
                 (user, target, day),
-                _new_bucket(target, label, model, user=user, day=day),
+                _new_bucket(
+                    target,
+                    label,
+                    model,
+                    user=names.get(user, user) if user else None,
+                    day=day,
+                ),
             ),
             row,
         )
@@ -311,10 +346,18 @@ async def current_org_usage(
             raise HTTPException(
                 status_code=503, detail="LiteLLM is not configured"
             )
+        # Members only ever need their own rows: ask LiteLLM for just
+        # those, so the page cap applies to them alone.
+        end_user = None if user.role == ROLE_ADMIN else user_key(user)
         try:
             await asyncio.to_thread(ensure_org_key, db, org)
+            if not org.litellm_team_id:
+                raise HTTPException(
+                    status_code=503,
+                    detail="The organization has no LiteLLM team yet",
+                )
             rows, capped = await asyncio.to_thread(
-                litellm.spend_logs, org.litellm_team_id, since, now
+                litellm.spend_logs, org.litellm_team_id, since, now, end_user
             )
         except LiteLLMError as e:
             raise HTTPException(status_code=502, detail=str(e))
@@ -324,9 +367,13 @@ async def current_org_usage(
                 detail=f"Cannot read the organization key: {e.reason}",
             )
 
+    # Backstop for the server-side ``end_user`` filter above.
     visible = list(filter(_visible_to(user), rows))
     labels = target_labels(db, user)
-    totals, by_target, entries = _aggregate_usage(visible, labels)
+    if chat_mock_enabled():
+        labels[MOCK_USAGE_TARGET] = MOCK_USAGE_LABEL
+    names = _user_names(db, {u for u in map(_row_user, visible) if u})
+    totals, by_target, entries = _aggregate_usage(visible, labels, names)
     return {
         "days": days,
         "since": since.isoformat(),

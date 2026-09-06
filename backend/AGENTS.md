@@ -136,7 +136,8 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   `list_hosted_targets` and answers chat with `You said: <last user message>`, embeddings with a 4-float
   vector per input and rerank with the documents reversed, without any instance, for the Playwright fast tier.
   The gateway host uses the local CA, so the process needs `SSL_CERT_FILE` (httpx honours it; `make backend`
-  sets it). `user_key(user)` (`user.email or user.sub`) is the identity every route forwarded through LiteLLM
+  sets it). `user_key(user)` (`str(user.id)`, an opaque id rather than the email, so no email reaches LiteLLM's
+  database, its metrics labels or an upstream provider) is the identity every route forwarded through LiteLLM
   carries as the OpenAI `user` field (`_forward`, LiteLLM branch only -- the direct passthrough carries no
   such field); LiteLLM records it as the spend log row's `end_user`. `target_labels(db, user)` maps every
   `inst-<id8>`/`prov-<id8>/<model>` name the caller's organization can spend on to its display label, for the
@@ -208,9 +209,11 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
 - Usage: `GET /v1alpha1/organizations/current/usage?days=30` (any member, `days` clamped `1..90`, 422 outside
   it) reads `LiteLLMClient.spend_logs` for the caller's organization team since `days - 1` days ago at 00:00
   UTC through now, then aggregates by `(end_user, model_group, day)`. Members keep only their own rows
-  (`end_user == user_key(user)`, matched in `_visible_to`) and never see an unattributed row (empty `end_user`,
+  (`spend_logs(..., end_user=user_key(user))` asks LiteLLM for just those; `_visible_to` is the backstop)
+  and never see an unattributed row (empty `end_user`,
   made before this endpoint's `user` field shipped, or with the master key); admins see every row, including
-  the unattributed ones as `user: null`. Response: `scope` (`"organization"` for an admin, `"user"` for a
+  the unattributed ones as `user: null`; each row's `user` is the email (else name, else subject) from the `users`
+  table for the ids LiteLLM stored (`_user_names`), or the raw `end_user` value when no user row matches. Response: `scope` (`"organization"` for an admin, `"user"` for a
   member), `capped` (from `spend_logs`), `totals` (`requests`, `prompt_tokens`, `completion_tokens`, `spend`),
   `by_target` (one entry per target, sorted by spend then requests, both descending) and `rows` (one entry per
   `(user, target, day)`, sorted by day descending, then user, then target — a stable sort by `(user, target)`

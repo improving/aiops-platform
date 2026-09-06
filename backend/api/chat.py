@@ -26,7 +26,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from kubernetes.client.exceptions import ApiException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.concurrency import iterate_in_threadpool
 
 from auth.current_user import CurrentUser, get_current_user
@@ -152,10 +152,12 @@ def find_target(db: Session, name: str, user: CurrentUser) -> Target:
 
 
 def user_key(user: CurrentUser) -> str:
-    """The identity LiteLLM records as the end user of a request:
-    the platform email, or the token subject when there is none
-    (service accounts, the disabled-mode dev user)."""
-    return user.email or user.sub
+    """The identity LiteLLM records as the end user of a request: the
+    platform user id, an opaque value that is stable across email
+    changes and never puts an email into LiteLLM's database, its
+    metrics labels or an upstream provider's request. The usage
+    endpoint maps it back to the email when it builds its response."""
+    return str(user.id)
 
 
 def litellm_client():
@@ -249,13 +251,22 @@ def target_labels(db: Session, user: CurrentUser) -> dict[str, str]:
     labels: dict[str, str] = {}
     instances = (
         db.query(DBInferenceInstance)
+        .options(
+            joinedload(DBInferenceInstance.model),
+            joinedload(DBInferenceInstance.engine),
+        )
         .filter(org_scope(DBInferenceInstance, user))
         .all()
     )
     for row in instances:
         name = row.litellm_model_name or instance_model_name(row.id)
         labels[name] = f"{row.model.name} · {row.engine.name}"
-    providers = db.query(Provider).filter(org_scope(Provider, user)).all()
+    providers = (
+        db.query(Provider)
+        .options(selectinload(Provider.models))
+        .filter(org_scope(Provider, user))
+        .all()
+    )
     for provider in providers:
         for model in provider.models:
             labels[model.litellm_model_name] = (

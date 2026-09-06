@@ -242,23 +242,34 @@ class LiteLLMClient:
         )
 
     def spend_logs(
-        self, team_id: str, start: datetime, end: datetime
+        self,
+        team_id: str,
+        start: datetime,
+        end: datetime,
+        end_user: str | None = None,
     ) -> tuple[list[dict], bool]:
         """Every spend-log row for the team between ``start`` and
         ``end`` (UTC), paging ``GET /spend/logs/ui`` at
         SPEND_LOGS_PAGE_SIZE rows per page, up to SPEND_LOGS_MAX_PAGES
-        pages. Returns ``(rows, capped)``; ``capped`` is true when the
-        proxy reports more rows than fit in that many pages."""
+        pages; with ``end_user`` only that user's rows, so the page cap
+        applies to them alone. Returns ``(rows, capped)``; ``capped``
+        is true when the proxy reports more rows than fit in that many
+        pages."""
         rows: list[dict] = []
         capped = False
         for page in range(1, SPEND_LOGS_MAX_PAGES + 1):
+            params: dict[str, str | int] = {
+                "team_id": team_id,
+                "start_date": start.strftime(SPEND_LOGS_DATE_FORMAT),
+                "end_date": end.strftime(SPEND_LOGS_DATE_FORMAT),
+            }
+            if end_user:
+                params["end_user"] = end_user
             payload = self.request(
                 "GET",
                 "/spend/logs/ui",
                 params={
-                    "team_id": team_id,
-                    "start_date": start.strftime(SPEND_LOGS_DATE_FORMAT),
-                    "end_date": end.strftime(SPEND_LOGS_DATE_FORMAT),
+                    **params,
                     "page": page,
                     "page_size": SPEND_LOGS_PAGE_SIZE,
                 },

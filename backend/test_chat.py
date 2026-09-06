@@ -38,6 +38,13 @@ SSE = (
 )
 
 
+def assert_user_id(value: str) -> None:
+    """The OpenAI ``user`` field carries the platform user id, never
+    the email (``user_key``)."""
+    uuid.UUID(value)
+    assert "@" not in value
+
+
 @pytest.fixture
 def client():
     app = create_app()
@@ -141,7 +148,7 @@ def test_chat_goes_through_litellm_with_the_org_key(client):
     assert seen["url"] == "https://litellm.test/v1/chat/completions"
     assert seen["auth"] == "Bearer sk-virtual"
     assert seen["body"]["model"] == TARGET
-    assert seen["body"]["user"] == "dev@example.test"
+    assert_user_id(seen["body"]["user"])
 
 
 def test_chat_falls_back_to_the_instance_without_litellm(client):
@@ -216,7 +223,7 @@ def test_embeddings_through_litellm(client):
         )
     assert response.status_code == 200
     assert response.json()["data"][0]["embedding"] == [0.1, 0.2]
-    assert seen["body"]["user"] == "dev@example.test"
+    assert_user_id(seen["body"]["user"])
 
 
 def test_rerank_through_litellm_carries_the_user(client):
@@ -242,7 +249,7 @@ def test_rerank_through_litellm_carries_the_user(client):
             json={"model": TARGET, "query": "q", "documents": ["a"]},
         )
     assert response.status_code == 200
-    assert seen["body"]["user"] == "dev@example.test"
+    assert_user_id(seen["body"]["user"])
 
 
 def test_targets_list_registered_instances(client):

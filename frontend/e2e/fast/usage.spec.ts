@@ -21,7 +21,7 @@ test.describe("usage page", () => {
 
     const targetRows = usage.byTargetTable.locator("tbody tr");
     await expect(targetRows).toHaveCount(1);
-    await expect(targetRows.first()).toContainText("inst-mock");
+    await expect(targetRows.first()).toContainText("Mock model");
 
     const userRows = usage.byUserTable.locator("tbody tr");
     await expect(userRows).toHaveCount(3);

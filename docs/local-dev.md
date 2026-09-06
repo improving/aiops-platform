@@ -320,7 +320,9 @@ The Playwright fast tier and the backend tests never call the sources:
 
 ## Usage and metrics
 
-Every chat, embeddings and rerank request the backend forwards to LiteLLM carries the platform user as the OpenAI `user` field,
+Every chat, embeddings and rerank request the backend forwards to LiteLLM carries the platform user id as the OpenAI `user` field
+(an opaque id, so no email reaches LiteLLM's database, its metrics or an upstream provider;
+the Usage page maps ids back to emails, the Grafana dashboard's `end_user` filter shows the ids),
 so LiteLLM's spend logs and its Prometheus metrics attribute tokens and spend to the user, the target and the organization's team.
 The Usage page (`/usage`, header link "Usage") reads `GET /v1alpha1/organizations/current/usage?days=30`:
 members see their own rows, admins the whole organization, with totals, a table per target and a table per user and day.
