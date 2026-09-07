@@ -20,7 +20,10 @@ raises when the route cannot be attached, and ``protect_browser_route``
 then deletes the browser route again, so a workload is never reachable
 without a login.
 SDK hosts (``vdb-<id8>-api``, ``inf-<id8>``) get one API-key policy each,
-created only once the credential Secret from Task 12 exists.
+reading the credential Secret the create endpoint stores before it
+installs. ``protect_sdk_route`` fails closed the same way: a route that
+cannot get its policy is deleted again, because most workloads check no
+key of their own (only Qdrant, Milvus and vLLM do).
 """
 
 import os
@@ -514,8 +517,28 @@ def delete_backend_traffic_policy(
     )
 
 
-class OidcPolicyError(RuntimeError):
+class GatewayPolicyError(RuntimeError):
+    """A route cannot be protected, so it must not stay published.
+
+    Raised by both fail-closed helpers below. Controllers catch this
+    base and re-raise it, so a gateway failure is never relabelled as a
+    Helm failure; the create endpoint then marks the row Failed with the
+    reason.
+    """
+
+
+class OidcPolicyError(GatewayPolicyError):
     """The shared OIDC policy cannot protect a browser route."""
+
+
+class ApiKeyPolicyError(GatewayPolicyError):
+    """The API-key policy cannot protect an SDK route.
+
+    An SDK route with no policy is served with nothing checking the key.
+    Only Qdrant, Milvus and vLLM also check it themselves; ChromaDB
+    ("enforced only by the gateway", templates/chromadb-values.yaml.jinja)
+    and the TGI/TEI, NIM, OPEA and Ollama inference engines do not.
+    """
 
 
 def _sso_route_exists(
@@ -678,6 +701,96 @@ def remove_oidc_target(
     )
 
 
+def _route_is_protected(
+    api_instance: client.CustomObjectsApi,
+    namespace: str,
+    policy_name: str,
+    route_name: str,
+) -> bool:
+    """Is ``route_name`` already listed on SecurityPolicy ``policy_name``?
+
+    Asked only after an attach failed, to tell the two cases apart: a
+    freshly published route with nothing protecting it, which must be
+    removed, and a route that was already protected before the call and
+    is still protected now, which must be left alone. A blip re-applying
+    a policy that is already correct must not take a running workload
+    off the air. When this cannot be determined the answer is False, so
+    the caller falls back to removing the route: fail closed.
+    """
+    try:
+        policy = api_instance.get_namespaced_custom_object(
+            POLICY_GROUP,
+            POLICY_VERSION,
+            namespace,
+            SECURITYPOLICY_PLURAL,
+            policy_name,
+        )
+    except Exception:
+        return False
+    targets = (policy.get("spec") or {}).get("targetRefs") or []
+    return any(target.get("name") == route_name for target in targets)
+
+
+def _protect_route(
+    namespace: str,
+    route_name: str,
+    policy_name: str,
+    attach,
+    error_cls: type,
+    verb: str,
+    exposure: str,
+    *,
+    api_instance: client.CustomObjectsApi,
+) -> None:
+    """Run ``attach``, or leave no unprotected route behind.
+
+    ``verb`` keeps each caller's own wording: a browser route *joins*
+    the one shared policy's targetRefs, an SDK route *gets* a policy of
+    its own. The shared body of the two helpers below. On failure the route is
+    removed (best effort) and ``error_cls`` is raised, unless the policy
+    turns out to already cover the route, in which case the route stays
+    up and only the error is raised: the caller still fails, but a
+    workload that was protected all along keeps serving.
+    """
+    try:
+        attach()
+    except Exception as e:
+        protected = _route_is_protected(
+            api_instance, namespace, policy_name, route_name
+        )
+        # error, not exception: the raise below carries the cause and the
+        # caller logs the trace once.
+        logger.error(
+            "HTTPRoute %s/%s could not %s SecurityPolicy %s (%s); %s",
+            namespace,
+            route_name,
+            verb,
+            policy_name,
+            e,
+            (
+                "the policy already covers it, so the route stays"
+                if protected
+                else f"removing the route so {exposure}"
+            ),
+        )
+        if not protected:
+            try:
+                delete_http_route(
+                    namespace, route_name, api_instance=api_instance
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to delete HTTPRoute %s/%s after the policy "
+                    "failure",
+                    namespace,
+                    route_name,
+                )
+        raise error_cls(
+            f"HTTPRoute {namespace}/{route_name} could not {verb} "
+            f"SecurityPolicy {policy_name}: {e}"
+        ) from e
+
+
 def protect_browser_route(
     namespace: str,
     route_name: str,
@@ -695,31 +808,76 @@ def protect_browser_route(
     if gateway_settings() is None:
         return
     api_instance = api_instance or client.CustomObjectsApi()
-    try:
-        add_oidc_target(namespace, route_name, api_instance=api_instance)
-    except Exception as e:
-        # error, not exception: the raise below carries the cause and the
-        # caller logs the trace once.
-        logger.error(
-            "HTTPRoute %s/%s could not join SecurityPolicy %s (%s); removing "
-            "the route so the workload is not exposed",
-            namespace,
-            route_name,
-            SHARED_OIDC_POLICY_NAME,
-            e,
-        )
-        try:
-            delete_http_route(namespace, route_name, api_instance=api_instance)
-        except Exception:
-            logger.exception(
-                "Failed to delete HTTPRoute %s/%s after the policy failure",
-                namespace,
-                route_name,
+    _protect_route(
+        namespace,
+        route_name,
+        SHARED_OIDC_POLICY_NAME,
+        lambda: add_oidc_target(
+            namespace, route_name, api_instance=api_instance
+        ),
+        OidcPolicyError,
+        "join",
+        "the workload is not reachable without a login",
+        api_instance=api_instance,
+    )
+
+
+def protect_sdk_route(
+    namespace: str,
+    route_name: str,
+    policy_name: str,
+    secret_name: str,
+    *,
+    api_instance: client.CustomObjectsApi | None = None,
+    core_v1_api: client.CoreV1Api | None = None,
+) -> None:
+    """An API-key policy on an SDK route, or no route at all.
+
+    The twin of ``protect_browser_route`` for the ``vdb-<id8>-api`` and
+    ``inf-<id8>`` hosts: when the policy cannot be created the route is
+    deleted again (best effort) and ``ApiKeyPolicyError`` is raised, so
+    the install fails and the row records the reason instead of a
+    workload being served with nothing checking the key.
+
+    A missing credential Secret is one of those failures, not a normal
+    outcome: both create endpoints store the credential before they
+    install (api/inference_instance.py, api/vectordb_instance.py), so by
+    the time a route exists the Secret does too.
+
+    An apikey SecurityPolicy carries no hostname (see
+    _security_policy_body), so none is taken here.
+
+    No-op without gateway settings.
+    """
+    if gateway_settings() is None:
+        return
+    api_instance = api_instance or client.CustomObjectsApi()
+
+    def attach() -> None:
+        if not secret_exists(namespace, secret_name, core_v1_api=core_v1_api):
+            raise RuntimeError(
+                f"credential Secret {namespace}/{secret_name} is missing"
             )
-        raise OidcPolicyError(
-            f"HTTPRoute {namespace}/{route_name} could not join "
-            f"SecurityPolicy {SHARED_OIDC_POLICY_NAME}: {e}"
-        ) from e
+        ensure_security_policy(
+            namespace,
+            policy_name,
+            route_name,
+            "apikey",
+            "",
+            secret_name,
+            api_instance=api_instance,
+        )
+
+    _protect_route(
+        namespace,
+        route_name,
+        policy_name,
+        attach,
+        ApiKeyPolicyError,
+        "get",
+        "the workload is not served without a key",
+        api_instance=api_instance,
+    )
 
 
 # --- Cross-namespace plumbing ---------------------------------------------
@@ -819,37 +977,4 @@ def secret_exists(
         if e.status == 404:
             return False
         raise
-    return True
-
-
-def ensure_apikey_policy(
-    namespace: str,
-    route_name: str,
-    secret_name: str,
-    *,
-    api_instance: client.CustomObjectsApi | None = None,
-    core_v1_api: client.CoreV1Api | None = None,
-) -> bool:
-    """API-key policy for an SDK route, but only once its credential
-    Secret exists (Task 12 writes it); the policy is named after the
-    route. Returns whether a policy was ensured."""
-    if gateway_settings() is None:
-        return False
-    if not secret_exists(namespace, secret_name, core_v1_api=core_v1_api):
-        logger.info(
-            "No API-key policy for HTTPRoute %s/%s yet: Secret %s is missing",
-            namespace,
-            route_name,
-            secret_name,
-        )
-        return False
-    ensure_security_policy(
-        namespace,
-        route_name,
-        route_name,
-        "apikey",
-        "",
-        secret_name,
-        api_instance=api_instance,
-    )
     return True

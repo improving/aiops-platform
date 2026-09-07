@@ -56,3 +56,49 @@ the shared policy is per namespace (the umbrella chart renders one in its releas
 (and builds it from scratch only where the `sso` callback route exists, since nothing else could complete a login),
 and a browser route that cannot join it is deleted again and the launch fails,
 so no route is ever left unprotected.
+
+Amended again 2026-09-07 (#27): the SDK routes follow the same rule.
+`vdb-<id8>-api` and `inf-<id8>` are created and given their API-key policy as one strict unit
+(`protect_sdk_route`, the twin of `protect_browser_route`),
+and a route that cannot get its policy is deleted again and the launch fails.
+They were best effort until now, on the reasoning that the workload also checks the key,
+which holds for only three of them:
+Qdrant, Milvus and vLLM check it themselves,
+while ChromaDB is enforced by the gateway alone
+and the TGI/TEI, NIM, OPEA and Ollama inference engines check nothing.
+A missing credential Secret counts as a failure rather than a reason to skip the policy,
+since both create endpoints store the credential before they install.
+`GatewayPolicyError` is the shared base of both failures,
+so neither is ever relabelled as a Helm failure.
+
+Each route is created and protected as a pair, in turn,
+rather than both routes being created and then both protected:
+the second form leaves a published host unprotected for as long as the first pair takes,
+and strands it if that step fails.
+A failure therefore never needs a sweep of the other route,
+and must not do one: on an upgrade the instance keeps running,
+so tearing down a dashboard that is protected and fine,
+because the SDK route failed, would be a self-inflicted outage.
+
+The same reasoning bounds the removal itself.
+A route is deleted only when it is actually unprotected:
+if the policy already lists the route, the attach failure is reported but the route stays up,
+because on every upgrade after the first the route and its policy already exist,
+and an apiserver blip re-confirming them must not take a running workload off the air.
+
+What a failed attach cannot do is record itself on the row.
+Marking the instance `Failed` does not survive:
+the workload is healthy, since Helm succeeded before the gateway step,
+so the 5 s poller sees Ready pods and writes `Running` back within one tick.
+An upgrade that loses its route therefore reports a 500 and logs the reason,
+while the row still reads Running with an endpoint that no longer resolves.
+Fixing that needs a status that is not derived purely from the pods, which is left as follow-up work.
+
+One consequence is deliberate and one-way.
+An instance whose credential Secret is absent
+(created before per-instance credentials existed)
+now fails its next upgrade, scale, stop or resume, and loses its SDK route,
+where it previously logged and carried on.
+That route was serving with nothing checking the key,
+so the failure makes an existing exposure visible rather than creating a new one.
+The fix for such a row is to delete and relaunch it.

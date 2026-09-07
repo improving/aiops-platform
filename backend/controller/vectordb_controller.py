@@ -19,6 +19,8 @@ from paths import TEMPLATES_DIR
 from schemas.vectordb_instance import VectorDBInstanceSchema
 from utils.credentials import CREDENTIAL_KEY, credential_secret_names
 from utils.gateway import (
+    ApiKeyPolicyError,
+    GatewayPolicyError,
     OidcPolicyError,
     apikey_secret_name,
     delete_http_route,
@@ -26,9 +28,9 @@ from utils.gateway import (
     ensure_gateway_client_secret,
     ensure_http_route,
     ensure_reference_grant,
-    ensure_security_policy,
     instance_hostname,
     protect_browser_route,
+    protect_sdk_route,
     remove_oidc_target,
 )
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
@@ -152,20 +154,16 @@ class VectorDBController:
     def _safe_gateway_call(self, description: str, fn, *args, **kwargs):
         """Run one best-effort gateway call, logging instead of raising.
 
-        Used for the SDK "-api" route and its API-key policy, the client
-        Secret copy and the ReferenceGrants (dev-stack helpers for a
-        second namespace), and every delete (called from a `finally`,
-        where a new exception would replace the one already propagating).
-        Such a problem must not block the install, upgrade or uninstall
-        it follows, and must not stop the next step from being attempted.
-        The API-key policy is best effort by ruling (PR 25 review item
-        2), not because it is harmless: a failed policy leaves the SDK
-        route open until the next upgrade re-applies it; Qdrant and
-        Milvus also check the key themselves, ChromaDB does not (its key
-        is enforced only by the gateway).
+        Used for the client Secret copy and the ReferenceGrants
+        (dev-stack helpers for a second namespace), and for every delete
+        (called from a `finally`, where a new exception would replace the
+        one already propagating). Such a problem must not block the
+        install, upgrade or uninstall it follows, and must not stop the
+        next step from being attempted; none of them leaves a workload
+        exposed.
 
-        NOT used for the browser route and its OIDC attachment: both are
-        strict, see _ensure_gateway_routes and _ensure_gateway_policies.
+        NOT used for either route or either policy: all four are strict
+        (#27), see _ensure_gateway_routes.
         """
         try:
             fn(*args, **kwargs)
@@ -173,21 +171,46 @@ class VectorDBController:
             self.logger.exception(description)
 
     def _ensure_gateway_routes(self, instance: VectorDBInstanceSchema):
-        """Create/patch the browser and SDK HTTPRoutes; a no-op without the
-        gateway env contract (see utils/gateway.py).
+        """Publish each host and protect it, one pair at a time.
 
-        The browser route is strict: a failed create fails the install
-        before _ensure_gateway_policies runs, so the shared OIDC policy
-        never gets a targetRef to a route that does not exist. The SDK
-        route stays best effort.
+        A route and its policy are one unit (#27): the route is created,
+        then immediately protected, before the next route is created at
+        all. Creating both routes first and protecting them afterwards
+        leaves a window where a published host has no policy, and a
+        failure in that window strands it.
 
-        A create failure raises OidcPolicyError, the same type
-        protect_browser_route uses for the policy step: both mean the
-        dashboard cannot be safely exposed, so install/upgrade must not
-        mislabel either one as a Helm failure."""
+        Every step is strict. A create failure raises the same
+        GatewayPolicyError subclass the matching policy step uses, and
+        protect_* deletes the route it could not protect, so a failure
+        anywhere leaves no unprotected host behind: the install (or
+        upgrade) then fails and the endpoint records the reason.
+
+        The shared prerequisites run first and stay best effort
+        (_safe_gateway_call): neither publishes anything, so their
+        failure exposes nothing by itself. Note that the policy attach
+        below does not re-check them -- _patch_oidc_targets looks only
+        for the sso route -- so a silently failed client-Secret copy or
+        ReferenceGrant yields a route under a policy that cannot
+        complete a login. That is a broken login, not an open door.
+        A no-op without the gateway env contract (see utils/gateway.py).
+        """
         service_name = self.get_service_name(instance)
         port = self._gateway_port(instance)
         browser_name, api_name = self._gateway_route_names(instance)
+
+        self._safe_gateway_call(
+            f"Failed to copy the gateway client secret into {self.namespace}",
+            ensure_gateway_client_secret,
+            self.namespace,
+            core_v1_api=self.core_v1_api,
+        )
+        self._safe_gateway_call(
+            f"Failed to ensure the reference grants for {self.namespace}",
+            ensure_reference_grant,
+            self.namespace,
+            api_instance=self.api_instance,
+        )
+
         try:
             ensure_http_route(
                 self.namespace,
@@ -202,59 +225,36 @@ class VectorDBController:
                 f"HTTPRoute {self.namespace}/{browser_name} could not be "
                 f"created: {e}"
             ) from e
-        self._safe_gateway_call(
-            f"Failed to ensure gateway route {api_name} for {instance.id}",
-            ensure_http_route,
+        protect_browser_route(
+            self.namespace, browser_name, api_instance=self.api_instance
+        )
+
+        try:
+            ensure_http_route(
+                self.namespace,
+                api_name,
+                instance_hostname("vdb", instance.id, suffix="-api"),
+                service_name,
+                port,
+                api_instance=self.api_instance,
+            )
+        except Exception as e:
+            raise ApiKeyPolicyError(
+                f"HTTPRoute {self.namespace}/{api_name} could not be "
+                f"created: {e}"
+            ) from e
+        protect_sdk_route(
             self.namespace,
             api_name,
-            instance_hostname("vdb", instance.id, suffix="-api"),
-            service_name,
-            port,
+            self._apikey_policy_name(instance),
+            apikey_secret_name("vdb", instance.id),
             api_instance=self.api_instance,
+            core_v1_api=self.core_v1_api,
         )
 
     def _apikey_policy_name(self, instance: VectorDBInstanceSchema) -> str:
         _, api_name = self._gateway_route_names(instance)
         return f"{api_name}-apikey"
-
-    def _ensure_gateway_policies(self, instance: VectorDBInstanceSchema):
-        """The dashboard host joins the shared OIDC policy; the SDK host
-        gets an API-key policy reading the credential Secret that the
-        create endpoint stores before installing (utils/credentials.py).
-
-        The OIDC step is strict (fail closed): a browser route that is
-        not under the policy is a dashboard reachable without a login,
-        so on failure protect_browser_route deletes the route again and
-        raises, the install (or upgrade) fails, and the create endpoint
-        marks the row Failed with the reason and uninstalls the release.
-        The other steps are best effort (_safe_gateway_call)."""
-        browser_name, api_name = self._gateway_route_names(instance)
-        self._safe_gateway_call(
-            f"Failed to copy the gateway client secret into {self.namespace}",
-            ensure_gateway_client_secret,
-            self.namespace,
-            core_v1_api=self.core_v1_api,
-        )
-        self._safe_gateway_call(
-            f"Failed to ensure the reference grants for {self.namespace}",
-            ensure_reference_grant,
-            self.namespace,
-            api_instance=self.api_instance,
-        )
-        protect_browser_route(
-            self.namespace, browser_name, api_instance=self.api_instance
-        )
-        self._safe_gateway_call(
-            f"Failed to ensure the API-key policy for {api_name}",
-            ensure_security_policy,
-            self.namespace,
-            self._apikey_policy_name(instance),
-            api_name,
-            "apikey",
-            instance_hostname("vdb", instance.id, suffix="-api"),
-            apikey_secret_name("vdb", instance.id),
-            api_instance=self.api_instance,
-        )
 
     def _delete_gateway_policies(self, instance: VectorDBInstanceSchema):
         """After the routes (see uninstall): a policy that briefly targets
@@ -321,10 +321,15 @@ class VectorDBController:
             )
             self.logger.info(f"Helm install succeeded for chart: {chart_name}")
             self._ensure_gateway_routes(instance)
-            self._ensure_gateway_policies(instance)
-        except OidcPolicyError:
-            # Helm succeeded; the gateway refused the route. Keep the
-            # type and the message, the endpoints catch Exception.
+        except GatewayPolicyError:
+            # Helm succeeded; the gateway refused a route. No sweep is
+            # needed and none is safe: each route is protected as it is
+            # published, so the only unprotected one is the route the
+            # helper already deleted, and anything still standing is
+            # protected. The endpoint uninstalls the release next, which
+            # removes the rest. Keep the type and the message: the
+            # endpoints catch Exception, and this must not read as a Helm
+            # failure.
             raise
         except (
             Exception
@@ -353,8 +358,11 @@ class VectorDBController:
             )
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
             self._ensure_gateway_routes(instance)
-            self._ensure_gateway_policies(instance)
-        except OidcPolicyError:
+        except GatewayPolicyError:
+            # As in install, and here a sweep would be actively wrong:
+            # the instance keeps running, so tearing down the other
+            # route would break a dashboard that is protected and fine
+            # because of a failure on the SDK side.
             raise
         except (
             Exception

@@ -8,6 +8,7 @@ from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.notebook import NotebookInstanceSchema
 from utils.gateway import (
+    GatewayPolicyError,
     OidcPolicyError,
     delete_backend_traffic_policy,
     delete_http_route,
@@ -176,13 +177,12 @@ class NotebooksController:
         where a new exception would replace the one already propagating).
         Such a problem must not block the install, upgrade or uninstall
         it follows, and must not stop the next step from being attempted.
-        A notebook has no API-key route; the API-key policies of the
-        other controllers are best effort by ruling (PR 25 review item
-        2), see vectordb_controller.py.
+        A notebook has no API-key route; the other controllers' SDK
+        routes and their API-key policies are strict too (#27), see
+        vectordb_controller.py and base_controller.py.
 
         NOT used for creating the browser route or joining it to the
-        OIDC policy: both are strict, see _ensure_gateway_route and
-        _ensure_gateway_policies.
+        OIDC policy: both are strict, see _ensure_gateway_route.
         """
         try:
             fn(*args, **kwargs)
@@ -190,49 +190,26 @@ class NotebooksController:
             self.logger.exception(description)
 
     def _ensure_gateway_route(self, instance: NotebookInstanceSchema):
-        """Create/patch the browser HTTPRoute; a no-op without the gateway
-        env contract (see utils/gateway.py). Notebooks get only one host.
-        Strict: a failed create fails the install before
-        _ensure_gateway_policies runs, so the shared OIDC policy never
-        gets a targetRef to a route that does not exist.
+        """Publish the notebook host and protect it, as one pair.
 
-        A create failure raises OidcPolicyError, the same type
-        protect_browser_route uses for the policy step: both mean the
-        notebook cannot be safely exposed, so install/upgrade must not
-        mislabel either one as a Helm failure.
-        """
-        release = self._get_release_name(instance)
-        try:
-            ensure_http_route(
-                instance.namespace,
-                release,
-                instance_hostname("nb", instance.id),
-                self.get_service_name(instance),
-                instance.service_port or 80,
-                api_instance=self.api_instance,
-            )
-        except Exception as e:
-            raise OidcPolicyError(
-                f"HTTPRoute {instance.namespace}/{release} could not be "
-                f"created: {e}"
-            ) from e
+        The prerequisites run first (best effort: neither publishes
+        anything), then the route is created and immediately joined to
+        the shared OIDC policy, then the WebSocket timeouts. Creating
+        the route and protecting it in two separate steps leaves a
+        window where a JupyterLab is published with no login, which is
+        the shape that produced a real hole in the vector database
+        controller; ADR 0002 states the pairing rule for every route, so
+        it is followed here too even though a notebook has only one.
 
-    def _ensure_gateway_policies(self, instance: NotebookInstanceSchema):
-        """Put the route under the shared OIDC policy (owner-only access
-        is decided by the API's ext-authz endpoint) and give the kernel
-        WebSockets long timeouts.
-
-        The OIDC step is strict (fail closed): a notebook route that is
-        not under the policy is a JupyterLab reachable without a login,
-        so on failure protect_browser_route deletes the route again and
-        raises, the install (or upgrade) fails, and the create endpoint
-        marks the row Failed with the reason and uninstalls the release.
-        The other steps are best effort (_safe_gateway_call).
+        Every strict failure raises OidcPolicyError, so install/upgrade
+        never mislabels it as a Helm failure; protect_browser_route
+        removes the route it could not protect.
 
         No appProtocol patch on the Service: the notebook-controller
-        rewrites the Service ports on every reconcile (verified live, Task
-        10), and Envoy speaks HTTP/1.1 to a Service without appProtocol,
-        so the WebSocket upgrade works as it is."""
+        rewrites the Service ports on every reconcile (verified live,
+        Task 10), and Envoy speaks HTTP/1.1 to a Service without
+        appProtocol, so the WebSocket upgrade works as it is.
+        """
         namespace = instance.namespace
         release = self._get_release_name(instance)
         self._safe_gateway_call(
@@ -247,6 +224,19 @@ class NotebooksController:
             namespace,
             api_instance=self.api_instance,
         )
+        try:
+            ensure_http_route(
+                namespace,
+                release,
+                instance_hostname("nb", instance.id),
+                self.get_service_name(instance),
+                instance.service_port or 80,
+                api_instance=self.api_instance,
+            )
+        except Exception as e:
+            raise OidcPolicyError(
+                f"HTTPRoute {namespace}/{release} could not be created: {e}"
+            ) from e
         protect_browser_route(
             namespace, release, api_instance=self.api_instance
         )
@@ -320,8 +310,7 @@ class NotebooksController:
             )
             self.logger.info(f"Helm install succeeded for chart: {chart_name}")
             self._ensure_gateway_route(instance)
-            self._ensure_gateway_policies(instance)
-        except OidcPolicyError:
+        except GatewayPolicyError:
             # Helm succeeded; the gateway refused the route. Keep the
             # type and the message, the endpoints catch Exception.
             raise
@@ -344,8 +333,7 @@ class NotebooksController:
             )
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
             self._ensure_gateway_route(instance)
-            self._ensure_gateway_policies(instance)
-        except OidcPolicyError:
+        except GatewayPolicyError:
             raise
         except Exception as e:
             self.logger.exception(f"Helm upgrade failed: {str(e)}")

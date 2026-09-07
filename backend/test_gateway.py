@@ -855,37 +855,165 @@ def test_secret_exists(gateway_env):
         gateway.secret_exists("ai-stack", "s", core_v1_api=core)
 
 
-def test_ensure_apikey_policy_only_when_secret_exists(gateway_env):
+def _core_with_secret(exists: bool):
+    """A CoreV1Api mock whose read_namespaced_secret finds the Secret or
+    404s, which is what gateway.secret_exists turns into True/False."""
     core = mock.Mock(spec=client.CoreV1Api)
-    core.read_namespaced_secret.side_effect = ApiException(status=404)
-    api_instance = _api()
-    assert (
-        gateway.ensure_apikey_policy(
+    if not exists:
+        core.read_namespaced_secret.side_effect = ApiException(status=404)
+    return core
+
+
+def test_protect_sdk_route_creates_the_policy_when_the_secret_is_there(
+    gateway_env,
+):
+    api = _api()
+    core = _core_with_secret(True)
+
+    gateway.protect_sdk_route(
+        "ai-stack",
+        "vdb-1-api",
+        "vdb-1-api-apikey",
+        "vdb-1-apikey-auth",
+        api_instance=api,
+        core_v1_api=core,
+    )
+
+    body = (
+        api.create_namespaced_custom_object.call_args.kwargs.get("body")
+        or api.create_namespaced_custom_object.call_args.args[4]
+    )
+    assert body["metadata"]["name"] == "vdb-1-api-apikey"
+    assert "apiKeyAuth" in body["spec"]
+    api.delete_namespaced_custom_object.assert_not_called()
+
+
+def test_protect_sdk_route_deletes_the_route_when_the_secret_is_missing(
+    gateway_env,
+):
+    """The lenient behaviour this replaced (skip the policy, keep the
+    route) is the exposure #27 closes: the host would be served with
+    nothing checking the key."""
+    api = _api()
+    core = _core_with_secret(False)
+
+    with pytest.raises(gateway.ApiKeyPolicyError) as excinfo:
+        gateway.protect_sdk_route(
             "ai-stack",
-            "qdrant-abc-api",
-            "vdb-00000001-apikey-auth",
-            api_instance=api_instance,
+            "vdb-1-api",
+            "vdb-1-api-apikey",
+            "vdb-1-apikey-auth",
+            api_instance=api,
             core_v1_api=core,
         )
-        is False
-    )
-    api_instance.create_namespaced_custom_object.assert_not_called()
-    core.read_namespaced_secret.side_effect = None
-    assert (
-        gateway.ensure_apikey_policy(
+
+    assert "vdb-1-apikey-auth" in str(excinfo.value)
+    assert isinstance(excinfo.value, gateway.GatewayPolicyError)
+    deleted = api.delete_namespaced_custom_object.call_args.args
+    assert deleted[3] == "httproutes"
+    assert deleted[4] == "vdb-1-api"
+
+
+def test_protect_sdk_route_deletes_the_route_when_the_policy_fails(
+    gateway_env,
+):
+    api = mock.Mock()
+    api.create_namespaced_custom_object.side_effect = ApiException(status=500)
+    api.get_namespaced_custom_object.side_effect = ApiException(status=404)
+    core = _core_with_secret(True)
+
+    with pytest.raises(gateway.ApiKeyPolicyError):
+        gateway.protect_sdk_route(
             "ai-stack",
-            "qdrant-abc-api",
-            "vdb-00000001-apikey-auth",
-            api_instance=api_instance,
+            "inf-1",
+            "inf-1",
+            "inf-1-apikey-auth",
+            api_instance=api,
             core_v1_api=core,
         )
-        is True
+
+    deleted = api.delete_namespaced_custom_object.call_args.args
+    assert (deleted[3], deleted[4]) == ("httproutes", "inf-1")
+
+
+def test_protect_sdk_route_still_raises_when_the_cleanup_delete_fails(
+    gateway_env,
+):
+    """The route delete is best effort, but the error is not: if the
+    cleanup cannot run, the caller must still fail so the install does
+    not report success over a route that may still be published."""
+    api = _api()
+    api.create_namespaced_custom_object.side_effect = ApiException(status=500)
+    api.get_namespaced_custom_object.side_effect = ApiException(status=404)
+    api.delete_namespaced_custom_object.side_effect = ApiException(status=500)
+    core = _core_with_secret(True)
+
+    with pytest.raises(gateway.ApiKeyPolicyError):
+        gateway.protect_sdk_route(
+            "ai-stack",
+            "inf-1",
+            "inf-1",
+            "inf-1-apikey-auth",
+            api_instance=api,
+            core_v1_api=core,
+        )
+
+    api.delete_namespaced_custom_object.assert_called()
+
+
+def test_protect_sdk_route_keeps_a_route_the_policy_already_covers(
+    gateway_env,
+):
+    """A blip re-applying a policy that is already correct must not take
+    a running workload off the air: on the second and later upgrades the
+    route and its policy already exist, so the only safe answer to "I
+    could not re-confirm it" is to leave the route alone and still fail.
+    """
+    api = _api(get={"spec": {"targetRefs": [{"name": "inf-1"}]}})
+    api.patch_namespaced_custom_object.side_effect = ApiException(status=500)
+    api.create_namespaced_custom_object.side_effect = ApiException(status=500)
+    core = _core_with_secret(True)
+
+    with pytest.raises(gateway.ApiKeyPolicyError):
+        gateway.protect_sdk_route(
+            "ai-stack",
+            "inf-1",
+            "inf-1",
+            "inf-1-apikey-auth",
+            api_instance=api,
+            core_v1_api=core,
+        )
+
+    api.delete_namespaced_custom_object.assert_not_called()
+
+
+def test_protect_browser_route_does_not_repatch_a_route_already_listed(
+    gateway_env,
+):
+    """The browser path gets the same property for free: a route already
+    in targetRefs needs no patch, so a re-run cannot fail and cannot
+    take the route down. The SDK path needs the explicit guard above
+    because its policy is always re-applied."""
+    api = _api(
+        get={"spec": {"targetRefs": [{"name": "sso"}, {"name": "vdb-1"}]}}
     )
-    body = api_instance.create_namespaced_custom_object.call_args.args[4]
-    assert body["metadata"]["name"] == "qdrant-abc-api"
-    assert body["spec"]["apiKeyAuth"]["credentialRefs"] == [
-        {"kind": "Secret", "name": "vdb-00000001-apikey-auth"}
-    ]
+
+    gateway.protect_browser_route("ai-stack", "vdb-1", api_instance=api)
+
+    api.patch_namespaced_custom_object.assert_not_called()
+    api.delete_namespaced_custom_object.assert_not_called()
+
+
+def test_protect_sdk_route_is_a_noop_without_gateway_settings(monkeypatch):
+    monkeypatch.delenv("AIOPS_PARENT_DOMAIN", raising=False)
+    api = mock.Mock()
+
+    gateway.protect_sdk_route(
+        "ai-stack", "inf-1", "inf-1", "s", api_instance=api
+    )
+
+    api.create_namespaced_custom_object.assert_not_called()
+    api.delete_namespaced_custom_object.assert_not_called()
 
 
 @pytest.mark.parametrize(

@@ -22,7 +22,12 @@ from controller import get_controller
 from db.database import get_db
 from logger import setup_logger
 from schemas.inference_instance import InferenceInstanceSchema
-from utils.instance_status import STATUS_STOPPED, mark_pending, utcnow
+from utils.gateway import GatewayPolicyError
+from utils.instance_status import (
+    STATUS_STOPPED,
+    mark_pending,
+    utcnow,
+)
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -68,6 +73,15 @@ async def _set_replica_count(db: Session, db_instance, replica_count: int):
             full_instance,
             engine_chart,
             overrides={"replicaCount": replica_count},
+        )
+    except GatewayPolicyError as e:
+        # Helm succeeded and the workload is serving; the gateway refused
+        # the route, so say that rather than blaming Helm.
+        logger.exception(f"Failed to protect the route: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to protect the gateway route: {str(e)}",
         )
     except Exception as e:
         logger.exception(f"Failed to upgrade Helm chart: {str(e)}")

@@ -43,6 +43,7 @@ from utils.credentials import (
     generate_secret,
     store_credential,
 )
+from utils.gateway import GatewayPolicyError
 from utils.instance_status import (
     READ_ONLY_STATUS_FIELDS,
     STATUS_FAILED,
@@ -573,6 +574,17 @@ async def update_inference_instance(
 
         try:
             await controller.upgrade(full_instance, engine_chart)
+        except GatewayPolicyError as e:
+            # Helm succeeded and the workload is running, but the gateway
+            # deleted the inf- route (fail closed, #27), so the host now
+            # 404s while the poller keeps refilling the endpoint. Record
+            # it; a plain Helm failure below changes nothing, because
+            # there the instance is still serving as it was.
+            logger.exception(f"Failed to protect the route: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to protect the gateway route: {str(e)}",
+            )
         except Exception as e:
             logger.exception(f"Failed to upgrade Helm chart: {str(e)}")
             raise HTTPException(

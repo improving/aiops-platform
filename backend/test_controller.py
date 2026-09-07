@@ -11,7 +11,11 @@ from kubernetes.client.exceptions import ApiException
 from pyhelm3.errors import ReleaseNotFoundError
 
 from controller import NotebooksController, VectorDBController, get_controller
-from controller.base_controller import ChartMetadataError, get_chart
+from controller.base_controller import (
+    ChartMetadataError,
+    HelmInstallError,
+    get_chart,
+)
 from controller.finetune_controller import FinetuneController
 from controller.vllm_controller import VLLMController
 from core import create_app
@@ -26,7 +30,7 @@ from schemas import (
     VectorDBSchema,
 )
 from utils import credentials, genid
-from utils.gateway import OidcPolicyError
+from utils.gateway import ApiKeyPolicyError, OidcPolicyError
 from utils.kubernetes_utils import PodStatus
 
 
@@ -450,13 +454,13 @@ async def test_vectordb_controller_uninstalls_without_status_parsing():
 
 
 @pytest.mark.asyncio
-async def test_vectordb_controller_install_survives_broken_gateway_api(
+async def test_vectordb_controller_install_fails_when_the_api_route_fails(
     monkeypatch,
 ):
-    """A problem with the SDK "-api" HTTPRoute must not be mistaken for a
-    Helm failure and must not stop the install from succeeding (see
-    VectorDBController._safe_gateway_call). The browser route and the
-    OIDC policy are reachable here."""
+    """The SDK "-api" route is strict too (#27): a database served with
+    nothing checking the key is the same exposure as an unprotected
+    dashboard, and Chroma has no auth of its own at all. The failure
+    keeps its own type rather than being relabelled a Helm failure."""
     monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
     helm = _helm_with_chart(MILVUS_CHART_METADATA)
     helm._command.install_or_upgrade = mock.AsyncMock()
@@ -477,17 +481,26 @@ async def test_vectordb_controller_install_survives_broken_gateway_api(
     )
     instance = _milvus_instance()
 
-    await controller.install(instance)  # does not raise
-
-    helm._command.install_or_upgrade.assert_awaited_once()
     release = controller._get_release_name(instance)
-    calls = api_instance.get_namespaced_custom_object.call_args_list
-    assert [c.args[-1] for c in calls if c.args[3] == "httproutes"] == [
-        release,
-        f"{release}-api",
+
+    with pytest.raises(ApiKeyPolicyError) as excinfo:
+        await controller.install(instance)
+
+    assert f"{release}-api" in str(excinfo.value)
+    assert not isinstance(excinfo.value, HelmInstallError)
+    helm._command.install_or_upgrade.assert_awaited_once()
+    # The browser route was published AND protected before the SDK route
+    # was attempted, so the failure never leaves a dashboard open.
+    patched = api_instance.patch_namespaced_custom_object.call_args.args[5]
+    assert _target_names(patched) == ["sso", release]
+    # And it is left alone: it is protected, and the endpoint uninstalls
+    # the release next. Sweeping it here would tear down a working
+    # dashboard because of a failure on the other route.
+    deletes = [
+        (c.args[3], c.args[4])
+        for c in api_instance.delete_namespaced_custom_object.call_args_list
     ]
-    patch_body = api_instance.patch_namespaced_custom_object.call_args.args[5]
-    assert _target_names(patch_body) == ["sso", release]
+    assert ("httproutes", release) not in deletes
 
 
 @pytest.mark.asyncio
@@ -593,16 +606,19 @@ async def test_vectordb_controller_install_fails_closed_without_the_policy(
         f"HTTPRoute ai-stack/{release} could not join SecurityPolicy "
         f"{SHARED_OIDC}"
     )
+    # Each route is created and protected as a pair, so the failure on
+    # the browser pair means the SDK route is never published at all.
     routes = [
         r["metadata"]["name"] for r in _created(api_instance, "HTTPRoute")
     ]
-    assert routes == [release, f"{release}-api"]
+    assert routes == [release]
     deletes = [
         (c.args[3], c.args[4])
         for c in api_instance.delete_namespaced_custom_object.call_args_list
     ]
-    assert deletes == [("httproutes", release)]
-    # Nothing after the strict step ran: no API-key policy.
+    # The browser route is removed by protect_browser_route, and the
+    # install's cleanup then sweeps for anything else.
+    assert ("httproutes", release) in deletes
     assert _created(api_instance, "SecurityPolicy") == []
 
 
@@ -792,12 +808,13 @@ async def test_notebook_controller_uninstall_removes_route_before_policies(
 @pytest.mark.asyncio
 async def test_vectordb_controller_install_policies(monkeypatch):
     """The browser route joins the shared OIDC policy; the SDK route gets
-    its own API-key policy, created unconditionally because the create
-    endpoint stores the credential Secrets before installing."""
+    its own API-key policy. The credential Secret is checked first (#27):
+    a policy pointing at a Secret that is not there cannot enforce
+    anything, so it would leave the route open in practice."""
     monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
     helm = _helm_with_chart(MILVUS_CHART_METADATA)
     helm._command.install_or_upgrade = mock.AsyncMock()
-    api_instance, core = _gateway_mocks()
+    api_instance, core = _gateway_mocks(secret_exists=True)
     controller = VectorDBController(
         namespace="ai-stack",
         core_v1_api=core,
@@ -811,8 +828,9 @@ async def test_vectordb_controller_install_policies(monkeypatch):
 
     values = helm._command.install_or_upgrade.await_args.args[2]
     assert "s3cret" in values["extraConfigFiles"]["user.yaml"]
-    # The Secret is not looked up: the caller guarantees it.
-    core.read_namespaced_secret.assert_not_called()
+    # The Secret backing the API-key policy is verified before the
+    # policy is created.
+    core.read_namespaced_secret.assert_called()
     routes = [
         r["metadata"]["name"] for r in _created(api_instance, "HTTPRoute")
     ]
@@ -899,6 +917,10 @@ def _inference_instance_and_chart():
 async def test_inference_controller_single_route_and_apikey_policy(
     monkeypatch, secret_exists
 ):
+    """With the credential Secret in place the inf- route gets its
+    API-key policy; without it the install fails closed (#27) and the
+    route is removed, because no in-repo inference engine except vLLM
+    checks a key of its own."""
     monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
     instance, chart = _inference_instance_and_chart()
     helm = mock.Mock()
@@ -919,6 +941,19 @@ async def test_inference_controller_single_route_and_apikey_policy(
     )
     release = controller._get_release_name(instance)
 
+    if not secret_exists:
+        with pytest.raises(ApiKeyPolicyError) as excinfo:
+            await controller.install(instance, chart)
+        assert "apikey-auth" in str(excinfo.value)
+        assert not isinstance(excinfo.value, HelmInstallError)
+        deleted = [
+            (c.args[3], c.args[4])
+            for c in api_instance.delete_namespaced_custom_object.call_args_list
+        ]
+        assert ("httproutes", release) in deleted
+        assert _created(api_instance, "SecurityPolicy") == []
+        return
+
     await controller.install(instance, chart)
 
     routes = _created(api_instance, "HTTPRoute")
@@ -932,14 +967,11 @@ async def test_inference_controller_single_route_and_apikey_policy(
         f"inf-{instance.id.hex[-8:]}.127.0.0.1.nip.io"
     ]
     policies = _created(api_instance, "SecurityPolicy")
-    if secret_exists:
-        (policy,) = policies
-        assert policy["metadata"]["name"] == release
-        assert _target_names(policy) == [release]
-        assert "apiKeyAuth" in policy["spec"]
-        assert "oidc" not in policy["spec"]
-    else:
-        assert policies == []
+    (policy,) = policies
+    assert policy["metadata"]["name"] == release
+    assert _target_names(policy) == [release]
+    assert "apiKeyAuth" in policy["spec"]
+    assert "oidc" not in policy["spec"]
 
     helm._command.uninstall = mock.AsyncMock()
     await controller.uninstall(instance)
@@ -947,17 +979,21 @@ async def test_inference_controller_single_route_and_apikey_policy(
         (c.args[3], c.args[4])
         for c in api_instance.delete_namespaced_custom_object.call_args_list
     ]
+    # The route goes first: a policy briefly targeting a route that is
+    # gone is harmless, a route outliving its API-key policy is not, and
+    # this runs from a finally that also fires when the Helm uninstall
+    # failed and the workload is still serving.
     assert deletes == [
+        ("httproutes", release),
         ("backendtrafficpolicies", release),
         ("securitypolicies", release),
-        ("httproutes", release),
     ]
 
 
 # --- Task 14: inference endpoint keys ---------------------------------------
 #
 # The SecurityPolicy on the "inf-<id8>" route (created via
-# base_controller._ensure_gateway_routes -> ensure_apikey_policy) is already
+# base_controller._ensure_gateway_routes -> protect_sdk_route) is already
 # covered above by test_inference_controller_single_route_and_apikey_policy
 # and by test_ensure_security_policy_apikey_body in test_gateway.py. What is
 # new here is the credential itself: vLLM's rendered values reference it with
@@ -1134,8 +1170,8 @@ async def test_create_inference_instance_keeps_the_row_on_install_failure(
 async def test_create_inference_instance_credential_enables_the_apikey_policy(
     monkeypatch,
 ):
-    """The store-before-install ordering is what lets T10's
-    ensure_apikey_policy (run from controller.install) see the credential
+    """The store-before-install ordering is what lets protect_sdk_route
+    (run from controller.install) see the credential
     Secret and create the SecurityPolicy on the very first install, using
     a real VLLMController instead of a mocked one."""
     monkeypatch.setenv("HF_API_TOKEN", "hf-test-token")
@@ -1147,7 +1183,7 @@ async def test_create_inference_instance_credential_enables_the_apikey_policy(
 
     api_instance, core_v1 = _gateway_mocks()
     # utils/credentials.py writes Secrets through this same CoreV1 client,
-    # so ensure_apikey_policy's own read_namespaced_secret sees them too.
+    # so protect_sdk_route's own read_namespaced_secret sees them too.
     core_v1.read_namespaced_secret.side_effect = None
     core_v1.read_namespaced_secret.return_value = mock.Mock()
 
@@ -1566,3 +1602,82 @@ async def test_ensure_helm_builds_the_client_off_the_event_loop(monkeypatch):
     assert controller.helm is helm
     # Cached: a second call does not build another one.
     assert await controller._ensure_helm() is helm
+
+
+@pytest.mark.asyncio
+async def test_vectordb_controller_install_fails_when_the_apikey_policy_fails(
+    monkeypatch,
+):
+    """The API-key policy is strict: when it cannot be created the "-api"
+    route is deleted again, so the database is never served with nothing
+    checking the key."""
+    monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
+    helm = _helm_with_chart(MILVUS_CHART_METADATA)
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    api_instance, core = _gateway_mocks(
+        shared_targets=["sso"], secret_exists=True
+    )
+    create = api_instance.create_namespaced_custom_object.side_effect
+
+    def fail_apikey_policy(group, version, namespace, plural, body, **kwargs):
+        if plural == "securitypolicies" and "apiKeyAuth" in body.get(
+            "spec", {}
+        ):
+            raise ApiException(status=500)
+        if create is not None:
+            return create(group, version, namespace, plural, body, **kwargs)
+        return body
+
+    api_instance.create_namespaced_custom_object.side_effect = (
+        fail_apikey_policy
+    )
+    controller = VectorDBController(
+        namespace="ai-stack",
+        core_v1_api=core,
+        api_instance=api_instance,
+        helm_client=helm,
+    )
+    instance = _milvus_instance()
+    release = controller._get_release_name(instance)
+
+    with pytest.raises(ApiKeyPolicyError):
+        await controller.install(instance, credential="s3cret")
+
+    deleted = [
+        (c.args[3], c.args[4])
+        for c in api_instance.delete_namespaced_custom_object.call_args_list
+    ]
+    assert ("httproutes", f"{release}-api") in deleted
+
+
+@pytest.mark.asyncio
+async def test_inference_controller_install_fails_when_the_route_fails(
+    monkeypatch,
+):
+    """The inf- route create is strict too: without it there is nothing
+    to attach a policy to, and the failure keeps its own type."""
+    monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
+    instance, chart = _inference_instance_and_chart()
+    helm = mock.Mock()
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    api_instance, core = _gateway_mocks(secret_exists=True)
+    api_instance.create_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    controller = get_controller(
+        "vllm",
+        namespace="ai-stack",
+        api_instance=api_instance,
+        core_v1_api=core,
+        helm_client=helm,
+    )
+    controller._add_and_update_helm_repo = mock.AsyncMock(
+        return_value=mock.Mock(
+            ref="vllm", repo=chart.chart_repo, metadata=mock.Mock(version="1")
+        )
+    )
+
+    with pytest.raises(ApiKeyPolicyError) as excinfo:
+        await controller.install(instance, chart)
+
+    assert not isinstance(excinfo.value, HelmInstallError)

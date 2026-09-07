@@ -18,14 +18,16 @@ from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
 from utils.gateway import (
     INFERENCE_TIMEOUTS,
+    ApiKeyPolicyError,
+    GatewayPolicyError,
     apikey_secret_name,
     delete_backend_traffic_policy,
     delete_http_route,
     delete_security_policy,
-    ensure_apikey_policy,
     ensure_backend_traffic_policy,
     ensure_http_route,
     instance_hostname,
+    protect_sdk_route,
 )
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
 
@@ -375,13 +377,12 @@ class Controller(ABC):
         deleted, since the caller's except-and-delete does not know the
         difference), must not block the install/upgrade/uninstall it
         follows, and must not stop the next call from being attempted.
-        Every inference step stays best effort by ruling (PR 25 review
-        item 2), not because it is harmless: inference has no browser
-        route, and a failed API-key policy leaves the inf-<id8> route
-        open until the next upgrade re-applies it; vLLM checks the key
-        itself, Ollama, TGI, NIM and the other engines do not. The
-        browser routes of notebooks and vector databases are the strict
-        case (their controllers, _ensure_gateway_policies).
+        What is left here is only the BackendTrafficPolicy (timeouts,
+        whose failure exposes nothing) and the deletes. The inf-<id8>
+        route and its API-key policy are no longer among them: they are
+        strict since #27, see _ensure_gateway_routes above, because an
+        unprotected inference host is served with nothing checking the
+        key and only vLLM checks one itself.
         """
         try:
             fn(*args, **kwargs)
@@ -394,23 +395,35 @@ class Controller(ABC):
         engineChart: EngineChartsSchema,
     ):
         """Create/patch the one SDK HTTPRoute (inf-<id8>; inference has no
-        browser UI) and, once its credential Secret exists (Task 12), the
-        API-key policy on it. No-op without the gateway env contract."""
+        browser UI) and the API-key policy on it. No-op without the
+        gateway env contract.
+
+        Both steps are strict (fail closed, #27): an inf- route with no
+        policy is an inference endpoint served with nothing checking the
+        key, and no in-repo engine except vLLM checks one itself. A
+        failure deletes the route again and raises ApiKeyPolicyError, so
+        install/upgrade never mislabels it as a Helm error and the create
+        endpoint marks the row Failed with the reason. The traffic policy
+        below stays best effort: its failure exposes nothing.
+        """
         route_name = self._gateway_route_name(instance)
-        self._safe_gateway_call(
-            f"Failed to ensure gateway route {route_name} for {instance.id}",
-            ensure_http_route,
+        try:
+            ensure_http_route(
+                self.namespace,
+                route_name,
+                instance_hostname("inf", instance.id),
+                self.get_service_name(instance, engineChart),
+                INFERENCE_GATEWAY_PORT,
+                api_instance=self.api_instance,
+            )
+        except Exception as e:
+            raise ApiKeyPolicyError(
+                f"HTTPRoute {self.namespace}/{route_name} could not be "
+                f"created: {e}"
+            ) from e
+        protect_sdk_route(
             self.namespace,
             route_name,
-            instance_hostname("inf", instance.id),
-            self.get_service_name(instance, engineChart),
-            INFERENCE_GATEWAY_PORT,
-            api_instance=self.api_instance,
-        )
-        self._safe_gateway_call(
-            f"Failed to ensure the API-key policy for {route_name}",
-            ensure_apikey_policy,
-            self.namespace,
             route_name,
             apikey_secret_name("inf", instance.id),
             api_instance=self.api_instance,
@@ -426,10 +439,25 @@ class Controller(ABC):
         )
 
     def _delete_gateway_routes(self, instance: InferenceInstanceSchema):
-        """Policy first, then the route it targets. Called from a
-        `finally`, where a new exception would silently replace the one
-        already being propagated; see _safe_gateway_call."""
+        """The route first, then the policies that targeted it.
+
+        The same order the other two controllers use, and for their
+        reason: a policy that briefly targets a route that is gone is
+        harmless, a route that outlives its API-key policy is not. This
+        runs from a `finally`, so it also runs when the Helm uninstall
+        raised and the workload is still serving; taking the policy away
+        first would leave that workload published with nothing checking
+        the key. A new exception here would silently replace the one
+        already propagating, hence _safe_gateway_call.
+        """
         route_name = self._gateway_route_name(instance)
+        self._safe_gateway_call(
+            f"Failed to delete gateway route {route_name} for {instance.id}",
+            delete_http_route,
+            self.namespace,
+            route_name,
+            api_instance=self.api_instance,
+        )
         self._safe_gateway_call(
             f"Failed to delete the traffic policy for {route_name}",
             delete_backend_traffic_policy,
@@ -440,13 +468,6 @@ class Controller(ABC):
         self._safe_gateway_call(
             f"Failed to delete the API-key policy for {route_name}",
             delete_security_policy,
-            self.namespace,
-            route_name,
-            api_instance=self.api_instance,
-        )
-        self._safe_gateway_call(
-            f"Failed to delete gateway route {route_name} for {instance.id}",
-            delete_http_route,
             self.namespace,
             route_name,
             api_instance=self.api_instance,
@@ -498,6 +519,11 @@ class Controller(ABC):
             await asyncio.to_thread(
                 self._ensure_gateway_routes, instance, engineChart
             )
+        except GatewayPolicyError:
+            # Helm succeeded; the route could not be protected and was
+            # removed again. Propagate as itself so the reason on the row
+            # names the policy instead of claiming Helm failed.
+            raise
         except (
             Exception
         ) as e:  # Consider replacing with a more specific exception
@@ -532,6 +558,10 @@ class Controller(ABC):
             await asyncio.to_thread(
                 self._ensure_gateway_routes, instance, engineChart
             )
+        except GatewayPolicyError:
+            # See install: the route is already gone, and the reason
+            # should name the policy rather than claim Helm failed.
+            raise
         except (
             Exception
         ) as e:  # Consider replacing with a more specific exception

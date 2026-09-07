@@ -66,9 +66,16 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   route), SDK hosts (`vdb-<id8>-api`, `inf-<id8>`) get their own `apikey` policy, notebook routes get a
   `BackendTrafficPolicy` for WebSockets and `inf-` routes one with no request timeout (Envoy's default 15 s cut
   streamed answers). Every function is a no-op without `AIOPS_PARENT_DOMAIN`.
-  Browser routes fail closed (ADR 0002): a failed route create or a failed `protect_browser_route` policy
-  attach both delete the route again and raise `OidcPolicyError`, so install/upgrade never mislabels either as
-  a Helm error.
+  Both route kinds fail closed (ADR 0002): each route is created and protected as a pair, and a failed create
+  or attach raises a `GatewayPolicyError` subclass (`OidcPolicyError` for browser routes through
+  `protect_browser_route`, `ApiKeyPolicyError` for SDK routes through `protect_sdk_route`), so install and
+  upgrade never mislabel any of them as a Helm error. The route is deleted only when it is actually
+  unprotected: `_protect_route` leaves it up when the policy already lists it, so re-confirming an existing
+  policy on a later upgrade cannot take a running workload down. A failed attach cannot be recorded on the
+  row, because the pods are healthy and the poller writes `Running` back within a tick. For an SDK route a missing credential Secret is one of
+  those failures, not a reason to skip the policy: both create endpoints store the credential before they
+  install, and most workloads check no key of their own (only Qdrant, Milvus and vLLM do).
+  The client-Secret copy, the ReferenceGrants and the BackendTrafficPolicy stay best effort.
 - `utils/kubernetes_utils.py` resolves the fallback service endpoint used when the gateway is not configured
   (loads kube config, file then in-cluster; LoadBalancer ingress IP or hostname, else the cluster IP,
   and `None` while nothing is known so the scheduler keeps polling).

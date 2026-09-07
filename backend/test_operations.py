@@ -24,6 +24,7 @@ from testing.rows import (
     delete_rows,
     user_id,
 )
+from utils.gateway import ApiKeyPolicyError
 from utils.kubernetes_utils import PodStatus
 
 CRASH = PodStatus(
@@ -800,6 +801,36 @@ def test_a_failed_helm_upgrade_leaves_the_row_unchanged(inference_env):
         row = _get(client, created["id"])
         assert row["status"] == "Pending"
         assert row["stopped_at"] is None
+    finally:
+        controller.upgrade.side_effect = None
+        _delete(client, created["id"])
+
+
+def test_a_gateway_failure_on_stop_says_so_and_leaves_the_row(
+    inference_env,
+):
+    """A gateway failure is reported as itself, not as a Helm failure.
+
+    The row is left alone on purpose. Marking it Failed here does not
+    survive: the workload is healthy (Helm succeeded), so the 5 s poller
+    sees Ready pods and apply_pod_status writes Running back and clears
+    last_error within one tick. Recording a status the poller erases
+    would be worse than recording none; the gap is in ADR 0002.
+    """
+    client, controller, _ = inference_env
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}"
+    try:
+        controller.upgrade.side_effect = ApiKeyPolicyError(
+            "HTTPRoute ai-stack/inf-1 could not get SecurityPolicy inf-1"
+        )
+        response = client.post(f"{url}/stop")
+        assert response.status_code == 500
+        detail = response.json()["detail"]
+        assert detail.startswith("Failed to protect the gateway route")
+        assert "Helm" not in detail
+        row = _get(client, created["id"])
+        assert row["status"] == "Pending"
     finally:
         controller.upgrade.side_effect = None
         _delete(client, created["id"])

@@ -119,7 +119,7 @@ that forwards the key to the workload; the browser host stays behind the shared 
 `api/inference_instance.py` stores the credential right after the row is created, before `controller.install`,
 and removes it after `controller.uninstall`.
 The `inf-<id8>-apikey-auth` Secret protects the `inf-<id8>` gateway route the same way it does for vector databases
-(`utils.gateway.ensure_apikey_policy`, wired into every engine controller through `base_controller.Controller`).
+(`utils.gateway.protect_sdk_route`, wired into every engine controller through `base_controller.Controller`; it fails closed, deleting the route when the policy cannot be created).
 Only vLLM's chart reads the credential itself: its values reference the credentials Secret with a `secretKeyRef`
 (`VLLM_API_KEY`, `controller/vllm_controller.py`), never the raw value.
 HuggingFace's chart (`text-generation-inference`/`text-embeddings-inference`), NIM and OPEA have no server-side
