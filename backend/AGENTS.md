@@ -275,6 +275,10 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   layer; `utils/pod_inspection.py` does the Kubernetes reads. `api/inference_operations.py` is stop/resume/scale
   on top of it; `api/inference_status.py` is the chart lookup and status-polling leaf both of it and
   `api/inference_instance.py` import from.
+- Pod logs are read with `_preload_content=False` and decoded in `utils/pod_inspection.py`:
+  the client declares a `str` return, so on a body it did not decode it hands back `str(bytes)`,
+  and the UI then shows `b'...'` with every newline as the two characters backslash and n.
+  `testing/pods.py` `fake_core` models that, so a test that drops the flag fails.
 - `test_operations.py` and `test_pod_inspection.py` cover all of this with mocked Helm and Kubernetes clients.
 
 ## Model registry (Phase 3)

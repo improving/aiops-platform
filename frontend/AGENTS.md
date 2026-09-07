@@ -70,6 +70,11 @@ pnpm e2e:ui                               # Playwright UI mode
   `inferenceInstance.litellm_model_name` (falling back to `inst-<id8>` derived from the instance id).
   Since Phase 2b, `ChatTarget.provider_id` (`null` for instances and the mock target) tells the two apart;
   `ChatPanel.tsx` splits the target `Select` into two `SelectGroup`s, "Deployed" and "Hosted".
+  The conversation section has a bounded height (`h-[calc(100vh-18rem)]`, the 18rem being the shell around it)
+  and the log inside it carries `min-h-0` next to `flex-1`: without both, the section grew with the history,
+  the log never scrolled and the composer was pushed off the page.
+  The log follows the newest message unless the reader has scrolled up (a `pinned` ref, never state, so
+  scrolling does not render); `e2e/fast/chat.spec.ts` seeds `aiops.chat.dev.inst-mock` to cover it.
 - Hosted providers (Phase 2b): `/providers` (`ProvidersPage.tsx`, `src/services/providerService.ts`) lists an
   organization's hosted providers (`GET /v1alpha1/providers`) with an expandable model table per provider
   (display name, model id, capability, context, per-token prices) and a `BudgetCard` for the LiteLLM team budget

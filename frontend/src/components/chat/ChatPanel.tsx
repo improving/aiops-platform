@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
@@ -130,6 +130,29 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     if (target && status === "ready") saveMessages(userKey, target, messages);
   }, [userKey, target, messages, status]);
 
+  // Follow the newest message, unless the user has scrolled up to read
+  // back: a stream that yanked the view down would make history
+  // unreadable. `pinned` is a ref, not state, so scrolling never renders.
+  const logRef = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+
+  const onLogScroll = useCallback(() => {
+    const log = logRef.current;
+    if (!log) return;
+    const fromBottom = log.scrollHeight - log.scrollTop - log.clientHeight;
+    pinned.current = fromBottom < 80;
+  }, []);
+
+  useEffect(() => {
+    const log = logRef.current;
+    if (log && pinned.current) log.scrollTop = log.scrollHeight;
+  }, [messages, error]);
+
+  // A new conversation starts at the bottom again.
+  useEffect(() => {
+    pinned.current = true;
+  }, [target]);
+
   const busy = status === "submitted" || status === "streaming";
   const canSend = !!selected && !busy && input.trim().length > 0;
 
@@ -228,12 +251,21 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
         </Button>
       </aside>
 
-      <section className="flex min-h-[60vh] flex-col">
+      {/* A bounded height, not a minimum: with only min-h the section grew
+          with the conversation, so the log below never became scrollable
+          and the composer was pushed off the bottom of the page. The 18rem
+          is the shell around it (header, title, footer), measured at 274px;
+          min-h keeps it usable when the viewport is short. */}
+      <section className="flex h-[calc(100vh-18rem)] min-h-[24rem] flex-col">
         <div
+          ref={logRef}
+          onScroll={onLogScroll}
           role="log"
           aria-label="Conversation"
           aria-live="polite"
-          className="flex-1 space-y-3 overflow-y-auto rounded-md border p-4"
+          // min-h-0 lets this flex child shrink below its content height,
+          // which is what makes overflow-y-auto scroll instead of grow.
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-md border p-4"
         >
           {messages.map((message) => (
             <div
@@ -242,8 +274,8 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
               data-role={message.role}
               className={
                 message.role === "user"
-                  ? "ml-auto max-w-[80%] rounded-lg bg-primary px-3 py-2 text-primary-foreground"
-                  : "mr-auto max-w-[80%] whitespace-pre-wrap rounded-lg bg-muted px-3 py-2"
+                  ? "ml-auto max-w-[80%] rounded-lg bg-primary px-3 py-2 break-words whitespace-pre-wrap text-primary-foreground"
+                  : "mr-auto max-w-[80%] rounded-lg bg-muted px-3 py-2 break-words whitespace-pre-wrap"
               }
             >
               {messageReasoning(message) && (

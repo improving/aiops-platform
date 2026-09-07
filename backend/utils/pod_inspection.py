@@ -49,14 +49,33 @@ def pod_logs(
     return {"pods": result}
 
 
+def _as_text(value) -> str:
+    """The log body as text, whatever shape the client handed back.
+
+    ``read_namespaced_pod_log`` is declared to return ``str``, so the
+    client passes the response body through ``str()``. On a body it did
+    not decode that yields the *repr* of the bytes: the log arrives as
+    ``b'[GIN] ...\\n...'`` with every newline as the two characters
+    backslash and n, and every non-ASCII byte as ``\\xc2\\xb5``. Reading
+    the response raw (``_preload_content=False``) and decoding it here is
+    the only way to get the real text; ``value`` is then the raw response
+    object, but the test fixtures pass a plain string.
+    """
+    data = getattr(value, "data", value)
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data or ""
+
+
 def _read_log(core_v1, namespace, pod, container, tail, previous) -> str:
     try:
-        text = core_v1.read_namespaced_pod_log(
+        response = core_v1.read_namespaced_pod_log(
             name=pod,
             namespace=namespace,
             container=container,
             tail_lines=tail,
             previous=previous,
+            _preload_content=False,
         )
     except ApiException as e:
         # 400: the container has not started yet, or has no previous run
@@ -65,7 +84,7 @@ def _read_log(core_v1, namespace, pod, container, tail, previous) -> str:
         if e.status in (400, 404):
             return ""
         raise
-    return text or ""
+    return _as_text(response)
 
 
 def pod_events(

@@ -52,6 +52,8 @@ def test_pod_logs_returns_every_container_of_every_pod():
         "container": "main",
         "tail_lines": 50,
         "previous": False,
+        # Raw, so the body is decoded here rather than by str().
+        "_preload_content": False,
     }
 
 
@@ -320,3 +322,39 @@ def test_restart_workload_without_a_workload_raises():
 
     with pytest.raises(LookupError):
         restart_workload("ai-stack", LABELS, apps_v1=apps)
+
+
+def test_pod_logs_decodes_the_raw_response_body():
+    """Without _preload_content=False and the decode, the client passes
+    the undecoded body through str(): the UI then shows b'...' with every
+    newline as the two characters backslash and n."""
+    core = fake_core(
+        [fake_pod("a")],
+        logs={("a", "ollama", False): "200 | 121.749\u00b5s\nready\n"},
+    )
+
+    log = pod_logs("ai-stack", LABELS, core_v1=core)["pods"][0]["containers"][
+        0
+    ]["log"]
+
+    assert log == "200 | 121.749\u00b5s\nready\n"
+    assert not log.startswith("b'")
+    assert log.count("\n") == 2
+    assert "\\n" not in log
+    kwargs = core.read_namespaced_pod_log.call_args.kwargs
+    assert kwargs["_preload_content"] is False
+
+
+def test_pod_logs_replaces_bytes_that_are_not_utf_8():
+    core = mock.Mock()
+    core.list_namespaced_pod.return_value = fake_listing(fake_pod("a"))
+    core.read_namespaced_pod_log.return_value = SimpleNamespace(
+        data=b"first\n\xff\xfe rest\n"
+    )
+
+    log = pod_logs("ai-stack", LABELS, core_v1=core)["pods"][0]["containers"][
+        0
+    ]["log"]
+
+    assert log.startswith("first\n")
+    assert log.endswith(" rest\n")
