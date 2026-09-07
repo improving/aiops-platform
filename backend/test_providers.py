@@ -5,12 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core import create_app
-from test_auth import (  # noqa: F401 (fixtures)
-    bearer,
-    make_token,
-    oidc_client,
-    rsa_key,
-)
+from testing.tokens import bearer, make_token
 from utils import litellm as ll
 from utils import secret_store as ss
 from utils.gateway import id8

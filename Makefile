@@ -244,6 +244,87 @@ litellm-down: ## Remove the LiteLLM release and its route (the litellm database 
 langflow-down: ## Remove the Langflow Deployment/Service/HTTPRoute/SecurityPolicy (the PVC is kept)
 	kubectl -n $(NAMESPACE) delete deployment/langflow service/langflow httproute/langflow securitypolicy/langflow-oidc --ignore-not-found
 
+# --- platform chart (charts/aiops-platform, docs/install.md) --------------------
+
+CHART_DIR           := charts/aiops-platform
+CHART_RELEASE       ?= aiops-platform
+CHART_NAMESPACE     ?= aiops-platform
+CHART_PARENT_DOMAIN ?= platform.127.0.0.1.nip.io
+CHART_IMAGE_TAG     ?= $(shell git rev-parse --short HEAD)
+CHART_CA_SECRET     := aiops-platform-ca
+CHART_TLS_SECRET    := $(CHART_RELEASE)-wildcard-tls
+
+.PHONY: chart-deps chart-lint chart-images chart-install chart-uninstall chart-smoke
+
+chart-deps: ## Fetch the platform chart's dependencies (Bitnami postgresql and keycloak, LiteLLM)
+	helm dependency build $(CHART_DIR)
+
+chart-lint: ## Lint the platform chart and check its renders with the default, external and kind values
+	./hack/chart-lint.sh
+
+chart-images: ## Build the backend and frontend images from this checkout and load them into kind
+	docker build -t ghcr.io/infracloudio/aiops-backend:$(CHART_IMAGE_TAG) backend
+	docker build -t ghcr.io/infracloudio/aiops-frontend:$(CHART_IMAGE_TAG) frontend
+	kind load docker-image --name $(CLUSTER_NAME) \
+		ghcr.io/infracloudio/aiops-backend:$(CHART_IMAGE_TAG) \
+		ghcr.io/infracloudio/aiops-frontend:$(CHART_IMAGE_TAG)
+
+chart-install: chart-deps ## Install the platform chart on kind (namespace aiops-platform, parent domain platform.127.0.0.1.nip.io); run chart-images first
+	@test -s $(CA_CRT) || { echo "$(CA_CRT) is missing: run 'make gateway-up ca-export' first"; exit 1; }
+	kubectl create namespace $(CHART_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n $(CHART_NAMESPACE) create secret generic $(CHART_CA_SECRET) --from-file=ca.crt=$(CA_CRT) \
+		--dry-run=client -o yaml | kubectl apply -f -
+	@# *.platform.127.0.0.1.nip.io resolves to 127.0.0.1, which inside a pod is
+	@# the pod itself; the UI must reach Keycloak's public issuer, so alias the
+	@# auth host to the gateway's Envoy Service.
+	@envoy_ip=$$(kubectl -n $(GATEWAY_NAMESPACE) get svc -l gateway.envoyproxy.io/owning-gateway-name=aiops \
+		-o jsonpath='{.items[0].spec.clusterIP}'); \
+	test -n "$$envoy_ip" || { echo "no Envoy Service for Gateway aiops: run 'make gateway-up'"; exit 1; }; \
+	echo "Envoy Service IP: $$envoy_ip"; \
+	helm upgrade --install $(CHART_RELEASE) $(CHART_DIR) -n $(CHART_NAMESPACE) \
+		-f $(CHART_DIR)/test/values-kind.yaml \
+		--set global.parentDomain=$(CHART_PARENT_DOMAIN) \
+		--set global.imageTag=$(CHART_IMAGE_TAG) \
+		--set global.caSecret=$(CHART_CA_SECRET) \
+		--set gateway.tls.secretName=$(CHART_TLS_SECRET) \
+		--set-json 'frontend.hostAliases=[{"ip":"'"$$envoy_ip"'","hostnames":["auth.$(CHART_PARENT_DOMAIN)"]}]' \
+		--timeout 15m
+	kubectl -n $(GATEWAY_NAMESPACE) wait --for=condition=Ready certificate/$(CHART_RELEASE)-wildcard --timeout=180s
+	@# The dev Gateway terminates *.127.0.0.1.nip.io only (one label); add the
+	@# platform wildcard certificate to its https listener, once. A later
+	@# 'make gateway-up' re-applies infra/local/gateway/gateway.yaml and drops
+	@# this entry again; re-run 'make chart-install' to restore it.
+	@if ! kubectl -n $(GATEWAY_NAMESPACE) get gateway aiops \
+		-o jsonpath='{.spec.listeners[?(@.name=="https")].tls.certificateRefs[*].name}' | grep -qw $(CHART_TLS_SECRET); then \
+		kubectl -n $(GATEWAY_NAMESPACE) patch gateway aiops --type json \
+			-p '[{"op":"add","path":"/spec/listeners/1/tls/certificateRefs/-","value":{"kind":"Secret","name":"$(CHART_TLS_SECRET)"}}]'; \
+	fi
+	kubectl -n $(CHART_NAMESPACE) rollout status statefulset/aiops-postgresql --timeout=600s
+	kubectl -n $(CHART_NAMESPACE) rollout status statefulset/aiops-keycloak --timeout=900s
+	kubectl -n $(CHART_NAMESPACE) rollout status deployment/aiops-litellm --timeout=600s
+	kubectl -n $(CHART_NAMESPACE) rollout status deployment/$(CHART_RELEASE)-backend --timeout=600s
+	kubectl -n $(CHART_NAMESPACE) rollout status deployment/$(CHART_RELEASE)-frontend --timeout=600s
+	@echo ""
+	@echo "UI:   https://ui.$(CHART_PARENT_DOMAIN)/   (dev users admin/admin, alice/alice, bob/bob)"
+	@echo "API:  https://api.$(CHART_PARENT_DOMAIN)/health"
+	@echo "Auth: https://auth.$(CHART_PARENT_DOMAIN)/realms/aiops"
+	@echo "The browser must trust $(CA_CRT) (make trust-ca)."
+
+chart-uninstall: ## Remove the platform chart from kind: the release, the namespace with its data, and the gateway certificate
+	-helm -n $(CHART_NAMESPACE) uninstall $(CHART_RELEASE)
+	@refs=$$(kubectl -n $(GATEWAY_NAMESPACE) get gateway aiops -o json 2>/dev/null \
+		| jq -c '[.spec.listeners[] | select(.name=="https") | .tls.certificateRefs[] | select(.name != "$(CHART_TLS_SECRET)")]'); \
+	if [ -n "$$refs" ]; then \
+		kubectl -n $(GATEWAY_NAMESPACE) patch gateway aiops --type json \
+			-p '[{"op":"replace","path":"/spec/listeners/1/tls/certificateRefs","value":'"$$refs"'}]'; \
+	fi
+	kubectl -n $(GATEWAY_NAMESPACE) delete secret $(CHART_TLS_SECRET) --ignore-not-found
+	kubectl delete namespace $(CHART_NAMESPACE) --ignore-not-found
+
+chart-smoke: ## Install the platform chart on kind and check the API, the realm and the login page through the gateway (ARGS="--skip-install" reuses an install)
+	CHART_RELEASE=$(CHART_RELEASE) CHART_NAMESPACE=$(CHART_NAMESPACE) PARENT_DOMAIN=$(CHART_PARENT_DOMAIN) CA_CERT=$(CA_CRT) \
+		./hack/chart-smoke.sh $(ARGS)
+
 # --- LoadBalancer support (optional, needs sudo -- not run by this Makefile) -
 
 lb: ## Print the cloud-provider-kind command to enable LoadBalancer IPs (requires sudo, run it yourself)

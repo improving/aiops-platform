@@ -5,10 +5,14 @@ import pprint
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from kubernetes import client
-from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
 
+from api.inference_status import (
+    _engine_chart_for,
+    _engine_chart_query,
+    check_pod_status_and_readiness,
+)
 from auth.current_user import CurrentUser, get_current_user, require_writer
 from auth.policy import authorize_read, authorize_write, org_scope
 from controller import get_controller
@@ -35,14 +39,17 @@ from schemas.inference_instance_dashboards import (
 from utils import genid
 from utils.credentials import (
     delete_credential,
+    find_credential,
     generate_secret,
     store_credential,
 )
-from utils.gateway import gateway_settings, instance_url
-from utils.kubernetes_utils import (
-    get_pod_status_and_readiness,
-    get_service_endpoint,
+from utils.instance_status import (
+    READ_ONLY_STATUS_FIELDS,
+    STATUS_FAILED,
+    STATUS_PENDING,
+    mark_failed,
 )
+from utils.kubernetes_utils import get_default_namespace
 from utils.litellm import (
     LiteLLMError,
     instance_litellm_params,
@@ -115,6 +122,17 @@ def unregister_instance(db_instance):
         )
 
 
+async def _uninstall_best_effort(controller, full_instance):
+    """A half-created release must not linger next to a Failed row."""
+    try:
+        await controller.uninstall(full_instance)
+    except Exception:
+        logger.exception(
+            "Failed to uninstall the release of %s after a failed install",
+            full_instance.id,
+        )
+
+
 @router.get(
     "/v1alpha1/inferenceInstance", response_model=list[InferenceInstanceSchema]
 )
@@ -141,11 +159,7 @@ async def list_inference_instances(
             .all()
         )
         for instance in instances:
-            instance_ready, instance_status = check_pod_status_and_readiness(
-                instance, db
-            )
-            instance.ready = instance_ready
-            instance.status = instance_status
+            instance.ready, _ = check_pod_status_and_readiness(instance, db)
         return instances
     except Exception as e:
         logger.exception(f"Error in list_inference_instances: {str(e)}")
@@ -185,9 +199,7 @@ async def get_inference_instance(
             )
         authorize_read(user, instance, "inference instance")
 
-        instance.ready, instance.status = check_pod_status_and_readiness(
-            instance, db
-        )
+        instance.ready, _ = check_pod_status_and_readiness(instance, db)
 
         return instance
     except HTTPException:
@@ -274,6 +286,22 @@ async def get_inference_instance_dashboards(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+def _find_instance(
+    db: Session, id: uuid.UUID, user: CurrentUser
+) -> DBInferenceInstance:
+    instance = (
+        db.query(DBInferenceInstance)
+        .filter(DBInferenceInstance.id == id)
+        .filter(org_scope(DBInferenceInstance, user))
+        .first()
+    )
+    if not instance:
+        raise HTTPException(
+            status_code=404, detail="Inference instance not found"
+        )
+    return instance
+
+
 @router.post(
     "/v1alpha1/inferenceInstance",
     response_model=InferenceInstanceSchema,
@@ -334,16 +362,7 @@ async def create_inference_instance(
                 )
             reference = serving_option.reference
 
-        engine_chart = (
-            db.query(DBEngineCharts)
-            .filter(
-                and_(
-                    DBEngineCharts.engine == engine.name,
-                    DBEngineCharts.chart_type == model.category,
-                )
-            )
-            .first()
-        )
+        engine_chart = _engine_chart_query(db, engine.name, model.category)
         if not engine_chart:
             logger.error(
                 f"Model Engine combination is invalid: model: {model.name}, engine: {engine.name}"
@@ -381,6 +400,11 @@ async def create_inference_instance(
             org_id=user.org_id,
             owner_id=user.id,
             reference=reference,
+            status=STATUS_PENDING,
+            replicas=instance.replicas,
+            gpu_count=instance.gpu_count,
+            cpu=instance.cpu,
+            memory=instance.memory,
         )
 
         db.add(db_config)
@@ -396,11 +420,16 @@ async def create_inference_instance(
 
         try:
             controller = get_controller(engine.name)
+            # Construction alone is cheap and never touches the cluster
+            # (see the Controller docstring), so without this the branch
+            # never fires: a missing kubeconfig would only surface later
+            # as "Failed to install Helm chart: ...". ensure_ready()
+            # forces the kube client, off the event loop, to make this a
+            # real pre-flight again.
+            await asyncio.to_thread(controller.ensure_ready)
         except Exception as e:
-            db.delete(db_instance)
-            db.delete(db_config)
-            db.commit()
             logger.exception(f"Failed to build the controller: {str(e)}")
+            mark_failed(db, db_instance, e)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to build the controller: {str(e)}",
@@ -408,7 +437,8 @@ async def create_inference_instance(
 
         try:
             credential_value = generate_secret(seed=str(db_instance.id))
-            store_credential(
+            await asyncio.to_thread(
+                store_credential,
                 db,
                 controller.namespace,
                 CREDENTIAL_KIND,
@@ -416,10 +446,8 @@ async def create_inference_instance(
                 credential_value,
             )
         except Exception as e:
-            db.delete(db_instance)
-            db.delete(db_config)
-            db.commit()
             logger.exception(f"Failed to store credential: {str(e)}")
+            mark_failed(db, db_instance, e)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to store credential: {str(e)}",
@@ -428,18 +456,9 @@ async def create_inference_instance(
         try:
             await controller.install(full_instance, engine_chart)
         except Exception as e:
-            try:
-                delete_credential(
-                    db, controller.namespace, CREDENTIAL_KIND, db_instance.id
-                )
-            except Exception:
-                # A stray Secret must not stop the row from being cleaned
-                # up: the install already failed.
-                logger.exception("Error deleting credential")
-            db.delete(db_instance)
-            db.delete(db_config)
-            db.commit()
             logger.exception(f"Failed to install Helm chart: {str(e)}")
+            mark_failed(db, db_instance, e)
+            await _uninstall_best_effort(controller, full_instance)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to install Helm chart: {str(e)}",
@@ -536,31 +555,17 @@ async def update_inference_instance(
         for key, value in updated_instance.model_dump(
             exclude_unset=True
         ).items():
+            # model and engine are the instance's identity (release name,
+            # chart); they are ORM relationships and never change through
+            # PUT, so a plain setattr with the dumped dict would crash.
+            if key in READ_ONLY_STATUS_FIELDS or key in ("model", "engine"):
+                continue
             if key == "config":
                 update_config_params(db, db_instance, value)
             else:
                 setattr(db_instance, key, value)
 
-        model = (
-            db.query(DBModel)
-            .filter(DBModel.id == db_instance.model_id)
-            .first()
-        )
-        engine = (
-            db.query(DBEngine)
-            .filter(DBEngine.id == db_instance.engine_id)
-            .first()
-        )
-        engine_chart = (
-            db.query(DBEngineCharts)
-            .filter(
-                and_(
-                    DBEngineCharts.engine == engine.name,
-                    DBEngineCharts.chart_type == model.category,
-                )
-            )
-            .first()
-        )
+        engine, engine_chart = _engine_chart_for(db, db_instance)
 
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
 
@@ -664,25 +669,56 @@ async def delete_inference_instance(
         authorize_write(user, db_instance, "inference instance")
 
         full_instance = InferenceInstanceSchema.model_validate(db_instance)
-        controller = get_controller(full_instance.engine.name)
+        # A Failed launch may have no release and no reachable cluster
+        # behind it (the install failed before or while talking to
+        # Kubernetes); its row must still be deletable, so for a Failed
+        # row a controller or uninstall failure is logged, not fatal.
+        failed = db_instance.status == STATUS_FAILED
+        controller = None
+        try:
+            controller = get_controller(full_instance.engine.name)
+        except Exception as e:
+            if not failed:
+                raise
+            logger.warning(
+                f"Deleting failed instance {id} without a controller: {e}"
+            )
 
         await asyncio.to_thread(unregister_instance, db_instance)
 
-        try:
-            await controller.uninstall(full_instance)
-        except Exception as e:
-            logger.exception(f"Failed to remove Helm chart: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to remove Helm chart: {str(e)}",
-            )
+        if controller is not None:
+            try:
+                await controller.uninstall(full_instance)
+            except Exception as e:
+                if not failed:
+                    logger.exception(f"Failed to remove Helm chart: {str(e)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to remove Helm chart: {str(e)}",
+                    )
+                logger.warning(
+                    f"Deleting failed instance {id}; uninstall failed: {e}"
+                )
 
+        # Also without a controller: the Secrets were written before the
+        # install, so inf-<id8>-credentials/-apikey-auth must not stay
+        # behind a Failed row. The namespace comes from the controller,
+        # else from the credential row, else the default.
         try:
-            delete_credential(db, controller.namespace, CREDENTIAL_KIND, id)
+            await asyncio.to_thread(
+                delete_credential,
+                db,
+                _credential_namespace(db, controller, id),
+                CREDENTIAL_KIND,
+                id,
+            )
         except Exception as e:
             # A stray Secret must not block deleting the row: the Helm
-            # release is already gone.
+            # release is already gone. The bookkeeping row goes with the
+            # instance row (nobody retries a deleted instance; the
+            # Secrets carry MANAGED_BY_LABEL for an operator sweep).
             logger.exception(f"Error deleting credential: {e}")
+            _forget_credential(db, CREDENTIAL_KIND, id)
 
         try:
             instance_dashboards = (
@@ -695,12 +731,15 @@ async def delete_inference_instance(
             if instance_dashboards:
                 for dashboard in instance_dashboards:
                     db.delete(dashboard)
-
-            db.delete(db_instance.config)
-            db.delete(db_instance)
-            db.commit()
         except Exception as e:
             logger.exception(f"Error deleting dashboards: {e}")
+
+        # Never inside the dashboards try: a swallowed error here would
+        # answer 200 with the row still present.
+        if db_instance.config is not None:
+            db.delete(db_instance.config)
+        db.delete(db_instance)
+        db.commit()
 
         return {"detail": "Inference instance deleted"}
     except HTTPException:
@@ -709,6 +748,24 @@ async def delete_inference_instance(
     except Exception as e:
         logger.exception(f"Error in delete_inference_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _forget_credential(db: Session, kind: str, id: uuid.UUID) -> None:
+    """Drop the credential bookkeeping row when its Secrets could not be
+    deleted but the instance row is going anyway."""
+    credential = find_credential(db, kind, id)
+    if credential is not None:
+        db.delete(credential)
+
+
+def _credential_namespace(db: Session, controller, id: uuid.UUID) -> str:
+    """Where the instance's credential Secrets live."""
+    if controller is not None:
+        return controller.namespace
+    credential = find_credential(db, CREDENTIAL_KIND, id)
+    if credential is not None:
+        return credential.namespace
+    return get_default_namespace()
 
 
 async def create_instance_dashboards(
@@ -769,151 +826,3 @@ async def create_instance_dashboards(
         raise HTTPException(
             status_code=500, detail=f"Error creating instance dashboards: {e}"
         )
-
-
-def missing_endpoint_clause():
-    """Filter for instances whose endpoint is NULL or empty."""
-    return or_(
-        DBInferenceInstance.endpoint.is_(None),
-        DBInferenceInstance.endpoint == "",
-    )
-
-
-def update_all_inference_instance_endpoints(db: Session):
-    """
-    Update all inference instance endpoints.
-    """
-    logger.debug("Updating all inference instance endpoints")
-    try:
-        # Query for instances without populated endpoints
-        instances = (
-            db.query(DBInferenceInstance)
-            .filter(missing_endpoint_clause())
-            .all()
-        )
-
-        logger.debug(
-            f"Found {len(instances)} inferenceinstances without populated endpoints"
-        )
-
-        for instance in instances:
-            update_instance_endpoints(instance.id, db)
-    finally:
-        db.close()
-
-
-def update_instance_endpoints(instanceId: uuid.UUID, db: Session):
-    """
-    Update the endpoints for an inference instance.
-
-    Args:
-        instanceId (uuid.UUID): The ID of the inference instance to update.
-        db (Session): The database session.
-    """
-    logger.info(f"Updating endpoints for instance {instanceId}")
-    instance = (
-        db.query(DBInferenceInstance)
-        .options(
-            joinedload(DBInferenceInstance.model),
-            joinedload(DBInferenceInstance.engine),
-        )
-        .filter(DBInferenceInstance.id == instanceId)
-        .first()
-    )
-    engine = (
-        db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
-    )
-    if not engine:
-        raise HTTPException(
-            status_code=404, detail="Associated engine not found"
-        )
-
-    engine_chart = (
-        db.query(DBEngineCharts)
-        .filter(
-            and_(
-                DBEngineCharts.engine == engine.name,
-                DBEngineCharts.chart_type == instance.model.category,
-            )
-        )
-        .first()
-    )
-    if not engine_chart:
-        raise HTTPException(
-            status_code=404, detail="Associated engine chart not found"
-        )
-
-    controller = get_controller(engine.name)
-    service_name = controller.get_service_name(instance, engine_chart)
-
-    if gateway_settings() is not None:
-        # The hostname is deterministic, so the endpoint is set as soon as
-        # the gateway is configured, without waiting for the Service.
-        # No trailing slash: the UI and SDK clients append paths such as
-        # /v1/chat/completions to this value.
-        instance.endpoint = instance_url("inf", instance.id, path="")
-        db.commit()
-        return
-
-    try:
-        endpoint = get_service_endpoint(controller.namespace, service_name)
-
-        if endpoint:
-            # Update the instance endpoint
-            instance.endpoint = endpoint
-            instance.healthEndpoint = f"{endpoint}/health"
-            instance.metricsEndpoint = f"{endpoint}/metrics"
-
-            # Update the database
-            db.commit()
-        else:
-            logger.warning(
-                f"Warning: Could not determine IP or port for service {service_name}"
-            )
-
-    except client.exceptions.ApiException as e:
-        logger.exception(f"Error getting service information: {e}")
-    # Don't raise an exception here, as we still want to return the instance information
-
-
-def check_pod_status_and_readiness(instance: DBInferenceInstance, db: Session):
-    """
-    Check the status and readiness of an inference instance's pod.
-
-    Args:
-        instance (DBInferenceInstance): The inference instance to check.
-
-    Returns:
-        tuple: A tuple containing the readiness status and the pod status.
-
-    Raises:
-        HTTPException: If the associated engine or engine chart is not found.
-    """
-    # Get the associated engine
-    engine = (
-        db.query(DBEngine).filter(DBEngine.id == instance.engine_id).first()
-    )
-    if not engine:
-        raise HTTPException(
-            status_code=404, detail="Associated engine not found"
-        )
-
-    engine_chart = (
-        db.query(DBEngineCharts)
-        .filter(
-            and_(
-                DBEngineCharts.engine == engine.name,
-                DBEngineCharts.chart_type == instance.model.category,
-            )
-        )
-        .first()
-    )
-    if not engine_chart:
-        raise HTTPException(
-            status_code=404, detail="Associated engine chart not found"
-        )
-
-    controller = get_controller(engine.name)
-    pod_labels = controller.get_pod_labels(instance, engine_chart)
-
-    return get_pod_status_and_readiness(controller.namespace, pod_labels)

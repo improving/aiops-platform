@@ -29,22 +29,19 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Application source
-COPY api/ ./api/
-COPY controller/ ./controller/
-COPY db/ ./db/
-COPY models/ ./models/
-COPY raw_data/ ./raw_data/
-COPY repositories/ ./repositories/
-COPY schemas/ ./schemas/
-COPY templates/ ./templates/
-COPY utils/ ./utils/
-COPY app.py core.py logger.py paths.py ./
+# Application source: every package core.py imports (api, auth, controller,
+# db, models, registry, utils, and whatever a later stream adds), the
+# Alembic migrations and alembic.ini that db/migrate.py runs at startup,
+# and the seed data. .dockerignore keeps tests, snapshots, tmp and the
+# virtualenv out of the context.
+COPY . .
 
-# Non-root user; helm keeps its cache and config under HOME
-RUN groupadd --system app && useradd --system --gid app --home-dir /app app && \
+# Non-root user; helm keeps its cache and config under HOME. Fixed uid/gid
+# so the chart's securityContext can set runAsNonRoot/runAsUser without
+# relying on the image's own idea of the account.
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --home-dir /app app && \
     chown -R app:app /app
-USER app
+USER 10001
 ENV HOME=/app
 
 EXPOSE 8000

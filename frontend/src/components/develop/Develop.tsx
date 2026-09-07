@@ -1,12 +1,20 @@
 "use client";
 
 import React from "react";
-import { LANGFLOW_URL } from "@/constants";
 import NotConfigured from "@/components/NotConfigured";
+import { useRuntimeConfig } from "@/lib/runtimeConfig";
 
 export default function Develop() {
-  if (!LANGFLOW_URL) {
-    return <NotConfigured name="Langflow" envVar="NEXT_PUBLIC_LANGFLOW_URL" />;
+  const { langflowUrl, loaded } = useRuntimeConfig();
+  if (!loaded) return null;
+  if (!langflowUrl) {
+    return (
+      <NotConfigured
+        name="Langflow"
+        envVar="NEXT_PUBLIC_LANGFLOW_URL"
+        backendVar="LANGFLOW_URL"
+      />
+    );
   }
 
   return (
@@ -19,7 +27,7 @@ export default function Develop() {
         If the embedded editor shows &quot;refused to connect&quot;, the
         Langflow session has expired:{" "}
         <a
-          href={LANGFLOW_URL}
+          href={langflowUrl}
           target="_blank"
           rel="noreferrer"
           className="underline"
@@ -29,7 +37,7 @@ export default function Develop() {
         , sign in, then reload this page.
       </p>
       <iframe
-        src={LANGFLOW_URL}
+        src={langflowUrl}
         className="w-full h-full"
         title="Develop Environment"
         frameBorder="0"

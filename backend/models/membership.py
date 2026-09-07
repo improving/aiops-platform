@@ -1,4 +1,6 @@
-from sqlalchemy import Column, ForeignKey, String, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -20,8 +22,15 @@ class Membership(Base):
     )
     # admin, member or viewer.
     role = Column(String, nullable=False)
+    # NULL for memberships that predate migration 0008.
+    created_at = Column(DateTime, default=datetime.now, nullable=True)
+    # The admin whose invitation created this membership, when any.
+    invited_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
-    user = relationship("User")
+    # Two foreign keys point at users; this one is the member.
+    user = relationship("User", foreign_keys=[user_id])
     organization = relationship("Organization")
 
     __table_args__ = (

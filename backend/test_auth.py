@@ -1,98 +1,32 @@
-import time
 import uuid
+from datetime import datetime, timedelta
 from unittest import mock
 
 import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from jwt import PyJWKClient
-from jwt.algorithms import RSAAlgorithm
 from jwt.exceptions import PyJWKClientConnectionError
 
 from auth import jwt as auth_jwt
+from auth.current_user import user_memberships
 from core import create_app
 from db.database import get_db_direct
+from models.invitation import Invitation
 from models.membership import Membership
 from models.organization import DEFAULT_ORG_SLUG, Organization
 from models.user import User
-
-ISSUER = "https://issuer.invalid/realms/test"
-AUDIENCE = "aiops-api"
-KID = "test-key"
-
-NOTEBOOKS = "/v1alpha1/notebooks"
-MODELS = "/v1alpha1/models"
-
-
-@pytest.fixture(scope="module")
-def rsa_key():
-    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-
-@pytest.fixture
-def oidc_client(monkeypatch, rsa_key):
-    """A TestClient in oidc mode whose JWKS is the test key."""
-    monkeypatch.setenv("AUTH_MODE", "oidc")
-    monkeypatch.setenv("OIDC_ISSUER", ISSUER)
-    jwks = {"keys": [RSAAlgorithm.to_jwk(rsa_key.public_key(), as_dict=True)]}
-    jwks["keys"][0]["kid"] = KID
-    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda self: jwks)
-    auth_jwt.reset_jwks_client()
-    yield TestClient(create_app())
-    auth_jwt.reset_jwks_client()
-
-
-def make_token(
-    key,
-    sub="alice",
-    email="alice@example.test",
-    name="Alice",
-    roles=("member",),
-    azp="aiops-ui",
-    aud=AUDIENCE,
-    iss=ISSUER,
-    expires_in=300,
-    kid=KID,
-):
-    now = int(time.time())
-    claims = {
-        "iss": iss,
-        "aud": aud,
-        "sub": sub,
-        "azp": azp,
-        "iat": now,
-        "exp": now + expires_in,
-        "realm_access": {"roles": list(roles)},
-    }
-    if email is not None:
-        claims["email"] = email
-    if name is not None:
-        claims["name"] = name
-    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": kid})
-
-
-def bearer(token):
-    return {"Authorization": f"Bearer {token}"}
-
-
-def membership_of(sub):
-    db = get_db_direct()
-    try:
-        user = db.query(User).filter(User.sub == sub).one()
-        org = (
-            db.query(Organization)
-            .filter(Organization.slug == DEFAULT_ORG_SLUG)
-            .one()
-        )
-        membership = (
-            db.query(Membership)
-            .filter(Membership.user_id == user.id, Membership.org_id == org.id)
-            .one()
-        )
-        return user, membership
-    finally:
-        db.close()
+from testing.rows import (
+    MODELS,
+    NOTEBOOKS,
+    add_row,
+    default_org_id,
+    delete_rows,
+    membership_of,
+    notebook_payload,
+    user_id,
+)
+from testing.tokens import KID, bearer, make_token
 
 
 def assert_unauthorized(response):
@@ -187,15 +121,6 @@ def test_admin_role_comes_from_realm_roles(oidc_client, rsa_key):
     assert membership.role == "admin"
 
 
-def test_role_change_updates_membership(oidc_client, rsa_key):
-    member = make_token(rsa_key, sub="dave", roles=("member",))
-    admin = make_token(rsa_key, sub="dave", roles=("admin",))
-    oidc_client.get(NOTEBOOKS, headers=bearer(member))
-    assert membership_of("dave")[1].role == "member"
-    oidc_client.get(NOTEBOOKS, headers=bearer(admin))
-    assert membership_of("dave")[1].role == "admin"
-
-
 def test_utility_endpoints_require_admin(oidc_client, rsa_key):
     member = make_token(rsa_key, roles=("member",))
     admin = make_token(rsa_key, sub="carol", roles=("admin",))
@@ -251,6 +176,14 @@ def test_client_credentials_token_maps_to_service_user(oidc_client, rsa_key):
     assert membership.role == "member"
 
 
+def test_x_dev_user_is_ignored_in_oidc_mode(oidc_client, rsa_key):
+    headers = bearer(make_token(rsa_key, sub="alice"))
+    headers["X-Dev-User"] = "bob"
+    assert oidc_client.get(NOTEBOOKS, headers=headers).status_code == 200
+    user, _ = membership_of("alice")
+    assert user.sub == "alice"
+
+
 # --- modes ------------------------------------------------------------------
 
 
@@ -287,107 +220,6 @@ def test_disabled_mode_runs_as_the_dev_admin():
 
 
 # --- ownership --------------------------------------------------------------
-
-
-NOT_READY = (False, "Pending")
-
-
-def notebook_payload(name):
-    return {
-        "name": name,
-        "type": "vscode",
-        "framework": "python",
-        "nvidia_gpu": False,
-    }
-
-
-@pytest.fixture
-def notebook_controller(monkeypatch):
-    with mock.patch("api.notebooks.NotebooksController") as controller_cls:
-        controller = controller_cls.return_value
-        controller.install = mock.AsyncMock()
-        controller.upgrade = mock.AsyncMock()
-        controller.uninstall = mock.AsyncMock()
-        monkeypatch.setattr(
-            "api.notebooks.get_pod_status_and_readiness",
-            lambda *args: NOT_READY,
-        )
-        yield controller
-
-
-@pytest.fixture
-def tokens(rsa_key):
-    return {
-        "alice": bearer(make_token(rsa_key, sub="alice", roles=("member",))),
-        "bob": bearer(make_token(rsa_key, sub="bob", roles=("member",))),
-        "carol": bearer(make_token(rsa_key, sub="carol", roles=("admin",))),
-    }
-
-
-@pytest.fixture
-def other_org():
-    """A second organization; rows added to it are removed afterwards."""
-    from models.finetune import DBFinetune
-    from models.inference_instance import DBInferenceInstance
-    from models.model_adapters import DBModelAdapters
-    from models.notebook import Notebook
-    from models.vectordb_instance import DBVectorDBInstance
-
-    db = get_db_direct()
-    org = Organization(slug="other", name="Other")
-    db.add(org)
-    db.commit()
-    org_id = org.id
-    db.close()
-    yield org_id
-    db = get_db_direct()
-    for model in (
-        Notebook,
-        DBVectorDBInstance,
-        DBInferenceInstance,
-        DBFinetune,
-        DBModelAdapters,
-    ):
-        db.query(model).filter(model.org_id == org_id).delete()
-    db.query(Organization).filter(Organization.id == org_id).delete()
-    db.commit()
-    db.close()
-
-
-def default_org_id():
-    db = get_db_direct()
-    try:
-        return (
-            db.query(Organization)
-            .filter(Organization.slug == DEFAULT_ORG_SLUG)
-            .one()
-            .id
-        )
-    finally:
-        db.close()
-
-
-def user_id(sub):
-    return membership_of(sub)[0].id
-
-
-def add_row(row):
-    db = get_db_direct()
-    try:
-        db.add(row)
-        db.commit()
-        return row.id
-    finally:
-        db.close()
-
-
-def delete_rows(model, *ids):
-    db = get_db_direct()
-    try:
-        db.query(model).filter(model.id.in_(ids)).delete()
-        db.commit()
-    finally:
-        db.close()
 
 
 def test_create_notebook_sets_org_and_owner(
@@ -530,7 +362,7 @@ def test_vectordb_instances_are_scoped(
 
     monkeypatch.setattr(
         "api.vectordb_instance.check_pod_status_and_readiness",
-        lambda instance: NOT_READY,
+        lambda instance, db, controller=None: (False, "Pending"),
     )
     vectordb_id = uuid.UUID(
         oidc_client.get("/v1alpha1/vectordb", headers=tokens["alice"]).json()[
@@ -572,7 +404,7 @@ def test_inference_instances_are_scoped(
 
     monkeypatch.setattr(
         "api.inference_instance.check_pod_status_and_readiness",
-        lambda instance, db: NOT_READY,
+        lambda instance, db, controller=None: (False, "Pending"),
     )
     model_id = uuid.UUID(
         oidc_client.get(MODELS, headers=tokens["alice"]).json()[0]["id"]
@@ -693,3 +525,343 @@ def test_finetune_jobs_are_scoped(oidc_client, tokens, other_org):
             oidc_client.delete(url, headers=tokens["alice"]).status_code == 204
         )
         controller.delete_job.assert_awaited_once()
+
+
+# --- Task 2: invitations and the membership role ----------------------------
+
+
+def test_first_login_with_invitation_skips_the_default_org(
+    oidc_client, rsa_key, other_org
+):
+    db = get_db_direct()
+    try:
+        db.add(
+            Invitation(
+                org_id=other_org,
+                email="frank@example.test",
+                role="member",
+                created_at=datetime.now(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    token = make_token(rsa_key, sub="frank", email="frank@example.test")
+    response = oidc_client.get(NOTEBOOKS, headers=bearer(token))
+    assert response.status_code == 200, response.text
+    db = get_db_direct()
+    try:
+        user = db.query(User).filter(User.sub == "frank").one()
+        rows = db.query(Membership).filter(Membership.user_id == user.id).all()
+        assert [m.org_id for m in rows] == [other_org]
+        assert rows[0].role == "member"
+    finally:
+        db.close()
+
+
+def test_membership_role_is_set_once(oidc_client, rsa_key):
+    member = make_token(rsa_key, sub="dave", roles=("member",))
+    admin = make_token(rsa_key, sub="dave", roles=("admin",))
+    oidc_client.get(NOTEBOOKS, headers=bearer(member))
+    assert membership_of("dave")[1].role == "member"
+    # A later admin realm role is not written to the membership row ...
+    oidc_client.get(NOTEBOOKS, headers=bearer(admin))
+    assert membership_of("dave")[1].role == "member"
+    # ... but a platform admin is admin for the request in every organization.
+    with mock.patch("core.reload_data"):
+        assert (
+            oidc_client.post("/reload-data", headers=bearer(admin)).status_code
+            == 200
+        )
+
+
+# --- Fix round 1: platform vs org role, verified invitations ----------------
+
+
+def test_org_admin_without_platform_admin_is_403_on_platform_routes(
+    oidc_client, rsa_key
+):
+    """An org admin role (here, from an invitation) is not the realm
+    ``admin`` role: it must not open /reload-data or a catalog write,
+    which are global and organization-independent. A platform admin
+    (a realm role) still gets through.
+
+    The catalog write below is an empty-body PATCH on an already-seeded
+    model: it changes nothing (every field is optional and only applied
+    when set) and, unlike a create or import, never calls the registry's
+    shared ``genid.uuid4()`` id generator
+    (``registry/manual.py``/``api/registry.py`` import both do, and it is
+    the same counter ``models/inference_instance.py`` draws its own ids
+    from -- creating a model here would shift a later snapshot test's
+    expected inference-instance id)."""
+    db = get_db_direct()
+    try:
+        default_org = (
+            db.query(Organization)
+            .filter(Organization.slug == DEFAULT_ORG_SLUG)
+            .one()
+        )
+        db.add(
+            Invitation(
+                org_id=default_org.id,
+                email="grace@example.test",
+                role="admin",
+                created_at=datetime.now(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    org_admin = make_token(
+        rsa_key, sub="grace", email="grace@example.test", roles=()
+    )
+    assert (
+        oidc_client.get(NOTEBOOKS, headers=bearer(org_admin)).status_code
+        == 200
+    )
+    assert membership_of("grace")[1].role == "admin"
+
+    model_id = oidc_client.get(MODELS, headers=bearer(org_admin)).json()[0][
+        "id"
+    ]
+    patch_url = f"/v1alpha1/registry/{model_id}"
+    with mock.patch("core.reload_data") as reload_data:
+        denied = oidc_client.post("/reload-data", headers=bearer(org_admin))
+        assert denied.status_code == 403
+        assert (
+            denied.json()["detail"]
+            == "This action needs the platform admin role"
+        )
+        reload_data.assert_not_called()
+    denied_registry = oidc_client.patch(
+        patch_url, json={}, headers=bearer(org_admin)
+    )
+    assert denied_registry.status_code == 403
+    assert (
+        denied_registry.json()["detail"]
+        == "This action needs the platform admin role"
+    )
+
+    platform_admin = make_token(rsa_key, sub="carol", roles=("admin",))
+    with mock.patch("core.reload_data") as reload_data:
+        allowed = oidc_client.post(
+            "/reload-data", headers=bearer(platform_admin)
+        )
+        assert allowed.status_code == 200, allowed.text
+        reload_data.assert_called_once()
+    allowed_registry = oidc_client.patch(
+        patch_url, json={}, headers=bearer(platform_admin)
+    )
+    assert allowed_registry.status_code == 200, allowed_registry.text
+
+
+def test_invitation_needs_a_verified_email(oidc_client, rsa_key, other_org):
+    """A self-service email change at the identity provider must not let a
+    user consume another address's pending invitation: an unverified email
+    leaves it pending, and a later verified request accepts it."""
+    db = get_db_direct()
+    try:
+        db.add(
+            Invitation(
+                org_id=other_org,
+                email="hank@example.test",
+                role="member",
+                created_at=datetime.now(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    unverified = make_token(
+        rsa_key, sub="hank", email="hank@example.test", email_verified=False
+    )
+    assert (
+        oidc_client.get(NOTEBOOKS, headers=bearer(unverified)).status_code
+        == 200
+    )
+    db = get_db_direct()
+    try:
+        user = db.query(User).filter(User.sub == "hank").one()
+        rows = db.query(Membership).filter(Membership.user_id == user.id).all()
+        # No invitation, no email_verified: the default org, nothing else.
+        assert [m.org_id for m in rows] == [default_org_id()]
+        invitation = (
+            db.query(Invitation)
+            .filter(Invitation.email == "hank@example.test")
+            .one()
+        )
+        assert invitation.accepted_at is None
+    finally:
+        db.close()
+
+    # A token without the claim at all behaves the same as False.
+    no_claim = make_token(
+        rsa_key, sub="hank", email="hank@example.test", email_verified=None
+    )
+    oidc_client.get(NOTEBOOKS, headers=bearer(no_claim))
+    db = get_db_direct()
+    try:
+        assert (
+            db.query(Invitation)
+            .filter(Invitation.email == "hank@example.test")
+            .one()
+            .accepted_at
+            is None
+        )
+    finally:
+        db.close()
+
+    verified = make_token(
+        rsa_key, sub="hank", email="hank@example.test", email_verified=True
+    )
+    assert (
+        oidc_client.get(NOTEBOOKS, headers=bearer(verified)).status_code == 200
+    )
+    db = get_db_direct()
+    try:
+        user = db.query(User).filter(User.sub == "hank").one()
+        rows = db.query(Membership).filter(Membership.user_id == user.id).all()
+        assert {m.org_id for m in rows} == {default_org_id(), other_org}
+        invitation = (
+            db.query(Invitation)
+            .filter(Invitation.email == "hank@example.test")
+            .one()
+        )
+        assert invitation.accepted_at is not None
+    finally:
+        db.close()
+
+
+def test_email_verified_string_false_is_not_treated_as_verified(
+    oidc_client, rsa_key, other_org
+):
+    """A misbehaving issuer sending the claim as the string "false"
+    (truthy under a plain bool() cast) must not be treated as a verified
+    email: only the literal boolean True counts."""
+    db = get_db_direct()
+    try:
+        db.add(
+            Invitation(
+                org_id=other_org,
+                email="ida@example.test",
+                role="member",
+                created_at=datetime.now(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    token = make_token(rsa_key, sub="ida", email="ida@example.test")
+    claims = jwt.decode(token, options={"verify_signature": False})
+    claims["email_verified"] = "false"
+    tampered = jwt.encode(
+        claims, rsa_key, algorithm="RS256", headers={"kid": KID}
+    )
+    assert (
+        oidc_client.get(NOTEBOOKS, headers=bearer(tampered)).status_code == 200
+    )
+    db = get_db_direct()
+    try:
+        invitation = (
+            db.query(Invitation)
+            .filter(Invitation.email == "ida@example.test")
+            .one()
+        )
+        assert invitation.accepted_at is None
+        user = db.query(User).filter(User.sub == "ida").one()
+        rows = db.query(Membership).filter(Membership.user_id == user.id).all()
+        assert [m.org_id for m in rows] == [default_org_id()]
+    finally:
+        db.close()
+
+
+def test_two_pending_invitations_are_accepted_in_creation_order(
+    oidc_client, rsa_key, other_org
+):
+    """The first-time active organization depends on which membership is
+    created first, which depends on invitation processing order: without
+    an explicit ORDER BY the row order (and so the result) is not
+    guaranteed, so pin it to the invitation's own created_at/id."""
+    db = get_db_direct()
+    try:
+        zzz = Organization(slug="zzz-invitee-org", name="Zzz")
+        db.add(zzz)
+        db.flush()
+        zzz_id = zzz.id
+        earlier = datetime.now()
+        later = earlier + timedelta(hours=1)
+        # Inserted out of chronological order, and "other" sorts before
+        # "zzz-invitee-org" alphabetically: only the created_at ordering
+        # can make "zzz-invitee-org" win.
+        db.add(
+            Invitation(
+                org_id=other_org,
+                email="ivy@example.test",
+                role="member",
+                created_at=later,
+            )
+        )
+        db.add(
+            Invitation(
+                org_id=zzz_id,
+                email="ivy@example.test",
+                role="viewer",
+                created_at=earlier,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    ivy_id = None
+    try:
+        token = make_token(rsa_key, sub="ivy", email="ivy@example.test")
+        assert (
+            oidc_client.get(NOTEBOOKS, headers=bearer(token)).status_code
+            == 200
+        )
+        db = get_db_direct()
+        try:
+            user = db.query(User).filter(User.sub == "ivy").one()
+            ivy_id = user.id
+            # user_memberships is exactly the ordering resolve_user picks
+            # the active organization from.
+            ordered = user_memberships(db, user.id)
+            assert [org.slug for _, org in ordered] == [
+                "zzz-invitee-org",
+                "other",
+            ]
+        finally:
+            db.close()
+    finally:
+        db = get_db_direct()
+        try:
+            if ivy_id is not None:
+                db.query(Membership).filter(
+                    Membership.user_id == ivy_id
+                ).delete()
+            db.query(Invitation).filter(
+                Invitation.email == "ivy@example.test"
+            ).delete()
+            db.query(Organization).filter(Organization.id == zzz_id).delete()
+            db.commit()
+        finally:
+            db.close()
+
+
+def test_platform_admin_without_membership_is_403_on_x_org(
+    oidc_client, rsa_key, other_org
+):
+    """``test_x_org_unknown_slug_is_403`` (test_tenancy.py) uses a slug
+    that does not exist; this covers the other 403 path: an existing
+    organization the caller (even a platform admin) does not belong to."""
+    token = make_token(rsa_key, sub="quinn", roles=("admin",))
+    assert oidc_client.get(NOTEBOOKS, headers=bearer(token)).status_code == 200
+    denied = oidc_client.get(
+        NOTEBOOKS, headers=bearer(token) | {"X-Org": "other"}
+    )
+    assert denied.status_code == 403
+    assert (
+        denied.json()["detail"] == "You are not a member of this organization"
+    )

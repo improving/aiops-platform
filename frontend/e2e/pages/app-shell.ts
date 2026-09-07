@@ -12,7 +12,7 @@ export class AppShell {
   readonly toasts: Locator;
   readonly themeToggle: Locator;
   readonly mobileMenuButton: Locator;
-  /** The avatar button; rendered only when the UI runs with AUTH_MODE=oidc. */
+  /** The avatar button; `UserMenu` in oidc mode, `DevUserMenu` in disabled mode. */
   readonly userMenuButton: Locator;
 
   constructor(readonly page: Page) {
@@ -40,6 +40,35 @@ export class AppShell {
     const menu = this.page.getByRole("menu");
     await expect(menu).toBeVisible();
     return menu;
+  }
+
+  /** The active organization's name; the user menu must be open (Radix
+   * renders the content in a portal only while it is open). */
+  organizationLabel(): Locator {
+    return this.page.getByTestId("active-organization");
+  }
+
+  /** Open the user menu and its "Switch organization" submenu. */
+  async openOrganizationSwitcher(): Promise<Locator> {
+    const menu = await this.openUserMenu();
+    await menu.getByRole("menuitem", { name: "Switch organization" }).click();
+    const submenu = this.page.getByRole("menu").last();
+    await expect(submenu.getByRole("menuitemradio").first()).toBeVisible();
+    return submenu;
+  }
+
+  /** Pick an organization by its name; the page reloads with the cookie set. */
+  async switchOrganization(name: string) {
+    const submenu = await this.openOrganizationSwitcher();
+    // waitForEvent, not waitForLoadState: the latter resolves at once on
+    // the already-loaded page, before window.location.reload() fires.
+    await Promise.all([
+      this.page.waitForEvent("load"),
+      submenu
+        .getByRole("menuitemradio", { name: new RegExp(`^${name} · `) })
+        .click(),
+    ]);
+    await this.openUserMenu();
   }
 
   /** Sign out through the user menu; ends on /login after the Keycloak logout. */

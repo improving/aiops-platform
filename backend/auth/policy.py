@@ -8,7 +8,8 @@ organization; ``owner_id`` NULL means only an admin may change them.
 from fastapi import HTTPException
 from sqlalchemy import and_, or_
 
-from auth.current_user import ROLE_ADMIN, WRITER_ROLES, CurrentUser
+from auth.current_user import CurrentUser
+from auth.roles import ROLE_ADMIN, WRITER_ROLES
 
 
 class Policy:

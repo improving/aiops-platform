@@ -8,12 +8,17 @@ service:
   type: {{ service.type | default('ClusterIP') }}
   port: {{ service.port | default(80) }}
 
+replicaCount: {{ replicaCount | default(1) }}
+
 resources:
   requests:
-    cpu: "{{ cpu_request | default('1') }}"
-    memory: {{ memory_request | default('2Gi') }}
+    cpu: "{{ resources.requests.cpu or '1' }}"
+    memory: "{{ resources.requests.memory or '2Gi' }}"
   limits:
-    memory: {{ memory_limit | default('4Gi') }}
+{% if resources.limits.cpu %}
+    cpu: "{{ resources.limits.cpu }}"
+{% endif %}
+    memory: "{{ resources.limits.memory or '4Gi' }}"
 
 env:
 {% for env_var in env %}

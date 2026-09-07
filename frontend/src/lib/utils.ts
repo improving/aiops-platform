@@ -124,6 +124,11 @@ export function formatEnumLabel(value: string): string {
     .join(" ");
 }
 
+/** A date-only display value, or "—" for a null timestamp. */
+export function formatDate(value: string | null): string {
+  return value ? new Date(value).toLocaleDateString() : "—";
+}
+
 export function GetVectorDBIcon(vectorDBId: string) {
   try {
     switch (vectorDBId) {

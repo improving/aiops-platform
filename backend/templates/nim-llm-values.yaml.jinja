@@ -23,6 +23,8 @@ metrics:
     additionalLabels:
       release: {{ metrics.serviceMonitor.additionalLabels.release | default("prometheus") }}
 
+replicaCount: {{ replicaCount | default(1) }}
+
 resources:
   limits:
     nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}

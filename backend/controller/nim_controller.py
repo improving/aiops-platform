@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 import tempfile
@@ -162,7 +163,11 @@ class NIMController(Controller):
         )
 
         try:
-            self.core_v1_api.create_namespaced_secret(self.namespace, secret)
+            await asyncio.to_thread(
+                self.core_v1_api.create_namespaced_secret,
+                self.namespace,
+                secret,
+            )
             self.logger.info(f"Secret '{secret_name}' created successfully")
         except ApiException as e:
             if e.status == 409:
@@ -198,7 +203,11 @@ class NIMController(Controller):
         )
 
         try:
-            self.core_v1_api.create_namespaced_secret(self.namespace, secret)
+            await asyncio.to_thread(
+                self.core_v1_api.create_namespaced_secret,
+                self.namespace,
+                secret,
+            )
             self.logger.info(f"Secret '{secret_name}' created successfully")
         except ApiException as e:
             if e.status == 409:
@@ -218,7 +227,7 @@ class NIMController(Controller):
         instance: InferenceInstanceSchema,
         engineChart: EngineChartsSchema,
     ):
-        self.create_ns_if_needed()
+        await asyncio.to_thread(self.create_ns_if_needed)
         await self._install_image_pull_secret(instance, engineChart)
         await self._install_ngc_api_secret(instance, engineChart)
         await super().install(instance, engineChart)

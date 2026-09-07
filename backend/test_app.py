@@ -5,19 +5,15 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from api.inference_instance import missing_endpoint_clause
+from api.inference_status import missing_endpoint_clause
 from core import create_app
 from db.database import get_db_direct
 from models.models import DBModel
 from models.serving_option import ServingOption
 from schemas.notebook import NOTEBOOK_NAME_MAX_LENGTH
-from test_auth import (  # noqa: F401 (fixtures)
-    bearer,
-    make_token,
-    oidc_client,
-    rsa_key,
-)
+from testing.tokens import bearer, make_token
 from utils import genid
+from utils.kubernetes_utils import PodStatus
 
 
 def test_missing_endpoint_clause_compiles_to_is_null():
@@ -211,7 +207,9 @@ def vectordb_env(monkeypatch):
     controller.uninstall = mock.AsyncMock()
     monkeypatch.setattr(vi, "VectorDBController", controller_cls)
     monkeypatch.setattr(
-        vi, "get_pod_status_and_readiness", lambda *a, **k: (False, "Pending")
+        vi,
+        "get_pod_status_and_readiness",
+        lambda *a, **k: PodStatus(False, "Pending"),
     )
     calls = mock.Mock()
     calls.generate_secret.return_value = "s3cret"
@@ -256,37 +254,65 @@ def test_create_vectordb_instance_stores_a_credential_before_install(
     assert str(instance_id) not in ids
 
 
-def test_create_vectordb_instance_install_failure_removes_the_credential(
+def _ids(client):
+    return {i["id"] for i in client.get("/v1alpha1/vectordb_instances").json()}
+
+
+def _rows(client):
+    return {
+        i["id"]: i for i in client.get("/v1alpha1/vectordb_instances").json()
+    }
+
+
+def test_create_vectordb_instance_install_failure_keeps_the_row(
     vectordb_env,
 ):
     client, controller, calls = vectordb_env
     controller.install.side_effect = RuntimeError("helm exploded")
-    before = len(client.get("/v1alpha1/vectordb_instances").json())
+    before = _ids(client)
 
     created = _create_vectordb(client)
 
     assert created.status_code == 500
     assert "helm exploded" in created.json()["detail"]
     calls.store_credential.assert_called_once()
-    calls.delete_credential.assert_called_once()
+    # The row and its credential stay; delete removes both.
+    calls.delete_credential.assert_not_called()
+    controller.uninstall.assert_awaited_once()
+    (new_id,) = _ids(client) - before
+    row = _rows(client)[new_id]
+    assert row["status"] == "Failed"
+    assert "helm exploded" in row["last_error"]
+    assert row["last_error_at"]
+    controller.install.side_effect = None
     assert (
-        calls.delete_credential.call_args.args[3]
-        == calls.store_credential.call_args.args[3]
+        client.delete(f"/v1alpha1/vectordb_instances/{new_id}").status_code
+        == 204
     )
-    assert len(client.get("/v1alpha1/vectordb_instances").json()) == before
+    calls.delete_credential.assert_called_once()
 
 
-def test_create_vectordb_instance_store_failure_leaves_no_row(vectordb_env):
+def test_create_vectordb_instance_store_failure_marks_the_row_failed(
+    vectordb_env,
+):
     client, controller, calls = vectordb_env
     calls.store_credential.side_effect = RuntimeError("secret write failed")
-    before = len(client.get("/v1alpha1/vectordb_instances").json())
+    before = _ids(client)
 
     created = _create_vectordb(client)
 
     assert created.status_code == 500
     controller.install.assert_not_awaited()
-    calls.delete_credential.assert_called_once()
-    assert len(client.get("/v1alpha1/vectordb_instances").json()) == before
+    controller.uninstall.assert_not_awaited()
+    (new_id,) = _ids(client) - before
+    row = _rows(client)[new_id]
+    assert row["status"] == "Failed"
+    assert "secret write failed" in row["last_error"]
+    calls.store_credential.side_effect = None
+    assert (
+        client.delete(f"/v1alpha1/vectordb_instances/{new_id}").status_code
+        == 204
+    )
 
 
 def test_engines_expose_the_cpu_flag():
@@ -311,6 +337,7 @@ def test_catalog_contains_the_ollama_demo_models():
 
 def test_create_inference_instance_needs_no_hf_token_for_ollama(monkeypatch):
     import api.inference_instance as ii
+    from models.inference_instance import DBInferenceInstance
 
     # Stop before the controller touches a cluster (the pattern of
     # test_create_vectordb_instance_without_cluster_leaves_no_row).
@@ -323,17 +350,37 @@ def test_create_inference_instance_needs_no_hf_token_for_ollama(monkeypatch):
     client = TestClient(app)
     engines = {e["name"]: e for e in client.get("/v1alpha1/engines").json()}
     models = {m["modelId"]: m for m in client.get("/v1alpha1/models").json()}
-    before = len(client.get("/v1alpha1/inferenceInstance").json())
     body = {
         "model": {"id": models["qwen3:0.6b"]["id"]},
         "engine": {"id": engines["Ollama"]["id"]},
         "config": {},
     }
     response = client.post("/v1alpha1/inferenceInstance", json=body)
-    # Past the token gate: the patched controller fails instead.
+    # Past the token gate: the patched controller fails instead. The row
+    # is kept (Failed); its controller keeps failing under this
+    # monkeypatch, so clean it up directly rather than through the list
+    # endpoint (which would refresh its status and hit the same boom).
     assert response.status_code == 500
     assert "HuggingFace" not in response.json()["detail"]
-    assert len(client.get("/v1alpha1/inferenceInstance").json()) == before
+    db = get_db_direct()
+    try:
+        row = (
+            db.query(DBInferenceInstance)
+            .filter(
+                DBInferenceInstance.model_id
+                == uuid.UUID(models["qwen3:0.6b"]["id"])
+            )
+            .one()
+        )
+        assert row.status == "Failed"
+        assert "no kubeconfig" in row.last_error
+        # The delete route removes both the row and its config; do the
+        # same here so no orphan config row is left behind.
+        db.delete(row.config)
+        db.delete(row)
+        db.commit()
+    finally:
+        db.close()
 
     body["engine"] = {"id": engines["vLLM"]["id"]}
     response = client.post("/v1alpha1/inferenceInstance", json=body)
@@ -355,6 +402,8 @@ def inference_env(monkeypatch):
     """A mocked controller, credential store and LiteLLM client around
     the inference instance routes."""
     import api.inference_instance as ii
+    import api.inference_operations as io
+    import api.inference_status as ist
 
     controller = mock.Mock()
     controller.namespace = "ai-stack"
@@ -371,7 +420,11 @@ def inference_env(monkeypatch):
 
     controller.install = install
     controller.uninstall = uninstall
-    monkeypatch.setattr(ii, "get_controller", lambda *a, **k: controller)
+    # get_controller is called from all three inference modules.
+    for module in (ii, io, ist):
+        monkeypatch.setattr(
+            module, "get_controller", lambda *a, **k: controller
+        )
     monkeypatch.setattr(ii, "store_credential", mock.Mock())
     monkeypatch.setattr(ii, "delete_credential", mock.Mock())
     litellm = mock.Mock()

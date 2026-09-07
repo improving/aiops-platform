@@ -7,10 +7,42 @@ interface InferenceInstance {
   healthEndpoint: string;
   metricsEndpoint: string;
   ready: boolean;
-  status: string;
+  // Set by the platform (backend/utils/instance_status.py): Pending,
+  // Running, Failed or Stopped; null for a row it has not looked at yet.
+  status: string | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
+  stopped_at?: string | null;
+  // Launch resources (#16).
+  replicas?: number;
+  gpu_count?: number;
+  cpu?: string | null;
+  memory?: string | null;
   config: InferenceInstanceConfig;
   litellm_model_name?: string | null;
   reference?: string | null;
+}
+
+// GET /v1alpha1/<kind>/{id}/logs (backend/utils/pod_inspection.py
+// pod_logs): every container of every pod behind the instance.
+interface PodLogs {
+  pods: { name: string; containers: { name: string; log: string }[] }[];
+}
+
+// GET /v1alpha1/<kind>/{id}/events (pod_events): newest first, at most 100.
+interface InstanceEvent {
+  at: string | null;
+  type: string;
+  reason: string;
+  message: string;
+  object: string;
+}
+
+// The query string of a logs call; tail is 1..5000.
+interface LogsQuery {
+  container?: string;
+  tail: number;
+  previous: boolean;
 }
 
 // GET /v1alpha1/chat/targets: what the caller may chat, embed or rerank
@@ -327,4 +359,7 @@ export type {
   FineTuneJob,
   EngineDefaultConfigEnvVars,
   EngineDefaultConfigArgs,
+  PodLogs,
+  InstanceEvent,
+  LogsQuery,
 };

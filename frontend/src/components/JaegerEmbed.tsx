@@ -1,8 +1,10 @@
+"use client";
+
 import React, { useState } from "react";
 import NotConfigured from "@/components/NotConfigured";
+import { useRuntimeConfig } from "@/lib/runtimeConfig";
 
 interface JaegerEmbedProps {
-  jaegerEndpoint: string;
   serviceName: string;
   start: number;
   end: number;
@@ -12,7 +14,6 @@ interface JaegerEmbedProps {
 }
 
 const JaegerEmbed: React.FC<JaegerEmbedProps> = ({
-  jaegerEndpoint,
   serviceName,
   start,
   end,
@@ -20,12 +21,14 @@ const JaegerEmbed: React.FC<JaegerEmbedProps> = ({
   lookback,
   height = "600px",
 }) => {
+  const runtime = useRuntimeConfig();
+  const endpoint = runtime.jaegerUrl;
   const [error, setError] = useState<string | null>(null);
   // Computed synchronously: an iframe must never render with an empty
   // src (the browser would load the page itself into the frame).
   let iframeUrl: string | null = null;
   try {
-    const url = new URL(`${jaegerEndpoint}/search`);
+    const url = new URL(`${endpoint}/search`);
     url.searchParams.append("service", serviceName);
     // start timestamp in microseconds
     url.searchParams.append("start", (start * 1000).toString());
@@ -38,8 +41,15 @@ const JaegerEmbed: React.FC<JaegerEmbedProps> = ({
     iframeUrl = null;
   }
 
-  if (!jaegerEndpoint) {
-    return <NotConfigured name="Jaeger" envVar="NEXT_PUBLIC_JAEGER_URL" />;
+  if (!runtime.loaded) return null;
+  if (!endpoint) {
+    return (
+      <NotConfigured
+        name="Jaeger"
+        envVar="NEXT_PUBLIC_JAEGER_URL"
+        backendVar="JAEGER_URL"
+      />
+    );
   }
 
   if (error) {

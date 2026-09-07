@@ -1,8 +1,10 @@
+"use client";
+
 import React, { useState } from "react";
 import NotConfigured from "@/components/NotConfigured";
+import { useRuntimeConfig } from "@/lib/runtimeConfig";
 
 interface GrafanaEmbedProps {
-  grafanaEndpoint: string;
   dashboardID: string;
   panelID: string;
   orgID: string;
@@ -36,26 +38,34 @@ function panelUrl(
 }
 
 const GrafanaEmbed: React.FC<GrafanaEmbedProps> = ({
-  grafanaEndpoint,
   dashboardID,
   panelID,
   orgID,
   queryParams = {},
   height = "300px",
 }) => {
+  const runtime = useRuntimeConfig();
+  const endpoint = runtime.grafanaUrl;
   const [error, setError] = useState<string | null>(null);
   // Computed synchronously: an iframe must never render with an empty
   // src (the browser would load the page itself into the frame).
   const iframeUrl = panelUrl(
-    grafanaEndpoint,
+    endpoint,
     dashboardID,
     panelID,
     orgID,
     queryParams
   );
 
-  if (!grafanaEndpoint) {
-    return <NotConfigured name="Grafana" envVar="NEXT_PUBLIC_GRAFANA_URL" />;
+  if (!runtime.loaded) return null;
+  if (!endpoint) {
+    return (
+      <NotConfigured
+        name="Grafana"
+        envVar="NEXT_PUBLIC_GRAFANA_URL"
+        backendVar="GRAFANA_URL"
+      />
+    );
   }
 
   if (error) {

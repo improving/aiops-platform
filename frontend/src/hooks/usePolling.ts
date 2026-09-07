@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 
-const TERMINAL_STATUSES = new Set(["Running", "Ready", "Failed"]);
+const TERMINAL_STATUSES = new Set(["Running", "Ready", "Failed", "Stopped"]);
 
 /**
  * An item is still being provisioned (and worth polling for) until it both

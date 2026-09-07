@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { AxiosError } from "axios";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -15,10 +14,17 @@ import {
   Credential,
   InferenceInstance,
   InferenceInstanceDashboard,
+  LogsQuery,
 } from "@/types/models";
+import { DetailRow } from "@/components/DetailRow";
+import { StatusBadge } from "@/components/instances/StatusBadge";
+import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { InstanceActions } from "@/components/instances/InstanceActions";
+import { InspectionTabs } from "@/components/instances/InspectionTabs";
+import { NotFoundOrError } from "@/components/instances/NotFoundOrError";
+import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import JaegerEmbed from "@/components/JaegerEmbed";
 import { Input } from "@/components/ui/input";
-import { GRAFANA_URL, JAEGER_URL } from "@/constants";
 import { modelService, upstreamModel } from "@/services/modelService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
@@ -137,6 +143,27 @@ export default function InferenceEndpointDetailsPage({
     }
   }, [params.id, toast]);
 
+  const fetchLogs = useCallback(
+    (query: LogsQuery) =>
+      modelService.getInferenceInstanceLogs(params.id, query),
+    [params.id]
+  );
+  const fetchEvents = useCallback(
+    () => modelService.getInferenceInstanceEvents(params.id),
+    [params.id]
+  );
+  const poll = useCallback(async () => {
+    try {
+      setInferenceInstance(await modelService.getInferenceInstance(params.id));
+    } catch {
+      // A silent refresh: the next one may succeed.
+    }
+  }, [params.id]);
+  usePolling(
+    poll,
+    inferenceInstance ? isNonTerminal(inferenceInstance) : false
+  );
+
   useEffect(() => {
     (async () => {
       await Promise.all([fetchInferenceInstance(), fetchDashboards()]);
@@ -172,34 +199,26 @@ export default function InferenceEndpointDetailsPage({
   }
 
   if (!inferenceInstance) {
-    if (loadError instanceof AxiosError && loadError.response?.status === 404) {
-      return <div>Model instance not found</div>;
-    }
-    if (loadError) {
-      return (
-        <div>
-          Could not load this model instance:{" "}
-          {parseApiError(loadError).description}
-        </div>
-      );
-    }
-    return <div>Model instance not found</div>;
+    return <NotFoundOrError error={loadError} noun="model instance" />;
   }
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      {inferenceInstance.config.enable_tracing ? (
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
+      <TabsList
+        className={`grid w-full ${
+          inferenceInstance.config.enable_tracing
+            ? "grid-cols-5"
+            : "grid-cols-4"
+        }`}
+      >
+        <TabsTrigger value="details">Details</TabsTrigger>
+        <TabsTrigger value="logs">Logs</TabsTrigger>
+        <TabsTrigger value="events">Events</TabsTrigger>
+        <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
+        {inferenceInstance.config.enable_tracing && (
           <TabsTrigger value="tracing">Tracing</TabsTrigger>
-        </TabsList>
-      ) : (
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="dashboards">Dashboards</TabsTrigger>
-        </TabsList>
-      )}
+        )}
+      </TabsList>
       <TabsContent value="details">
         <DisplayCard
           title={inferenceInstance.model.name}
@@ -208,50 +227,61 @@ export default function InferenceEndpointDetailsPage({
           onRefresh={fetchInferenceInstance}
           content={
             <div className="grid gap-4">
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Model</Label>
-                <span>{inferenceInstance.model.name || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Engine</Label>
-                <span>{inferenceInstance.engine.name || "N/A"}</span>
-              </div>
+              <ErrorBanner
+                error={inferenceInstance.last_error}
+                at={inferenceInstance.last_error_at}
+              />
+              <DetailRow label="Model">
+                {inferenceInstance.model.name || "N/A"}
+              </DetailRow>
+              <DetailRow label="Engine">
+                {inferenceInstance.engine.name || "N/A"}
+              </DetailRow>
               {inferenceInstance.host && (
-                <div className="grid grid-cols-2 items-center gap-4">
-                  <Label>Host</Label>
-                  <span>{inferenceInstance.host || "N/A"}</span>
-                </div>
+                <DetailRow label="Host">
+                  {inferenceInstance.host || "N/A"}
+                </DetailRow>
               )}
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Ready</Label>
-                <span>{inferenceInstance.ready ? "Yes" : "No"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Status</Label>
-                <span>{inferenceInstance.status || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Endpoint</Label>
-                <span className="flex items-center">
-                  <span
-                    className={
-                      inferenceInstance.ready
-                        ? "text-green-500"
-                        : "text-red-500"
-                    }
-                  >
-                    {inferenceInstance.endpoint || "N/A"}
-                  </span>
-                  {inferenceInstance.endpoint && (
-                    <span className="ml-2">
-                      <CopyButton
-                        label="endpoint"
-                        text={inferenceInstance.endpoint}
-                      />
-                    </span>
-                  )}
+              <DetailRow label="Ready">
+                {inferenceInstance.ready ? "Yes" : "No"}
+              </DetailRow>
+              <DetailRow label="Status">
+                <StatusBadge
+                  ready={inferenceInstance.ready}
+                  status={inferenceInstance.status}
+                />
+              </DetailRow>
+              <DetailRow label="Replicas">
+                {inferenceInstance.replicas ?? 1}
+              </DetailRow>
+              <DetailRow label="Resources">
+                {[
+                  inferenceInstance.engine.cpu
+                    ? null
+                    : `${inferenceInstance.gpu_count ?? 1} GPU`,
+                  inferenceInstance.cpu ? `CPU ${inferenceInstance.cpu}` : null,
+                  inferenceInstance.memory
+                    ? `memory ${inferenceInstance.memory}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "defaults"}
+              </DetailRow>
+              <DetailRow label="Endpoint" valueClassName="flex items-center">
+                <span
+                  className={
+                    inferenceInstance.ready ? "text-green-500" : "text-red-500"
+                  }
+                >
+                  {inferenceInstance.endpoint || "N/A"}
                 </span>
-              </div>
+                {inferenceInstance.endpoint && (
+                  <CopyButton
+                    label="endpoint"
+                    text={inferenceInstance.endpoint}
+                  />
+                )}
+              </DetailRow>
               {inferenceInstance.endpoint && (
                 <div className="grid grid-cols-2 items-start gap-4">
                   <Label>Access</Label>
@@ -286,79 +316,82 @@ print(client.chat.completions.create(
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>API Key</Label>
-                <span className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    loading={credentialLoading}
-                    onClick={() => handleShowApiKey(false)}
-                  >
-                    Show API key
-                  </Button>
-                  {inferenceInstance.ready && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link
-                        href={`/chat?target=${
-                          inferenceInstance.litellm_model_name ??
-                          `inst-${inferenceInstance.id.replace(/-/g, "").slice(-8)}`
-                        }`}
-                      >
-                        Chat
-                      </Link>
-                    </Button>
-                  )}
+              <DetailRow label="API Key" valueClassName="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={credentialLoading}
+                  onClick={() => handleShowApiKey(false)}
+                >
+                  Show API key
+                </Button>
+                {inferenceInstance.ready && (
                   <Button asChild variant="outline" size="sm">
-                    <Link href="/usage">Usage</Link>
+                    <Link
+                      href={`/chat?target=${
+                        inferenceInstance.litellm_model_name ??
+                        `inst-${inferenceInstance.id.replace(/-/g, "").slice(-8)}`
+                      }`}
+                    >
+                      Chat
+                    </Link>
                   </Button>
-                </span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Health Endpoint</Label>
-                <span>{inferenceInstance.healthEndpoint || "N/A"}</span>
-              </div>
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Metrics Endpoint</Label>
-                <span>{inferenceInstance.metricsEndpoint || "N/A"}</span>
-              </div>
-
-              <div className="grid grid-cols-2 items-center gap-4">
-                <Label>Tracing</Label>
-                <span>
-                  {inferenceInstance.config.enable_tracing
-                    ? "Enabled"
-                    : "Disabled"}
-                </span>
-              </div>
-
+                )}
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/usage">Usage</Link>
+                </Button>
+              </DetailRow>
+              <DetailRow label="Health Endpoint">
+                {inferenceInstance.healthEndpoint || "N/A"}
+              </DetailRow>
+              <DetailRow label="Metrics Endpoint">
+                {inferenceInstance.metricsEndpoint || "N/A"}
+              </DetailRow>
+              <DetailRow label="Tracing">
+                {inferenceInstance.config.enable_tracing
+                  ? "Enabled"
+                  : "Disabled"}
+              </DetailRow>
               {inferenceInstance.config.lora_adapters.length > 0 && (
-                <div className="grid grid-cols-2 items-center gap-4">
-                  <Label>Adapters</Label>
-                  <span>
-                    {inferenceInstance.config.lora_adapters.map((adapter) => (
-                      <Button
-                        key={adapter.id}
-                        variant="outline"
-                        className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm mr-2 mb-2"
-                        onClick={() => setSelectedAdapter(adapter)}
-                      >
-                        {adapter.name}
-                      </Button>
-                    ))}
-                  </span>
-                </div>
+                <DetailRow label="Adapters">
+                  {inferenceInstance.config.lora_adapters.map((adapter) => (
+                    <Button
+                      key={adapter.id}
+                      variant="outline"
+                      className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm mr-2 mb-2"
+                      onClick={() => setSelectedAdapter(adapter)}
+                    >
+                      {adapter.name}
+                    </Button>
+                  ))}
+                </DetailRow>
               )}
             </div>
           }
           footer={
-            <DeleteButton
-              onDelete={handleDelete}
-              onSuccess={() => router.push("/models/endpoints")}
-            />
+            <div className="flex flex-wrap gap-2">
+              <InstanceActions
+                status={inferenceInstance.status}
+                replicas={inferenceInstance.replicas ?? 1}
+                onRestart={() =>
+                  modelService.restartInferenceInstance(params.id)
+                }
+                onStop={() => modelService.stopInferenceInstance(params.id)}
+                onResume={() => modelService.resumeInferenceInstance(params.id)}
+                onScale={(replicas) =>
+                  modelService.scaleInferenceInstance(params.id, replicas)
+                }
+                onDone={fetchInferenceInstance}
+              />
+              <DeleteButton
+                onDelete={handleDelete}
+                onSuccess={() => router.push("/models/endpoints")}
+              />
+            </div>
           }
         />
       </TabsContent>
+      <InspectionTabs fetchLogs={fetchLogs} fetchEvents={fetchEvents} />
       <TabsContent value="dashboards">
         <Card>
           <CardHeader>
@@ -409,7 +442,6 @@ print(client.chat.completions.create(
               {dashboards.map((dashboard) => (
                 <GrafanaEmbed
                   key={dashboard.id}
-                  grafanaEndpoint={GRAFANA_URL}
                   dashboardID={dashboard.dashboard_id || ""}
                   panelID={dashboard.panel_id || ""}
                   orgID={dashboard.org_id}
@@ -485,7 +517,6 @@ print(client.chat.completions.create(
             </div>
             {serviceName && (
               <JaegerEmbed
-                jaegerEndpoint={JAEGER_URL}
                 serviceName={serviceName}
                 start={now - selectedTimeRange.value}
                 end={now}

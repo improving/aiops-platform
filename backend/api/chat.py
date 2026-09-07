@@ -29,6 +29,7 @@ from kubernetes.client.exceptions import ApiException
 from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.concurrency import iterate_in_threadpool
 
+from api.inference_status import check_pod_status_and_readiness
 from auth.current_user import CurrentUser, get_current_user
 from auth.policy import authorize_read, org_scope
 from db.database import get_db
@@ -182,8 +183,6 @@ def instance_api_key(db: Session, instance) -> str | None:
 def list_instance_targets(db: Session, user: CurrentUser) -> list[dict]:
     """The deployed-instance chat/embedding/rerank targets of the
     caller's organization."""
-    from api.inference_instance import check_pod_status_and_readiness
-
     rows = (
         db.query(DBInferenceInstance)
         .filter(org_scope(DBInferenceInstance, user))

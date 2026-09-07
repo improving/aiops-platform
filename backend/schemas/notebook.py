@@ -42,6 +42,10 @@ class NotebookInstanceSchema(BaseModel):
     status: str | None = None
     ready: bool | None = False
     endpoint: str | None = None
+    # Operations (#15): set by the platform, read by the UI.
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+    stopped_at: datetime | None = None
 
     @field_validator("type")
     @classmethod
@@ -67,7 +71,13 @@ class NotebookInstanceSchema(BaseModel):
                 raise ValueError("Invalid framework for type vscode")
         return v
 
-    @field_serializer("created_at", "updated_at", when_used="json")
+    @field_serializer(
+        "created_at",
+        "updated_at",
+        "last_error_at",
+        "stopped_at",
+        when_used="json",
+    )
     def serialize_datetime(self, value: datetime | None) -> str | None:
         return value.isoformat() if value is not None else None
 

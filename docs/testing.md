@@ -53,6 +53,8 @@ With `E2E_START_SERVERS=1` Playwright:
 
 The frontend server is reused when one already answers on `:3001`; the backend is always started fresh.
 Port `8001` must be free.
+`E2E_BACKEND_PORT` and `E2E_FRONTEND_PORT` move both managed servers,
+so two checkouts can run the fast tier at the same time.
 
 To iterate faster, run your own servers and point the tests at them:
 
@@ -100,6 +102,16 @@ Keycloak restarting invalidates every saved session too:
 the refresh token in it no longer exists, `RefreshAccessTokenError` fires on the next Auth.js refresh,
 and the affected spec is redirected to `/login`.
 `make auth-up` restarts Keycloak, so re-run the cluster tier's `setup` project (or the whole tier) after it.
+
+## Chart smoke
+
+`make chart-smoke` (`hack/chart-smoke.sh`) installs `charts/aiops-platform` on the running kind stack and checks, through the gateway:
+the backend and frontend Deployments are Available, `GET /health` and `GET /v1alpha1/config/ui` on `api.platform.127.0.0.1.nip.io`,
+a 401 without a token, the realm's discovery document on `auth.platform.127.0.0.1.nip.io`,
+the login page on `ui.platform.127.0.0.1.nip.io`, the UI pod reaching the issuer host,
+and a client-credentials token from `aiops-automation` listing the catalog.
+`ARGS="--skip-install"` reuses an existing install; `make chart-lint` is the offline part (lint plus three renders with assertions).
+The fast Playwright tier covers the runtime UI configuration in `runtime-config.spec.ts`.
 
 ## Scripts and make targets
 
@@ -152,7 +164,7 @@ frontend/
     auth.setup.ts            logs alice, bob and admin into Keycloak; the `setup` project
     pages/                  page objects; one class per screen, accessible-name locators only
       app-shell.ts          header, theme menu, heading, toasts, delete confirmation, loading skeletons, breadcrumbs
-      home.ts  model-catalog.ts  model-details.ts  finetune-form.ts  launch-model.ts
+      home.ts  model-catalog.ts  model-details.ts  finetune-form.ts  launch-model.ts  inference-endpoint.ts (tabs, status field, Actions menu)
       vector-db-catalog.ts  vector-db-endpoints.ts (list page and `VectorDBInstanceDetailsPage`)  notebook-form.ts  notebooks.ts
       login.ts              the app's /login page and Keycloak's login form
       develop.ts            the Langflow iframe on /develop
@@ -181,6 +193,10 @@ frontend/
 - `asUser(name)` returns a `BrowserContext` signed in as `"alice" | "bob" | "admin"`, restored from the saved storage state.
   Contexts are cached per test and closed in teardown.
   Every cluster spec is alice by default (the project's `storageState`); reach for `asUser` only for a second identity in the same test.
+- On the fast tier `asUser` takes one of the dev identities instead (`dev`, `alice`, `bob`, `viewer`, `outsider`):
+  it opens a fresh context with the `aiops_dev_user` cookie, which `src/proxy.ts` turns into `X-Dev-User` for the `TEST_MODE` backend
+  (`backend/auth/dev_users.py`); `dev` and `outsider` are members of the seeded organization `other`.
+  `api.withHeaders({ "X-Org": "other" })` or `api.withHeaders({ Authorization: "Bearer aiops_..." })` returns a `BackendApi` that sends those headers on every call.
 - `userApi(name)` is a `BackendApi` over the `asUser(name)` context's `request`,
   calling `/api/v1alpha1` through the UI proxy so the backend sees that user's own bearer token (`src/proxy.ts` adds it).
   The automation user behind `api` is a plain member:
@@ -297,7 +313,8 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `models-catalog.spec.ts`      | search, category and subcategory filters, combined filters, Import Model dialog, card link              | pass                          | 3 s   |
 | `model-details.spec.ts`       | Details tab content, `?tab=` reflects the tab and survives reload, deep link, Launch Model             | pass                          | 4 s   |
 | `finetune-form.spec.ts`       | sections and defaults, required fields block the submit, backend rejection toast, stubbed create/list/params/delete flow | pass | 3 s |
-| `launch-form.spec.ts`         | the three wizard steps, engine filtering, empty argument name blocks the submit, rejected deploy toast; an Ollama tag offers only Ollama and needs no host, a Hugging Face id never offers Ollama | pass | 4 s |
+| `launch-form.spec.ts`         | the three wizard steps, engine filtering, empty argument name blocks the submit, rejected deploy toast; an Ollama tag offers only Ollama and needs no host, a Hugging Face id never offers Ollama; GPU count, replicas, CPU and memory are sent (GPU count hidden for Ollama), replicas outside 1 to 16 block the submit | pass | 4 s |
+| `instance-operations.spec.ts` | stubbed instance routes: a failed instance's badge and reason on the card and the detail page, the Logs tab (container and lines selects, copy) and the Events tab, Stop then Resume flipping the badge | pass | 3 s |
 | `chat.spec.ts`                | the mock target from `AIOPS_CHAT_MOCK`, streamed answer, history survives a reload, clear; `?target=` preselects; empty state links to the catalog | pass | 3 s |
 | `providers.spec.ts`           | add a provider with the two mock models, table and chat targets update, disable hides its models, remove one model, delete, set a budget (in-memory secret store) | pass | 4 s |
 | `registry.spec.ts`            | import `Qwen/Qwen3-0.6B-GGUF` from the fixture as a draft, its Ollama `hf.co/...` option, publish, catalog and wizard show it, deprecate, delete; add manually; add an Ollama tag from the manifest fixture | pass | 5 s |
@@ -308,6 +325,9 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `theme.spec.ts`               | system default, Light and Dark persist across reloads, back to System                                   | pass                          | 2 s   |
 | `develop.spec.ts`             | "Langflow is not configured" card                                                                       | pass                          | 1 s   |
 | `mobile.spec.ts`              | no horizontal overflow at 390 px, hamburger menu                                                        | pass                          | 2 s   |
+| `tenancy.spec.ts`             | the user menu's organization block, the switcher sets `aiops_org` and reloads, `outsider` sees an empty instance list, a stale cookie is cleared once, the organization page (members, invite, withdraw, create organization, member view) | pass | 6 s |
+| `audit.spec.ts`               | a launch appears newest first, the action filter, Export CSV columns, a member is refused, a failing list toasts | pass | 4 s |
+| `tokens.spec.ts`              | create a token, shown once with copy and curl, listed as Active with its prefix, revoke, a read token, the menu link | pass | 3 s |
 
 | Spec (cluster tier)           | Covers                                                                                                  | Time      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------- | --------- |
@@ -321,6 +341,8 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `embeddings-lifecycle.spec.ts`| launch `all-minilm:33m` on Ollama through the API, Ready, listed as an embedding target, two 384-dimension vectors from `POST /v1alpha1/embeddings` through LiteLLM, delete | 2 to 5 min |
 | `hosted-chat.spec.ts`         | opt-in with `E2E_OPENAI_API_KEY`: admin adds OpenAI with `gpt-4o-mini`, chats with the hosted target, spend increases, provider deleted; skipped without the key | 1 min |
 | `registry-lifecycle.spec.ts`  | import `Qwen/Qwen3-0.6B-GGUF` from the live Hugging Face Hub, publish, launch on Ollama with the `hf.co/...` reference, chat once, delete the instance and the entry | 3 to 8 min |
+| `tenancy-isolation.spec.ts`   | admin creates `e2e-acme` and invites bob; bob switches organizations through the `aiops_org` cookie (`X-Org` works only on the direct `api` fixture) and cannot list or read alice's Ollama instance; a personal token lists instances, a read token cannot create, a revoked one answers 401; the audit page shows the launch | 1 to 5 min |
+| `day2-ops.spec.ts`            | launch `qwen3:0.6b` on Ollama with `cpu`/`memory` pinned to fit the lab node (verified against a real pod), Ready, logs and events from the UI and the API, restart (pod replaced), stop (pods gone, `Stopped`), resume (Ready again, one pod), delete | 2 to 12 min (first run pulls the model) |
 
 The cluster times assume the images are already on the kind node.
 The first pull of a notebook or Qdrant image adds minutes; the tests wait up to 6 minutes for a notebook and 5 for a vector DB.

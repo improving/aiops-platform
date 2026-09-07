@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RocketIcon } from "@radix-ui/react-icons";
 import { CopyButton } from "@/components/CopyButton";
+import { StatusBadge } from "@/components/instances/StatusBadge";
+import { ErrorBanner } from "@/components/instances/ErrorBanner";
 import {
   Select,
   SelectContent,
@@ -189,20 +191,28 @@ export default function InferenceEndpoints() {
                             {endpoint.host}
                           </span>
                         )}
-                        {endpoint.ready ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                            Ready
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
-                            {endpoint.status || "In Progress"}
-                          </span>
-                        )}
+                        <StatusBadge
+                          ready={endpoint.ready}
+                          status={endpoint.status}
+                        />
+                        <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
+                          {endpoint.replicas ?? 1}{" "}
+                          {(endpoint.replicas ?? 1) === 1
+                            ? "replica"
+                            : "replicas"}
+                        </span>
                         {endpoint.config.lora_adapters.length > 0 && (
                           <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
                             {endpoint.config.lora_adapters.length} Adapters
                           </span>
                         )}
+                      </div>
+                      <div className="mb-3">
+                        <ErrorBanner
+                          compact
+                          error={endpoint.last_error}
+                          at={endpoint.last_error_at}
+                        />
                       </div>
                       <p className="text-sm text-gray-600 mb-2">
                         <strong>Endpoint: </strong>

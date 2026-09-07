@@ -42,6 +42,14 @@ export type E2EOptions = {
 /** One of the users `e2e/auth.setup.ts` logs in and saves storage state for. */
 export type E2EUser = "alice" | "bob" | "admin";
 
+/** The X-Dev-User identities of the fast tier (backend/auth/dev_users.py). */
+export type DevUser = "dev" | "alice" | "bob" | "viewer" | "outsider";
+
+/** Cookie names shared with src/lib/orgCookie.ts (kept literal here so the
+ * e2e files stay independent of the app's module graph). */
+export const DEV_USER_COOKIE = "aiops_dev_user";
+export const ORG_COOKIE = "aiops_org";
+
 // Resolved from this file's location (frontend/e2e/fixtures.ts), not the
 // process cwd, so it is correct however the test runner is invoked.
 const AUTH_STATE_DIR = path.resolve(__dirname, "..", "playwright", ".auth");
@@ -182,6 +190,26 @@ export type OrgSpendRecord = {
   budget_usd: number | null;
 };
 
+// GET /v1alpha1/organizations and /organizations/current
+// (backend/api/organizations.py).
+export type OrganizationRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  role: "admin" | "member" | "viewer";
+};
+
+export type MyOrganizationsRecord = {
+  organizations: OrganizationRecord[];
+  active: string;
+};
+
+export type CurrentOrganizationRecord = OrganizationRecord & {
+  budget_usd: number | null;
+  member_count: number;
+  is_platform_admin: boolean;
+};
+
 /** OIDC settings for the client-credentials grant the `api` fixture uses. */
 const OIDC_ISSUER =
   process.env.OIDC_ISSUER ?? "https://auth.127.0.0.1.nip.io/realms/aiops";
@@ -198,8 +226,24 @@ export class BackendApi {
   constructor(
     readonly request: APIRequestContext,
     readonly baseURL: string,
-    readonly authMode: AuthMode = "disabled"
+    readonly authMode: AuthMode = "disabled",
+    readonly extraHeaders: Record<string, string> = {}
   ) {}
+
+  /**
+   * The same API with extra headers on every call (X-Org, a token bearer).
+   * Through `userApi` the proxy replaces it with the `aiops_org` cookie
+   * (src/proxy.ts), so an `X-Org` header here only works against the
+   * direct `api` fixture; to pin an organization through the proxy, use
+   * a cookie-scoped context instead (see `orgScopedApi` in
+   * `e2e/cluster/tenancy-isolation.spec.ts`).
+   */
+  withHeaders(headers: Record<string, string>): BackendApi {
+    return new BackendApi(this.request, this.baseURL, this.authMode, {
+      ...this.extraHeaders,
+      ...headers,
+    });
+  }
 
   private url(path: string) {
     return `${this.baseURL}/v1alpha1${path}`;
@@ -246,6 +290,9 @@ export class BackendApi {
   }
 
   private async authHeaders(): Promise<Record<string, string>> {
+    // A caller-supplied bearer (a personal token) wins over the automation
+    // token, and a 401 on it must surface instead of being retried.
+    if (this.extraHeaders.Authorization) return {};
     if (this.authMode === "disabled") return {};
     if (!this.tokenPromise) this.tokenPromise = this.fetchToken();
     this.token = await this.tokenPromise;
@@ -267,13 +314,20 @@ export class BackendApi {
         return this.request.put(this.url(path), { headers, data: body });
       return this.request.post(this.url(path), { headers, data: body });
     };
-    let res = await call(await this.authHeaders());
-    if (res.status() === 401 && this.authMode !== "disabled") {
+    let res = await call({
+      ...this.extraHeaders,
+      ...(await this.authHeaders()),
+    });
+    if (
+      res.status() === 401 &&
+      this.authMode !== "disabled" &&
+      !this.extraHeaders.Authorization
+    ) {
       const token = await this.refreshToken();
-      const headers: Record<string, string> = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-      res = await call(headers);
+      res = await call({
+        ...this.extraHeaders,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      });
     }
     return res;
   }
@@ -281,6 +335,30 @@ export class BackendApi {
   /** A raw GET, for asserting a status (403 for another user's resource). */
   get(path: string): Promise<APIResponse> {
     return this.send("GET", path);
+  }
+
+  /** Raw POST and DELETE, for asserting a status or reading a body. */
+  post(path: string, body?: object): Promise<APIResponse> {
+    return this.send("POST", path, body);
+  }
+
+  remove(path: string): Promise<APIResponse> {
+    return this.send("DELETE", path);
+  }
+
+  async organizations(): Promise<MyOrganizationsRecord> {
+    const res = await this.send("GET", "/organizations");
+    expect(res.ok(), `GET /organizations -> ${res.status()}`).toBeTruthy();
+    return res.json();
+  }
+
+  async currentOrganization(): Promise<CurrentOrganizationRecord> {
+    const res = await this.send("GET", "/organizations/current");
+    expect(
+      res.ok(),
+      `GET /organizations/current -> ${res.status()}`
+    ).toBeTruthy();
+    return res.json();
   }
 
   async models(): Promise<ModelRecord[]> {
@@ -586,7 +664,7 @@ type Fixtures = {
    * (bob) in the same test, e.g. to confirm they get 403 on alice's
    * resources.
    */
-  asUser: (name: E2EUser) => Promise<BrowserContext>;
+  asUser: (name: E2EUser | DevUser) => Promise<BrowserContext>;
   /**
    * A `BackendApi` that calls `/api/v1alpha1` through the UI proxy with the
    * `asUser(name)` session, so the backend sees that user's own bearer
@@ -595,7 +673,7 @@ type Fixtures = {
    * and cannot delete what she created. Use `userApi("alice")` to look up
    * and poll her notebooks and `userApi("admin")` for cleanup.
    */
-  userApi: (name: E2EUser) => Promise<BackendApi>;
+  userApi: (name: E2EUser | DevUser) => Promise<BackendApi>;
 };
 
 export const test = base.extend<E2EOptions & Fixtures>({
@@ -617,15 +695,27 @@ export const test = base.extend<E2EOptions & Fixtures>({
     await ctx.dispose();
   },
 
-  asUser: async ({ browser }, provide) => {
-    const cache = new Map<E2EUser, BrowserContext>();
-    const factory = async (name: E2EUser) => {
+  asUser: async ({ browser, authMode, baseURL }, provide) => {
+    const cache = new Map<string, BrowserContext>();
+    const factory = async (name: E2EUser | DevUser) => {
       let ctx = cache.get(name);
       if (!ctx) {
-        ctx = await browser.newContext({
-          storageState: authStatePath(name),
-          ignoreHTTPSErrors: true,
-        });
+        if (authMode === "disabled") {
+          // Fast tier: no Keycloak; the cookie becomes X-Dev-User in
+          // src/proxy.ts and picks a fixed dev identity on the backend.
+          // baseURL is not inherited by browser.newContext(); pass it so
+          // relative page.goto("/...") works on these contexts too.
+          ctx = await browser.newContext({ baseURL });
+          await ctx.addCookies([
+            { name: DEV_USER_COOKIE, value: name, url: baseURL! },
+          ]);
+        } else {
+          ctx = await browser.newContext({
+            baseURL,
+            storageState: authStatePath(name as E2EUser),
+            ignoreHTTPSErrors: true,
+          });
+        }
         cache.set(name, ctx);
       }
       return ctx;
@@ -637,7 +727,7 @@ export const test = base.extend<E2EOptions & Fixtures>({
   userApi: async ({ asUser, baseURL }, provide) => {
     expect(baseURL, "userApi needs a baseURL").toBeTruthy();
     const proxyURL = `${baseURL!.replace(/\/$/, "")}/api`;
-    await provide(async (name: E2EUser) => {
+    await provide(async (name: E2EUser | DevUser) => {
       const ctx = await asUser(name);
       // "disabled": no bearer of its own; the proxy adds the session's.
       return new BackendApi(ctx.request, proxyURL, "disabled");

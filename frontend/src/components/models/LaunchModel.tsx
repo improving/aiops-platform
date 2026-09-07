@@ -32,6 +32,15 @@ function cpuOnly(options: ServingOption[]): boolean {
   return options.length > 0 && options.every((option) => option.cpu);
 }
 
+// Launch resource validation (#16), mirroring
+// backend/schemas/inference_instance.py's InferenceInstanceCreateSchema:
+// replicas is bounded 1 to 16, and cpu/memory must be Kubernetes quantities
+// ("4", "500m", "16Gi", "0.5") no longer than 32 characters.
+export const REPLICAS_MIN = 1;
+export const REPLICAS_MAX = 16;
+export const QUANTITY_PATTERN = /^[0-9]+(\.[0-9]+)?(m|[EPTGMK]i?)?$/;
+export const QUANTITY_MAX_LENGTH = 32;
+
 type EnvVar = {
   name: string;
   value: string;
@@ -65,6 +74,13 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const { toast } = useToast(); // Initialize toast
   const [enableTracing, setEnableTracing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Launch resources (#16): sent as top-level fields of the create body.
+  const [resources, setResources] = useState({
+    gpuCount: 1,
+    replicas: "1",
+    cpu: "",
+    memory: "",
+  });
 
   useEffect(() => {
     const fetchEngines = async () => {
@@ -236,6 +252,43 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
       return;
     }
 
+    const replicas = Number(resources.replicas);
+    if (
+      !Number.isInteger(replicas) ||
+      replicas < REPLICAS_MIN ||
+      replicas > REPLICAS_MAX
+    ) {
+      toast({
+        title: `Replicas must be a whole number from ${REPLICAS_MIN} to ${REPLICAS_MAX}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const cpu = resources.cpu.trim();
+    if (
+      cpu &&
+      (cpu.length > QUANTITY_MAX_LENGTH || !QUANTITY_PATTERN.test(cpu))
+    ) {
+      toast({
+        title: "CPU must be a Kubernetes quantity such as 2 or 500m",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const memory = resources.memory.trim();
+    if (
+      memory &&
+      (memory.length > QUANTITY_MAX_LENGTH || !QUANTITY_PATTERN.test(memory))
+    ) {
+      toast({
+        title: "Memory must be a Kubernetes quantity such as 8Gi",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const data = await modelService.createInferenceInstance({
@@ -243,6 +296,10 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
         engine: { id: selectedOption?.engine_id ?? "" },
         host: formData.hostId,
         serving_option_id: formData.servingOptionId || undefined,
+        gpu_count: selectedOption?.cpu ? 1 : resources.gpuCount,
+        replicas,
+        cpu: cpu || undefined,
+        memory: memory || undefined,
         config: {
           maxInputLength: 0,
           maxTokens: 0,
@@ -468,7 +525,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                     }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Engine">
                     <SelectValue placeholder="Select Engine" />
                   </SelectTrigger>
                   <SelectContent>
@@ -482,6 +539,81 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
 
                 {formData.servingOptionId && (
                   <div className="mt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      {!selectedOption?.cpu && (
+                        <div className="grid gap-1">
+                          <Label htmlFor="gpu-count">GPU count</Label>
+                          <Select
+                            value={String(resources.gpuCount)}
+                            onValueChange={(value) =>
+                              setResources((prev) => ({
+                                ...prev,
+                                gpuCount: Number(value),
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              id="gpu-count"
+                              aria-label="GPU count"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 4, 8].map((n) => (
+                                <SelectItem key={n} value={String(n)}>
+                                  {n}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <div className="grid gap-1">
+                        <Label htmlFor="replicas">Replicas</Label>
+                        <Input
+                          id="replicas"
+                          type="text"
+                          inputMode="numeric"
+                          value={resources.replicas}
+                          onChange={(e) =>
+                            setResources((prev) => ({
+                              ...prev,
+                              replicas: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <Label htmlFor="cpu">CPU</Label>
+                        <Input
+                          id="cpu"
+                          type="text"
+                          placeholder="e.g. 4"
+                          value={resources.cpu}
+                          onChange={(e) =>
+                            setResources((prev) => ({
+                              ...prev,
+                              cpu: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <Label htmlFor="memory">Memory</Label>
+                        <Input
+                          id="memory"
+                          type="text"
+                          placeholder="e.g. 16Gi"
+                          value={resources.memory}
+                          onChange={(e) =>
+                            setResources((prev) => ({
+                              ...prev,
+                              memory: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
                     <div className="flex items-center space-x-2 mb-4">
                       <Switch
                         id="enable-tracing"

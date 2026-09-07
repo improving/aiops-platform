@@ -10,6 +10,10 @@ export class LaunchModelPage extends AppShell {
   readonly skipButton: Locator;
   readonly nextButton: Locator;
   readonly engineSelect: Locator;
+  readonly gpuCountSelect: Locator;
+  readonly replicasInput: Locator;
+  readonly cpuInput: Locator;
+  readonly memoryInput: Locator;
   readonly tracingSwitch: Locator;
   readonly argNames: Locator;
   readonly envNames: Locator;
@@ -23,7 +27,11 @@ export class LaunchModelPage extends AppShell {
     this.skipButton = page.getByRole("button", { name: "Skip" });
     // exact: the Next.js dev-tools button is also named "...Next...".
     this.nextButton = page.getByRole("button", { name: "Next", exact: true });
-    this.engineSelect = page.getByRole("combobox");
+    this.engineSelect = page.getByRole("combobox", { name: "Engine" });
+    this.gpuCountSelect = page.getByRole("combobox", { name: "GPU count" });
+    this.replicasInput = page.getByLabel("Replicas");
+    this.cpuInput = page.getByLabel("CPU", { exact: true });
+    this.memoryInput = page.getByLabel("Memory", { exact: true });
     this.tracingSwitch = page.getByLabel("Enable Tracing");
     this.argNames = page.getByPlaceholder("Argument Name");
     this.envNames = page.getByPlaceholder("Variable Name");
@@ -50,6 +58,11 @@ export class LaunchModelPage extends AppShell {
   async selectEngine(name: string) {
     await this.engineSelect.click();
     await this.page.getByRole("option", { name, exact: true }).click();
+  }
+
+  async selectGpuCount(value: "1" | "2" | "4" | "8") {
+    await this.gpuCountSelect.click();
+    await this.page.getByRole("option", { name: value, exact: true }).click();
   }
 
   /** The "Delete" button next to the last (new) argument row. */

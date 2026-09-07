@@ -43,22 +43,40 @@ export function useListState(): [
   return [state, update, nextPage];
 }
 
+const DEFAULT_SORT: SortKey = "name-asc";
+
 export function applyListControls<T>(
   items: T[],
   state: ListState,
-  opts: { name: (item: T) => string; ready: (item: T) => boolean }
+  opts: {
+    name: (item: T) => string;
+    ready?: (item: T) => boolean;
+    // Overrides the default name sort while `state.sort` is still at its
+    // default (a caller with no readiness concept, like the audit log,
+    // has no `ListControls` to pick a different sort from anyway).
+    sortKey?: (item: T) => string | number;
+    direction?: "asc" | "desc";
+  }
 ): { visible: T[]; total: number; hasMore: boolean } {
-  const filtered = items.filter((i) =>
-    state.status === "all"
-      ? true
-      : state.status === "ready"
-        ? opts.ready(i)
-        : !opts.ready(i)
-  );
+  const filtered = !opts.ready
+    ? items
+    : items.filter((i) =>
+        state.status === "all"
+          ? true
+          : state.status === "ready"
+            ? opts.ready!(i)
+            : !opts.ready!(i)
+      );
   const sorted = [...filtered].sort((a, b) => {
-    if (state.sort === "status") {
+    if (state.sort === "status" && opts.ready) {
       const d = Number(opts.ready(b)) - Number(opts.ready(a));
       if (d !== 0) return d;
+    }
+    if (state.sort === DEFAULT_SORT && opts.sortKey) {
+      const ka = opts.sortKey(a);
+      const kb = opts.sortKey(b);
+      const cmp = ka < kb ? -1 : ka > kb ? 1 : 0;
+      return opts.direction === "desc" ? -cmp : cmp;
     }
     const cmp = opts.name(a).localeCompare(opts.name(b));
     return state.sort === "name-desc" ? -cmp : cmp;
@@ -74,34 +92,44 @@ export function applyListControls<T>(
 export function ListControls({
   state,
   onChange,
+  showStatusFilter = true,
 }: {
   state: ListState;
   onChange: (patch: Partial<ListState>) => void;
+  // False for a list with no readiness concept (MembersTable): the Status
+  // filter has nothing to filter, so it does not render, and the Sort
+  // options drop "Status" too -- it would silently order like "Name A-Z".
+  showStatusFilter?: boolean;
 }) {
+  const sortOptions = showStatusFilter
+    ? SORT_OPTIONS
+    : SORT_OPTIONS.filter((option) => option.value !== "status");
   return (
     <div className="flex flex-wrap gap-2">
-      <Select
-        value={state.status}
-        onValueChange={(v) => {
-          const option = STATUS_OPTIONS.find((o) => o.value === v);
-          if (option) onChange({ status: option.value });
-        }}
-      >
-        <SelectTrigger className="w-[150px]" aria-label="Status">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {STATUS_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {showStatusFilter && (
+        <Select
+          value={state.status}
+          onValueChange={(v) => {
+            const option = STATUS_OPTIONS.find((o) => o.value === v);
+            if (option) onChange({ status: option.value });
+          }}
+        >
+          <SelectTrigger className="w-[150px]" aria-label="Status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
       <Select
         value={state.sort}
         onValueChange={(v) => {
-          const option = SORT_OPTIONS.find((o) => o.value === v);
+          const option = sortOptions.find((o) => o.value === v);
           if (option) onChange({ sort: option.value });
         }}
       >
@@ -109,7 +137,7 @@ export function ListControls({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {SORT_OPTIONS.map((option) => (
+          {sortOptions.map((option) => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
             </SelectItem>

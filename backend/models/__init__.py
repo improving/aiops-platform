@@ -4,12 +4,15 @@ Alembic (``alembic/env.py``) and ``db/db.py`` rely on this.
 """
 
 from models import (
+    api_token,
+    audit_event,
     engine_chart_dashboards,
     engine_charts,
     engines,
     finetune,
     inference_instance,
     inference_instance_dashboards,
+    invitation,
     membership,
     model_adapters,
     models,

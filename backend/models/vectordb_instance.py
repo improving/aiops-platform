@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, UUID, Column, ForeignKey, String
+from sqlalchemy import JSON, UUID, Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import relationship
 
 from db.database import Base
@@ -23,5 +23,11 @@ class DBVectorDBInstance(Base):
     owner_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # Migration 0008: Pending, Running, Failed or Stopped, written by
+    # the platform; NULL means "derive from the pod".
+    status = Column(String, nullable=True)
+    last_error = Column(Text, nullable=True)
+    last_error_at = Column(DateTime, nullable=True)
+    stopped_at = Column(DateTime, nullable=True)
 
     vectorDB = relationship("DBVectorDB")

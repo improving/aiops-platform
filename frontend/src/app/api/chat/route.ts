@@ -8,8 +8,15 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from "ai";
+import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { backendUrl } from "@/lib/backend";
+import {
+  DEV_USER_COOKIE,
+  DEV_USER_HEADER,
+  ORG_COOKIE,
+  ORG_HEADER,
+} from "@/lib/orgCookie";
 
 export const runtime = "nodejs";
 // A CPU model streams slowly; do not cut the answer short.
@@ -52,6 +59,13 @@ export async function POST(req: Request) {
 
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  // The route is excluded from the proxy matcher, so it forwards the
+  // organization (and, in disabled mode, the dev user) cookie itself.
+  const jar = await cookies();
+  const org = jar.get(ORG_COOKIE)?.value;
+  if (org) headers[ORG_HEADER] = org;
+  const devUser = authDisabled() ? jar.get(DEV_USER_COOKIE)?.value : undefined;
+  if (devUser) headers[DEV_USER_HEADER] = devUser;
 
   const provider = createOpenAICompatible({
     name: "aiops",

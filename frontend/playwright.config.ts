@@ -14,8 +14,10 @@ import type { AuthMode, E2EOptions } from "./e2e/fixtures";
 const CI = !!process.env.CI;
 const START_SERVERS = process.env.E2E_START_SERVERS === "1";
 
-const BACKEND_PORT = 8001;
-const FRONTEND_PORT = 3001;
+// E2E_BACKEND_PORT / E2E_FRONTEND_PORT move the managed servers, so two
+// checkouts (worktrees) can run the fast tier at the same time.
+const BACKEND_PORT = Number(process.env.E2E_BACKEND_PORT ?? 8001);
+const FRONTEND_PORT = Number(process.env.E2E_FRONTEND_PORT ?? 3001);
 const managedBackendURL = `http://localhost:${BACKEND_PORT}`;
 const managedFrontendURL = `http://localhost:${FRONTEND_PORT}`;
 

@@ -12,7 +12,7 @@ import {
 import { useTheme } from "next-themes";
 import { ThemeDropdown } from "./ThemeDropdown";
 import { MobileNav } from "./MobileNav";
-import { UserMenu } from "./UserMenu";
+import { DevUserMenu, UserMenu } from "./UserMenu";
 import { AUTH_DISABLED } from "@/constants";
 import { cn } from "@/lib/utils";
 import {
@@ -177,7 +177,7 @@ export default function Header() {
             <ThemeDropdown setTheme={setTheme} />
             <MobileNav menuItems={menuItems} isActive={isActive} />
           </div>
-          {!AUTH_DISABLED && <UserMenu />}
+          {AUTH_DISABLED ? <DevUserMenu /> : <UserMenu />}
         </div>
       </div>
     </header>

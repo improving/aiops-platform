@@ -8,13 +8,16 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from api import finetune
+from api.audit import router as audit_router
 from api.authz import router as authz_router
 from api.chat import router as chat_router
+from api.config import router as config_router
 from api.credentials import router as credentials_router
 from api.engines import router as engines_router
 from api.hosts import router as hosts_router
 from api.inference_instance import router as inference_instance_router
-from api.inference_instance import update_all_inference_instance_endpoints
+from api.inference_operations import router as inference_operations_router
+from api.inference_status import update_all_inference_instance_endpoints
 from api.model_adapters import router as model_adapters_router
 from api.models import router as models_router
 from api.notebooks import router as notebooks_router
@@ -22,10 +25,13 @@ from api.notebooks import update_all_notebook_instance_endpoints
 from api.organizations import router as organizations_router
 from api.providers import router as providers_router
 from api.registry import router as registry_router
+from api.tokens import router as tokens_router
+from api.usage import router as usage_router
 from api.vectordb import router as vectordb_router
 from api.vectordb_instance import router as vectordb_instance_router
 from api.vectordb_instance import update_all_vectordb_instance_endpoints
-from auth.current_user import CurrentUser, require_admin
+from audit.middleware import AuditMiddleware
+from auth.current_user import CurrentUser, require_platform_admin
 from auth.settings import MODE_DISABLED, check_auth_settings
 from db.database import get_db, get_db_direct, get_engine
 from db.db import init_db, refresh_db, reload_data
@@ -150,6 +156,9 @@ def create_app(setup_db: bool = True):
     _app.include_router(models_router, tags=["models"])
     _app.include_router(engines_router, tags=["engines"])
     _app.include_router(inference_instance_router, tags=["inference_instance"])
+    _app.include_router(
+        inference_operations_router, tags=["inference_instance"]
+    )
     _app.include_router(hosts_router, tags=["hosts"])
     _app.include_router(vectordb_router, tags=["vectordb"])
     _app.include_router(vectordb_instance_router, tags=["vectordb_instance"])
@@ -160,13 +169,24 @@ def create_app(setup_db: bool = True):
     _app.include_router(credentials_router, tags=["credentials"])
     _app.include_router(chat_router, tags=["chat"])
     _app.include_router(organizations_router, tags=["organizations"])
+    _app.include_router(usage_router, tags=["organizations"])
     _app.include_router(providers_router, tags=["providers"])
     _app.include_router(registry_router, tags=["registry"])
+    _app.include_router(audit_router, tags=["audit"])
+    _app.include_router(tokens_router, tags=["tokens"])
+    _app.include_router(config_router, tags=["config"])
+
+    # The outermost middleware in this app's own stack, wrapping every
+    # route including the utility endpoints; Starlette's own
+    # ServerErrorMiddleware sits outside it and would otherwise render an
+    # unhandled exception's 500 with no X-Request-ID, so AuditMiddleware
+    # sends that one response itself before re-raising.
+    _app.add_middleware(AuditMiddleware)
 
     @_app.post("/reload-data", tags=["utility"])
     async def reload_data_endpoint(
         db: Session = Depends(get_db),
-        user: CurrentUser = Depends(require_admin),
+        user: CurrentUser = Depends(require_platform_admin),
     ):
         reload_data(db)
         return {"message": "Data reloaded successfully"}
@@ -175,7 +195,7 @@ def create_app(setup_db: bool = True):
     async def refresh_db_endpoint(
         db: Session = Depends(get_db),
         engine: Engine = Depends(get_engine),
-        user: CurrentUser = Depends(require_admin),
+        user: CurrentUser = Depends(require_platform_admin),
     ):
         refresh_db(db, engine)
         return {"message": "Data refreshed successfully"}

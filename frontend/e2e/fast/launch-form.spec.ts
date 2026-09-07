@@ -222,4 +222,115 @@ test.describe("serving options", () => {
     await expect(launch.engineOptions()).toHaveText(expected);
     await page.keyboard.press("Escape");
   });
+
+  test("resource fields default to one replica and are sent with the launch", async ({
+    page,
+    api,
+  }) => {
+    const model = await firstLlm(api);
+    const launch = new LaunchModelPage(page);
+    await openLaunch(page, launch, model.id);
+    await launch.skipButton.click();
+    await launch.selectEngine("vLLM");
+    await expect(launch.gpuCountSelect).toBeVisible();
+    await expect(launch.replicasInput).toHaveValue("1");
+    await expect(launch.cpuInput).toHaveValue("");
+    await launch.selectGpuCount("2");
+    await launch.replicasInput.fill("2");
+    await launch.cpuInput.fill("4");
+    await launch.memoryInput.fill("16Gi");
+    await launch.nextButton.click();
+
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (req) =>
+          req.url().includes("/inferenceInstance") && req.method() === "POST"
+      ),
+      launch.createButton.click(),
+    ]);
+    const body = request.postDataJSON();
+    expect(body.gpu_count).toBe(2);
+    expect(body.replicas).toBe(2);
+    expect(body.cpu).toBe("4");
+    expect(body.memory).toBe("16Gi");
+    // No Hugging Face token on the TEST_MODE backend: the launch is refused.
+    await expect(launch.toast(/HTTP 400/)).toBeVisible();
+  });
+
+  test("an Ollama tag hides the GPU count and sends 1", async ({
+    page,
+    api,
+  }) => {
+    const models = await api.models();
+    const ollamaModel = models.find((m) => m.modelId === "qwen3:0.6b")!;
+    // Ollama needs no Hugging Face token, so the TEST_MODE backend would
+    // persist a Failed row (the controller cannot load a kubeconfig) that
+    // outlives this test; answer the POST here instead and assert the body.
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 400, json: { detail: "stubbed" } })
+        : route.fallback()
+    );
+    const launch = new LaunchModelPage(page);
+    await openLaunch(page, launch, ollamaModel.id);
+    await launch.nextButton.click();
+    await launch.selectEngine("Ollama");
+    await expect(launch.replicasInput).toBeVisible();
+    await expect(launch.gpuCountSelect).toHaveCount(0);
+    await launch.nextButton.click();
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (req) =>
+          req.url().includes("/inferenceInstance") && req.method() === "POST"
+      ),
+      launch.createButton.click(),
+    ]);
+    const body = request.postDataJSON();
+    expect(body.gpu_count).toBe(1);
+    expect(body.replicas).toBe(1);
+    expect(body).not.toHaveProperty("cpu");
+    await expect(launch.toast(/HTTP 400: stubbed/)).toBeVisible();
+  });
+
+  test("replicas outside 1 to 16 block the submit", async ({ page, api }) => {
+    const model = await firstLlm(api);
+    const launch = new LaunchModelPage(page);
+    await openLaunch(page, launch, model.id);
+    await launch.skipButton.click();
+    await launch.selectEngine("vLLM");
+    await launch.replicasInput.fill("17");
+    await launch.nextButton.click();
+    const posts: string[] = [];
+    page.on("request", (req) => {
+      if (req.method() === "POST") posts.push(req.url());
+    });
+    await launch.createButton.click();
+    await expect(launch.toast("Replicas must be")).toBeVisible();
+    expect(posts).toEqual([]);
+  });
+
+  test("an invalid memory quantity blocks the submit", async ({
+    page,
+    api,
+  }) => {
+    const model = await firstLlm(api);
+    const launch = new LaunchModelPage(page);
+    await openLaunch(page, launch, model.id);
+    await launch.skipButton.click();
+    await launch.selectEngine("vLLM");
+    await launch.memoryInput.fill("16GB");
+    await launch.nextButton.click();
+    // The submit must be blocked client-side: a POST here would mean the
+    // invalid quantity reached the backend.
+    let posted = false;
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) => {
+      if (route.request().method() === "POST") posted = true;
+      return route.fallback();
+    });
+    await launch.createButton.click();
+    await expect(
+      launch.toast("Memory must be a Kubernetes quantity")
+    ).toBeVisible();
+    expect(posted).toBe(false);
+  });
 });

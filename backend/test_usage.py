@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-import api.organizations as orgs
+import api.usage as usage
 from auth.current_user import CurrentUser, get_current_user
 from core import create_app
 from db.database import get_db_direct
@@ -112,7 +112,7 @@ def _member(email: str, org_id, user_id: str) -> CurrentUser:
 
 
 def test_usage_needs_litellm_configured(client, monkeypatch):
-    monkeypatch.setattr(orgs, "get_client", lambda: None)
+    monkeypatch.setattr(usage, "get_client", lambda: None)
     response = client.get("/v1alpha1/organizations/current/usage")
     assert response.status_code == 503
 
@@ -131,8 +131,8 @@ def test_usage_days_out_of_range_is_422(client):
 def test_usage_502_on_litellm_error(client, monkeypatch):
     litellm = mock.Mock()
     litellm.spend_logs.side_effect = ll.LiteLLMError("down")
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     response = client.get("/v1alpha1/organizations/current/usage")
     assert response.status_code == 502
 
@@ -141,8 +141,8 @@ def test_usage_admin_sees_every_user_and_the_unattributed_row(
     client, monkeypatch
 ):
     litellm = _mock_litellm()
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     _add_user(ALICE_ID, "alice@example.com")
 
     response = client.get("/v1alpha1/organizations/current/usage")
@@ -175,8 +175,8 @@ def test_usage_admin_sees_every_user_and_the_unattributed_row(
 
 def test_usage_member_sees_only_their_own_rows(client, monkeypatch):
     litellm = _mock_litellm()
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     _add_user(BOB_ID, "bob@example.com")
     bob = _member("bob@example.com", _default_org().id, BOB_ID)
 
@@ -198,9 +198,9 @@ def test_usage_member_sees_only_their_own_rows(client, monkeypatch):
 
 
 def test_usage_503_without_a_litellm_team(client, monkeypatch):
-    monkeypatch.setattr(orgs, "get_client", lambda: _mock_litellm())
+    monkeypatch.setattr(usage, "get_client", lambda: _mock_litellm())
     monkeypatch.setattr(
-        orgs,
+        usage,
         "ensure_org_key",
         lambda db, org, core_v1=None: setattr(org, "litellm_team_id", None),
     )
@@ -215,8 +215,8 @@ def test_usage_labels_deleted_targets(client, monkeypatch):
         {**ROWS[0], "model_group": "prov-deadbeef/gpt-x"},
         {**ROWS[0], "model_group": "other"},
     ]
-    monkeypatch.setattr(orgs, "get_client", lambda: _mock_litellm(rows))
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: _mock_litellm(rows))
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     response = client.get("/v1alpha1/organizations/current/usage")
     assert response.status_code == 200, response.text
     labels = {t["target"]: t["label"] for t in response.json()["by_target"]}
@@ -229,9 +229,9 @@ def test_usage_labels_deleted_targets(client, monkeypatch):
 
 def test_usage_capped_passes_through(client, monkeypatch):
     monkeypatch.setattr(
-        orgs, "get_client", lambda: _mock_litellm(rows=[], capped=True)
+        usage, "get_client", lambda: _mock_litellm(rows=[], capped=True)
     )
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     response = client.get("/v1alpha1/organizations/current/usage")
     assert response.status_code == 200
     assert response.json()["capped"] is True
@@ -279,8 +279,8 @@ def test_usage_merges_rows_of_one_person_under_two_end_user_values(
         },
     ]
     litellm = _mock_litellm(rows)
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     _add_user(ALICE_ID, "alice@example.com")
 
     response = client.get("/v1alpha1/organizations/current/usage")
@@ -317,8 +317,8 @@ def test_usage_keeps_two_people_apart_on_one_target_and_day(
         },
     ]
     litellm = _mock_litellm(rows)
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     _add_user(ALICE_ID, "alice@example.com")
     _add_user(BOB_ID, "bob@example.com")
 
@@ -361,8 +361,8 @@ def test_usage_member_does_not_see_their_email_keyed_rows(client, monkeypatch):
     # returns both rows, so the backstop ``_visible_to`` is what drops
     # the email-keyed one.
     litellm = _mock_litellm(rows)
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
-    monkeypatch.setattr(orgs, "ensure_org_key", _fake_ensure)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
     _add_user(BOB_ID, "bob@example.com")
     bob = _member("bob@example.com", _default_org().id, BOB_ID)
 

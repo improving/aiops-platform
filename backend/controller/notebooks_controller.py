@@ -8,7 +8,7 @@ from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.notebook import NotebookInstanceSchema
 from utils.gateway import (
-    add_oidc_target,
+    OidcPolicyError,
     delete_backend_traffic_policy,
     delete_http_route,
     ensure_backend_traffic_policy,
@@ -16,6 +16,7 @@ from utils.gateway import (
     ensure_http_route,
     ensure_reference_grant,
     instance_hostname,
+    protect_browser_route,
     remove_oidc_target,
 )
 from utils.kubernetes_utils import get_core_v1_client
@@ -167,13 +168,21 @@ class NotebooksController:
         return context
 
     def _safe_gateway_call(self, description: str, fn, *args, **kwargs):
-        """Run one gateway call, logging instead of raising on failure.
+        """Run one best-effort gateway call, logging instead of raising.
 
-        Never raises: a gateway problem must not be mistaken for a Helm
-        failure (which would leave the release installed but the row
-        deleted, since the caller's except-and-delete does not know the
-        difference), must not block the install/upgrade/uninstall it
-        follows, and must not stop the next call from being attempted.
+        Used for the BackendTrafficPolicy (only timeouts), the client
+        Secret copy and the ReferenceGrants (dev-stack helpers for a
+        second namespace), and every delete (called from a `finally`,
+        where a new exception would replace the one already propagating).
+        Such a problem must not block the install, upgrade or uninstall
+        it follows, and must not stop the next step from being attempted.
+        A notebook has no API-key route; the API-key policies of the
+        other controllers are best effort by ruling (PR 25 review item
+        2), see vectordb_controller.py.
+
+        NOT used for creating the browser route or joining it to the
+        OIDC policy: both are strict, see _ensure_gateway_route and
+        _ensure_gateway_policies.
         """
         try:
             fn(*args, **kwargs)
@@ -183,22 +192,42 @@ class NotebooksController:
     def _ensure_gateway_route(self, instance: NotebookInstanceSchema):
         """Create/patch the browser HTTPRoute; a no-op without the gateway
         env contract (see utils/gateway.py). Notebooks get only one host.
+        Strict: a failed create fails the install before
+        _ensure_gateway_policies runs, so the shared OIDC policy never
+        gets a targetRef to a route that does not exist.
+
+        A create failure raises OidcPolicyError, the same type
+        protect_browser_route uses for the policy step: both mean the
+        notebook cannot be safely exposed, so install/upgrade must not
+        mislabel either one as a Helm failure.
         """
-        self._safe_gateway_call(
-            f"Failed to ensure gateway route for {instance.id}",
-            ensure_http_route,
-            instance.namespace,
-            self._get_release_name(instance),
-            instance_hostname("nb", instance.id),
-            self.get_service_name(instance),
-            instance.service_port or 80,
-            api_instance=self.api_instance,
-        )
+        release = self._get_release_name(instance)
+        try:
+            ensure_http_route(
+                instance.namespace,
+                release,
+                instance_hostname("nb", instance.id),
+                self.get_service_name(instance),
+                instance.service_port or 80,
+                api_instance=self.api_instance,
+            )
+        except Exception as e:
+            raise OidcPolicyError(
+                f"HTTPRoute {instance.namespace}/{release} could not be "
+                f"created: {e}"
+            ) from e
 
     def _ensure_gateway_policies(self, instance: NotebookInstanceSchema):
         """Put the route under the shared OIDC policy (owner-only access
         is decided by the API's ext-authz endpoint) and give the kernel
-        WebSockets long timeouts. Each step is attempted on its own.
+        WebSockets long timeouts.
+
+        The OIDC step is strict (fail closed): a notebook route that is
+        not under the policy is a JupyterLab reachable without a login,
+        so on failure protect_browser_route deletes the route again and
+        raises, the install (or upgrade) fails, and the create endpoint
+        marks the row Failed with the reason and uninstalls the release.
+        The other steps are best effort (_safe_gateway_call).
 
         No appProtocol patch on the Service: the notebook-controller
         rewrites the Service ports on every reconcile (verified live, Task
@@ -218,12 +247,8 @@ class NotebooksController:
             namespace,
             api_instance=self.api_instance,
         )
-        self._safe_gateway_call(
-            f"Failed to add {release} to the OIDC policy",
-            add_oidc_target,
-            namespace,
-            release,
-            api_instance=self.api_instance,
+        protect_browser_route(
+            namespace, release, api_instance=self.api_instance
         )
         self._safe_gateway_call(
             f"Failed to ensure the backend traffic policy for {release}",
@@ -234,7 +259,9 @@ class NotebooksController:
         )
 
     def _delete_gateway_policies(self, instance: NotebookInstanceSchema):
-        """Policies go before the route they target."""
+        """After the route (see uninstall): a policy that briefly targets
+        a route that is gone is harmless, a route without its policy is
+        not."""
         namespace = instance.namespace
         release = self._get_release_name(instance)
         self._safe_gateway_call(
@@ -253,8 +280,10 @@ class NotebooksController:
         )
 
     def _delete_gateway_route(self, instance: NotebookInstanceSchema):
-        """Called from a `finally`, where a new exception would silently
-        replace the one already being propagated; see _safe_gateway_call."""
+        """The route goes first: if the Helm uninstall failed (release
+        still running) it must not outlive its OIDC target. Called from a
+        `finally`, where a new exception would silently replace the one
+        already being propagated; see _safe_gateway_call."""
         self._safe_gateway_call(
             f"Failed to delete gateway route for {instance.id}",
             delete_http_route,
@@ -292,6 +321,10 @@ class NotebooksController:
             self.logger.info(f"Helm install succeeded for chart: {chart_name}")
             self._ensure_gateway_route(instance)
             self._ensure_gateway_policies(instance)
+        except OidcPolicyError:
+            # Helm succeeded; the gateway refused the route. Keep the
+            # type and the message, the endpoints catch Exception.
+            raise
         except Exception as e:
             self.logger.exception(f"Helm install failed: {str(e)}")
             raise HelmInstallError(f"Helm install failed: {str(e)}") from e
@@ -312,6 +345,8 @@ class NotebooksController:
             self.logger.info(f"Helm upgrade succeeded for chart: {chart_name}")
             self._ensure_gateway_route(instance)
             self._ensure_gateway_policies(instance)
+        except OidcPolicyError:
+            raise
         except Exception as e:
             self.logger.exception(f"Helm upgrade failed: {str(e)}")
             raise HelmUpgradeError(f"Helm upgrade failed: {str(e)}") from e
@@ -332,5 +367,5 @@ class NotebooksController:
             self.logger.exception(f"Helm uninstall failed: {str(e)}")
             raise HelmUninstallError(f"Helm uninstall failed: {str(e)}") from e
         finally:
-            self._delete_gateway_policies(instance)
             self._delete_gateway_route(instance)
+            self._delete_gateway_policies(instance)

@@ -15,12 +15,7 @@ from core import create_app
 from db.database import get_db_direct
 from models.inference_instance import DBInferenceInstance
 from models.models import DBModel
-from test_auth import (  # noqa: F401 (fixtures)
-    bearer,
-    make_token,
-    oidc_client,
-    rsa_key,
-)
+from testing.tokens import bearer, make_token
 from utils import genid
 
 MOCK_SOURCE_ID = "Qwen/Qwen3-0.6B-GGUF"

@@ -147,6 +147,11 @@ All passwords match the username.
 | `alice` | `alice` | `platform-members` (role `member`) | `alice@example.test` |
 | `bob` | `bob` | `platform-members` (role `member`) | `bob@example.test` |
 
+The realm role decides two things only: `admin` makes a platform admin (admin in every organization, may create organizations),
+and on a user's first login it sets the role of the membership that login creates.
+A user promoted in Keycloak after first login is not promoted in an organization automatically;
+an organization admin changes the role on `/organization` (ADR 0008).
+
 Clients in realm `aiops`:
 
 - `aiops-ui` -- public, PKCE (S256), for the frontend
@@ -426,6 +431,19 @@ and a second Ollama instance stays `Pending` with "Insufficient memory" until th
 (the smoke test and the cluster tier therefore launch instances one after the other).
 Check with `kubectl describe node aiops-control-plane` ("Allocated resources") or `docker stats aiops-control-plane`.
 
+## The platform chart on kind
+
+`make chart-images chart-smoke` installs `charts/aiops-platform` next to the dev stack:
+namespace `aiops-platform`, parent domain `platform.127.0.0.1.nip.io`, the dev `Gateway` `aiops` reused,
+its own certificate for `*.platform.127.0.0.1.nip.io` from the dev CA added to the Gateway's https listener,
+and the dev users imported into the bundled Keycloak.
+`docs/install.md` explains the chart; this is only the local recipe.
+Delete a running Ollama instance first (memory), trust the CA for the browser (`make trust-ca`),
+then open `https://ui.platform.127.0.0.1.nip.io/` and sign in as `alice`.
+`make chart-uninstall` removes the namespace and the certificate again.
+The chart-installed backend attaches `nb-`/`vdb-` browser routes to the `aiops-workloads-oidc` policy the chart renders in its own namespace
+(see "Other namespaces" under "Workload access").
+
 ## Tests
 
 `docs/testing.md` covers both Playwright tiers in full:
@@ -575,14 +593,20 @@ only a route created without a gateway configured
 ### Other namespaces
 
 `AIOPS_NAMESPACE` may point the controllers at another namespace.
+A `SecurityPolicy` can only target routes in its own namespace,
+so `add_oidc_target` patches the `aiops-workloads-oidc` policy of the
+route's namespace: the one `make auth-up` created in `ai-stack`,
+or the one the umbrella chart renders in its release namespace.
 `ensure_gateway_client_secret` copies the `aiops-gateway-oidc` Secret
 there and `ensure_reference_grant` adds the namespace to the two
 `ReferenceGrant`s (`auth` for the `keycloak` Service, `ai-stack` for
-`aiops-backend`), but the shared OIDC policy is only created in
-`ai-stack`, where the `sso` callback route lives:
-a browser route in any other namespace is left **unprotected** with a
-warning in the backend log until a per-namespace callback host
-(`sso-<namespace>`, with its own registered redirect URI) exists.
+`aiops-backend`);
+when the policy is missing it is built from scratch only if an `sso`
+callback route exists in that namespace (nothing else could complete a
+login), otherwise the browser route cannot be protected.
+That case **fails closed**: the route is deleted again, the install
+fails and the row is `Failed` with the policy named in the reason;
+a workload is never left reachable without a login.
 API-key policies work in any namespace.
 
 ### Check it
@@ -610,8 +634,8 @@ which ends every session: log in again.
   turned a working session into `invalid_token: Invalid refresh token` (identity notes, "Spike results").
 - **The Develop page's Langflow iframe needs a prior login on the gateway domain.**
   See "Iframe caveat" under "Langflow for the Develop page" above.
-- **Browser routes outside `ai-stack` are unprotected.**
-  The shared OIDC policy's callback host only exists in `ai-stack`;
+- **A namespace without the shared OIDC policy cannot run notebooks or vector databases.**
+  Their browser routes must join `aiops-workloads-oidc` in that namespace, or the launch fails;
   see "Other namespaces" under "Workload access" above.
 - **The Qdrant dashboard needs its API key pasted in by hand.**
   The `vdb-<id8>` browser host only checks the OIDC login and ownership (ext-authz) --

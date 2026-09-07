@@ -6,6 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from urllib3.exceptions import MaxRetryError
 
+from api.instance_inspection import InstanceKind, add_inspection_routes
 from auth.current_user import CurrentUser, get_current_user, require_writer
 from auth.policy import authorize_owner, authorize_write, owner_scope
 from controller.notebooks_controller import NotebooksController
@@ -14,6 +15,13 @@ from logger import setup_logger
 from models.notebook import Notebook
 from schemas.notebook import NotebookCreateSchema, NotebookInstanceSchema
 from utils.gateway import gateway_settings, instance_url
+from utils.instance_status import (
+    STATUS_FAILED,
+    STATUS_PENDING,
+    apply_pod_status,
+    mark_failed,
+    refresh_stale,
+)
 from utils.kubernetes_utils import (
     get_pod_status_and_readiness,
     get_service_endpoint,
@@ -79,16 +87,35 @@ async def create_notebook(
 
     notebook_data = filter_notebook_fields(notebook.model_dump())
     db_notebook = Notebook(
-        **notebook_data, org_id=user.org_id, owner_id=user.id
+        **notebook_data,
+        org_id=user.org_id,
+        owner_id=user.id,
+        status=STATUS_PENDING,
     )
-    controller = NotebooksController()
+    db.add(db_notebook)
+    db.commit()
+    db.refresh(db_notebook)
+    try:
+        controller = NotebooksController()
+    except Exception as e:
+        logger.exception(f"Failed to build the controller: {str(e)}")
+        mark_failed(db, db_notebook, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
     try:
         await controller.install(db_notebook)
     except Exception as e:
+        logger.exception(f"Failed to install Helm chart: {str(e)}")
+        mark_failed(db, db_notebook, e)
+        try:
+            await controller.uninstall(db_notebook)
+        except Exception:
+            logger.exception(
+                "Failed to uninstall the release of %s after a failed install",
+                db_notebook.id,
+            )
         raise HTTPException(status_code=500, detail=str(e))
 
-    db.add(db_notebook)
-    db.commit()
     db.refresh(db_notebook)
     return db_notebook
 
@@ -110,9 +137,7 @@ async def list_notebooks(
     notebooks = db.query(Notebook).filter(owner_scope(Notebook, user)).all()
     try:
         for notebook in notebooks:
-            notebook.ready, notebook.status = check_pod_status_and_readiness(
-                notebook
-            )
+            notebook.ready, _ = check_pod_status_and_readiness(notebook, db)
     except MaxRetryError as e:
         logger.error(f"Error checking pod status and readiness: {e}")
         raise HTTPException(
@@ -144,15 +169,48 @@ async def get_notebook(
         raise HTTPException(status_code=404, detail="Notebook not found")
     authorize_owner(user, notebook, "notebook")
     try:
-        notebook.ready, notebook.status = check_pod_status_and_readiness(
-            notebook
-        )
+        notebook.ready, _ = check_pod_status_and_readiness(notebook, db)
     except MaxRetryError as e:
         logger.error(f"Error checking pod status and readiness: {e}")
         raise HTTPException(
             status_code=500, detail="Error checking pod status and readiness"
         )
     return notebook
+
+
+def _find_notebook(db: Session, id: uuid.UUID, user: CurrentUser) -> Notebook:
+    notebook = (
+        db.query(Notebook)
+        .filter(Notebook.id == id)
+        .filter(owner_scope(Notebook, user))
+        .first()
+    )
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return notebook
+
+
+def notebook_pod_labels(controller: NotebooksController, notebook: Notebook):
+    """The notebook-controller labels every pod with the Notebook CR name,
+    which is the chart's Service name (see NotebooksController)."""
+    return f"notebook-name={controller.get_service_name(notebook)}"
+
+
+NOTEBOOK_KIND = InstanceKind(
+    label="notebook",
+    find=_find_notebook,
+    # Notebooks are read by their owner only (owner_scope, authorize_owner).
+    authorize_read=authorize_owner,
+    authorize_write=authorize_write,
+    make_controller=lambda db, row: NotebooksController(),
+    namespace=lambda controller, row: row.namespace,
+    pod_labels=lambda db, controller, row: notebook_pod_labels(
+        controller, row
+    ),
+    # Notebooks have no actions (spec 6.3).
+    restart=False,
+)
+add_inspection_routes(router, "/v1alpha1/notebooks", NOTEBOOK_KIND)
 
 
 @router.put("/v1alpha1/notebooks/{id}", response_model=NotebookInstanceSchema)
@@ -184,7 +242,16 @@ async def update_notebook(
     db.commit()
     db.refresh(db_notebook)
     controller = NotebooksController()
-    await controller.upgrade(db_notebook)
+    try:
+        await controller.upgrade(db_notebook)
+    except Exception as e:
+        # The gateway may have deleted the browser route (fail closed):
+        # the row must not keep saying Ready with an endpoint.
+        logger.exception(f"Failed to upgrade the notebook: {str(e)}")
+        mark_failed(db, db_notebook, e)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to upgrade the notebook: {str(e)}"
+        )
     return db_notebook
 
 
@@ -210,26 +277,50 @@ async def delete_notebook(
     if not db_notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
     authorize_write(user, db_notebook, "notebook")
-    controller = NotebooksController()
-    await controller.uninstall(db_notebook)
+    # A Failed launch may have no release and no reachable cluster
+    # behind it (the install failed before or while talking to
+    # Kubernetes); its row must still be deletable, so for a Failed row
+    # a controller or uninstall failure is logged, not fatal.
+    failed = db_notebook.status == STATUS_FAILED
+    controller = None
+    try:
+        controller = NotebooksController()
+    except Exception as e:
+        if not failed:
+            raise
+        logger.warning(
+            f"Deleting failed notebook {id} without a controller: {e}"
+        )
+    if controller is not None:
+        try:
+            await controller.uninstall(db_notebook)
+        except Exception as e:
+            if not failed:
+                raise
+            logger.warning(
+                f"Deleting failed notebook {id}; uninstall failed: {e}"
+            )
     db.delete(db_notebook)
     db.commit()
     return {"message": "Notebook deleted successfully"}
 
 
-def check_pod_status_and_readiness(instance: Notebook):
-    """
-    Check the status and readiness of a notebook instance's pod.
-
-    Args:
-        instance (Notebook): The notebook instance to check.
-
-    Returns:
-        tuple: A tuple containing the readiness status and the pod status.
-    """
-    controller = NotebooksController()
-    pod_labels = controller.get_pod_labels(instance)
-    return get_pod_status_and_readiness(instance.namespace, pod_labels)
+def check_pod_status_and_readiness(
+    instance: Notebook,
+    db: Session,
+    controller: NotebooksController | None = None,
+):
+    """Look at the pods, persist the derived status and return
+    (ready, persisted status). The poller passes one controller for the
+    whole tick; a request builds its own."""
+    controller = (
+        controller if controller is not None else NotebooksController()
+    )
+    pods = get_pod_status_and_readiness(
+        instance.namespace, controller.get_pod_labels(instance)
+    )
+    apply_pod_status(db, instance, pods)
+    return pods.ready, instance.status
 
 
 def update_all_notebook_instance_endpoints(db: Session):
@@ -251,6 +342,10 @@ def update_all_notebook_instance_endpoints(db: Session):
 
         for instance in instances:
             update_instance_endpoints(instance, db)
+
+        refresh_stale(
+            db, Notebook, check_pod_status_and_readiness, NotebooksController
+        )
     finally:
         db.close()
 

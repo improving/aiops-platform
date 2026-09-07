@@ -80,5 +80,6 @@ known-first-party = [
     "paths",
     "repositories",
     "schemas",
+    "testing",
     "utils",
 ]

@@ -14,12 +14,18 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from auth.current_user import CurrentUser, get_current_user
+from auth.current_user import (
+    AUTH_KIND_TOKEN,
+    CurrentUser,
+    as_member_of,
+    get_current_user,
+)
 from auth.policy import Policy, not_owner
 from db.database import get_db
 from logger import setup_logger
 from models.inference_instance import DBInferenceInstance
 from models.notebook import Notebook
+from models.organization import DEFAULT_ORG_SLUG, Organization
 from models.vectordb_instance import DBVectorDBInstance
 from utils.hostnames import parse_hostname
 from utils.ids import find_by_id8
@@ -86,6 +92,27 @@ def authorize_route(
         raise HTTPException(
             status_code=404, detail=f"No {label} for host {requested!r}"
         )
+    # The gateway forwards "authorization" and "cookie" only (utils/gateway.py
+    # headersToExtAuth), and the UI's aiops_org cookie lives on the UI host,
+    # so X-Org never arrives: the caller shows up in their first
+    # organization. Evaluate the policy as a member of the resource's
+    # organization instead. A personal token is bound to one organization
+    # and is not re-scoped.
+    if user.auth_kind != AUTH_KIND_TOKEN:
+        if row.org_id is not None and row.org_id != user.org_id:
+            user = as_member_of(db, user, row.org_id) or user
+        elif row.org_id is None and not user.is_default_org:
+            # A row from before the tenancy migration belongs to the
+            # default organization (auth/policy.py Policy.can_read);
+            # re-scope a caller who is a member there but currently
+            # active in another organization.
+            default_org = (
+                db.query(Organization)
+                .filter(Organization.slug == DEFAULT_ORG_SLUG)
+                .first()
+            )
+            if default_org is not None:
+                user = as_member_of(db, user, default_org.id) or user
     decision = "allow" if allowed(user, row) else "deny"
     logger.info(
         "authz host=%r forwarded_host=%r sub=%s %s=%s decision=%s",

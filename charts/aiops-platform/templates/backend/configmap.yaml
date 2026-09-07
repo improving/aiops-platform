@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aiops-platform.backendFullname" . }}-config
+  labels:
+    {{- include "aiops-platform.labelsForComponent" (dict "root" . "component" "backend") | nindent 4 }}
+data:
+  AIOPS_NAMESPACE: {{ .Release.Namespace | quote }}
+  AUTH_MODE: oidc
+  OIDC_ISSUER: {{ include "aiops-platform.issuer" . | quote }}
+  {{- if .Values.keycloak.enabled }}
+  # The JWKS is fetched in-cluster over plain HTTP: the public issuer host
+  # is not reachable from a pod on kind (nip.io resolves to the loopback
+  # address) and needs the gateway's TLS elsewhere. OIDC_ISSUER above is
+  # only compared with the token's iss claim.
+  OIDC_JWKS_URL: "http://{{ .Values.keycloak.fullnameOverride }}/realms/aiops/protocol/openid-connect/certs"
+  {{- end }}
+  DATABASE_URL: {{ include "aiops-platform.databaseUrl" . | quote }}
+  DATABASE_NAME: {{ include "aiops-platform.databaseName" . | quote }}
+  DATABASE_USER: {{ include "aiops-platform.databaseUser" . | quote }}
+  {{- if .Values.gateway.enabled }}
+  AIOPS_PARENT_DOMAIN: {{ .Values.global.parentDomain | quote }}
+  AIOPS_GATEWAY_NAME: {{ include "aiops-platform.gatewayName" . | quote }}
+  AIOPS_GATEWAY_NAMESPACE: {{ include "aiops-platform.gatewayNamespace" . | quote }}
+  {{- end }}
+  LITELLM_URL: {{ include "aiops-platform.litellmUrl" . | quote }}
+  GRAFANA_URL: {{ .Values.ui.grafanaUrl | quote }}
+  LANGFLOW_URL: {{ .Values.ui.langflowUrl | quote }}
+  JAEGER_URL: {{ .Values.ui.jaegerUrl | quote }}
+  {{- range $key, $value := .Values.backend.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

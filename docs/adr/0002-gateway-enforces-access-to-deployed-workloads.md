@@ -50,3 +50,9 @@ so one login covers every instance
 A consequence not in the original design:
 a browser route in any namespace other than the one holding the `sso` callback host is left unprotected,
 with a warning logged, until that namespace gets a callback host of its own.
+Amended 2026-09-07:
+the shared policy is per namespace (the umbrella chart renders one in its release namespace),
+`add_oidc_target` patches the policy of the route's own namespace
+(and builds it from scratch only where the `sso` callback route exists, since nothing else could complete a login),
+and a browser route that cannot join it is deleted again and the launch fails,
+so no route is ever left unprotected.

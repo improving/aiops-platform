@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import type { NextFetchEvent } from "next/server";
 import { auth } from "@/auth";
 import { backendUrl } from "@/lib/backend";
+import {
+  DEV_USER_COOKIE,
+  DEV_USER_HEADER,
+  ORG_COOKIE,
+  ORG_HEADER,
+} from "@/lib/orgCookie";
 import type { Session } from "next-auth";
 
 // Everything except Next.js internals, the Auth.js routes and /api/chat:
@@ -28,6 +34,22 @@ function rewriteToBackend(
   const headers = new Headers(request.headers);
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  // The proxy owns both headers: a client-sent value never passes through.
+  // The organization comes from the cookie the switcher sets.
+  headers.delete(ORG_HEADER);
+  const org = request.cookies.get(ORG_COOKIE)?.value;
+  if (org) {
+    headers.set(ORG_HEADER, org);
+  }
+  // Disabled mode only: the Playwright fast tier impersonates one of the
+  // fixed dev users through this cookie (backend/auth/dev_users.py).
+  headers.delete(DEV_USER_HEADER);
+  const devUser = authDisabled()
+    ? request.cookies.get(DEV_USER_COOKIE)?.value
+    : undefined;
+  if (devUser) {
+    headers.set(DEV_USER_HEADER, devUser);
   }
   return NextResponse.rewrite(
     new URL(`${backendUrl()}${apiPath}${request.nextUrl.search}`),

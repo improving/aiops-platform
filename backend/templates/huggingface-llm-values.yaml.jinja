@@ -23,11 +23,25 @@ env:
     value: "{{ env.lora_adapters }}"
 {% endif %}
 
+replicaCount: {{ replicaCount | default(1) }}
+
 resources:
   limits:
     nvidia.com/gpu: {{ resources.limits.gpu | default(1) }}
+{% if resources.limits.cpu %}
+    cpu: "{{ resources.limits.cpu }}"
+{% endif %}
+{% if resources.limits.memory %}
+    memory: "{{ resources.limits.memory }}"
+{% endif %}
   requests:
     nvidia.com/gpu: {{ resources.requests.gpu | default(1) }}
+{% if resources.requests.cpu %}
+    cpu: "{{ resources.requests.cpu }}"
+{% endif %}
+{% if resources.requests.memory %}
+    memory: "{{ resources.requests.memory }}"
+{% endif %}
 
 strategy:
   type: {{ strategy.type | default("Recreate") }}

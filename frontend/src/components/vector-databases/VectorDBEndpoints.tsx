@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { VectorDBInstanceSchema } from "@/types/vectordb";
 import { OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
 import { CopyButton } from "@/components/CopyButton";
+import { StatusBadge } from "@/components/instances/StatusBadge";
+import { ErrorBanner } from "@/components/instances/ErrorBanner";
 import Link from "next/link";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
@@ -122,15 +124,17 @@ export default function VectorDBEndpoints() {
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                       {instance.vectorDB.chart_name}
                     </span>
-                    {instance.ready ? (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                        Ready
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm">
-                        {instance.status || "In Progress"}
-                      </span>
-                    )}
+                    <StatusBadge
+                      ready={instance.ready}
+                      status={instance.status}
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <ErrorBanner
+                      compact
+                      error={instance.last_error}
+                      at={instance.last_error_at}
+                    />
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
                     <strong>Endpoint: </strong>

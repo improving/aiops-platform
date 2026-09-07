@@ -11,6 +11,9 @@ import {
   Host,
   FineTuneConfig,
   ServingOption,
+  InstanceEvent,
+  LogsQuery,
+  PodLogs,
 } from "@/types/models";
 
 export const modelService = {
@@ -86,6 +89,52 @@ export const modelService = {
 
   deleteInferenceInstance: async (id: string) => {
     await api.delete(`/api/v1alpha1/inferenceInstance/${id}`);
+  },
+
+  // Logs and events of the instance's pods (backend/api/inference_instance.py).
+  getInferenceInstanceLogs: async (id: string, query: LogsQuery) => {
+    const response = await api.get<PodLogs>(
+      `/api/v1alpha1/inferenceInstance/${id}/logs`,
+      { params: query }
+    );
+    return response.data;
+  },
+
+  getInferenceInstanceEvents: async (id: string) => {
+    const response = await api.get<InstanceEvent[]>(
+      `/api/v1alpha1/inferenceInstance/${id}/events`
+    );
+    return response.data;
+  },
+
+  // Day-2 actions (#16); each answers the updated instance.
+  restartInferenceInstance: async (id: string) => {
+    const response = await api.post<InferenceInstance>(
+      `/api/v1alpha1/inferenceInstance/${id}/restart`
+    );
+    return response.data;
+  },
+
+  stopInferenceInstance: async (id: string) => {
+    const response = await api.post<InferenceInstance>(
+      `/api/v1alpha1/inferenceInstance/${id}/stop`
+    );
+    return response.data;
+  },
+
+  resumeInferenceInstance: async (id: string) => {
+    const response = await api.post<InferenceInstance>(
+      `/api/v1alpha1/inferenceInstance/${id}/resume`
+    );
+    return response.data;
+  },
+
+  scaleInferenceInstance: async (id: string, replicas: number) => {
+    const response = await api.post<InferenceInstance>(
+      `/api/v1alpha1/inferenceInstance/${id}/scale`,
+      { replicas }
+    );
+    return response.data;
   },
 
   // The value comes back once; afterwards it is null unless an admin
@@ -167,6 +216,11 @@ export const modelService = {
     // the instance row and every consumer reads
     // instance.reference or instance.model.modelId.
     serving_option_id?: string;
+    // Launch resources (#16); the backend defaults are 1, 1, null, null.
+    gpu_count?: number;
+    replicas?: number;
+    cpu?: string;
+    memory?: string;
   }) => {
     const response = await api.post<InferenceInstance>(
       "/api/v1alpha1/inferenceInstance",

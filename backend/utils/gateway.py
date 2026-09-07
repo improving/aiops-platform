@@ -12,6 +12,13 @@ OIDC ``SecurityPolicy`` per namespace, ``aiops-workloads-oidc``, whose
 derives the OIDC cookie suffix from the policy, so only the policy that
 started a login can finish it on the shared callback host
 ``sso.<parent domain>`` (Task 10 spike, gateway notes "Spike results").
+A SecurityPolicy can only target routes in its own namespace, so the
+policy that is patched is the one in the route's namespace: the one
+``make auth-up`` creates in ``ai-stack``, or the one the umbrella chart
+renders in its release namespace. ``add_oidc_target`` fails closed: it
+raises when the route cannot be attached, and ``protect_browser_route``
+then deletes the browser route again, so a workload is never reachable
+without a login.
 SDK hosts (``vdb-<id8>-api``, ``inf-<id8>``) get one API-key policy each,
 created only once the credential Secret from Task 12 exists.
 """
@@ -44,10 +51,9 @@ REFERENCEGRANT_PLURAL = "referencegrants"
 
 MANAGED_BY_LABEL = {"app.kubernetes.io/managed-by": "aiops"}
 
-# The namespace that hosts the shared callback route "sso"
-# (infra/local/gateway/sso.yaml) and therefore the only namespace whose
-# shared OIDC policy can complete a login; see add_oidc_target.
-SHARED_OIDC_NAMESPACE = "ai-stack"
+# The shared OIDC policy and the callback route it targets first
+# (infra/local/gateway/sso.yaml, charts/aiops-platform/templates/gateway).
+# Both live in the namespace of the instance routes; see add_oidc_target.
 SHARED_OIDC_POLICY_NAME = "aiops-workloads-oidc"
 SSO_ROUTE_NAME = "sso"
 OIDC_CALLBACK_PATH = "/oauth2/callback"
@@ -508,6 +514,28 @@ def delete_backend_traffic_policy(
     )
 
 
+class OidcPolicyError(RuntimeError):
+    """The shared OIDC policy cannot protect a browser route."""
+
+
+def _sso_route_exists(
+    api_instance: client.CustomObjectsApi, namespace: str
+) -> bool:
+    try:
+        api_instance.get_namespaced_custom_object(
+            HTTPROUTE_GROUP,
+            HTTPROUTE_VERSION,
+            namespace,
+            HTTPROUTE_PLURAL,
+            SSO_ROUTE_NAME,
+        )
+    except ApiException as e:
+        if e.status == 404:
+            return False
+        raise
+    return True
+
+
 def _patch_oidc_targets(
     api_instance: client.CustomObjectsApi,
     namespace: str,
@@ -534,6 +562,16 @@ def _patch_oidc_targets(
                 raise
             if not add:
                 return
+            if not _sso_route_exists(api_instance, namespace):
+                # A policy built here would target a callback route that
+                # is not there, so no login could ever complete on it.
+                raise OidcPolicyError(
+                    f"SecurityPolicy {namespace}/{SHARED_OIDC_POLICY_NAME} "
+                    f"is missing and there is no {SSO_ROUTE_NAME} HTTPRoute "
+                    f"in {namespace} to build it from: install the shared "
+                    "OIDC policy in that namespace (make auth-up, or the "
+                    "aiops-platform chart) before deploying instances there"
+                )
             body = _security_policy_body(
                 namespace,
                 SHARED_OIDC_POLICY_NAME,
@@ -607,22 +645,15 @@ def add_oidc_target(
 ) -> None:
     """Put a browser route under the shared OIDC policy of its namespace.
 
-    Creates the policy (with the ``sso`` callback route as its first
-    target) when it is missing. Only SHARED_OIDC_NAMESPACE hosts the
-    callback route, so a route anywhere else is left unprotected with a
-    warning until per-namespace SSO exists (gateway notes).
+    Patches ``aiops-workloads-oidc`` in ``namespace`` (targetRefs cannot
+    cross namespaces). When the policy is missing it is created with the
+    ``sso`` callback route as its first target, but only if that route
+    exists in the namespace; otherwise ``OidcPolicyError`` is raised.
+    Every other failure (API errors, exhausted conflict retries) raises
+    too: a caller must treat a failure as "the route is unprotected" and
+    remove the route (fail closed). No-op without gateway settings.
     """
     if gateway_settings() is None:
-        return
-    if namespace != SHARED_OIDC_NAMESPACE:
-        logger.warning(
-            "No OIDC policy for HTTPRoute %s/%s: the shared callback route "
-            "only exists in %s, so browser routes outside it stay "
-            "unprotected",
-            namespace,
-            route_name,
-            SHARED_OIDC_NAMESPACE,
-        )
         return
     _patch_oidc_targets(
         api_instance or client.CustomObjectsApi(), namespace, route_name, True
@@ -635,8 +666,9 @@ def remove_oidc_target(
     *,
     api_instance: client.CustomObjectsApi | None = None,
 ) -> None:
-    """Take a route out of the shared OIDC policy; the policy stays."""
-    if gateway_settings() is None or namespace != SHARED_OIDC_NAMESPACE:
+    """Take a route out of the shared OIDC policy of its namespace; the
+    policy stays. No-op without gateway settings or without the policy."""
+    if gateway_settings() is None:
         return
     _patch_oidc_targets(
         api_instance or client.CustomObjectsApi(),
@@ -644,6 +676,50 @@ def remove_oidc_target(
         route_name,
         False,
     )
+
+
+def protect_browser_route(
+    namespace: str,
+    route_name: str,
+    *,
+    api_instance: client.CustomObjectsApi | None = None,
+) -> None:
+    """``add_oidc_target``, or no route at all (fail closed).
+
+    When the route cannot join the shared policy it is deleted again
+    (best effort) and ``OidcPolicyError`` naming the policy is raised, so
+    the caller's install fails and the row records the reason, instead
+    of a workload staying reachable without a login. No-op without
+    gateway settings.
+    """
+    if gateway_settings() is None:
+        return
+    api_instance = api_instance or client.CustomObjectsApi()
+    try:
+        add_oidc_target(namespace, route_name, api_instance=api_instance)
+    except Exception as e:
+        # error, not exception: the raise below carries the cause and the
+        # caller logs the trace once.
+        logger.error(
+            "HTTPRoute %s/%s could not join SecurityPolicy %s (%s); removing "
+            "the route so the workload is not exposed",
+            namespace,
+            route_name,
+            SHARED_OIDC_POLICY_NAME,
+            e,
+        )
+        try:
+            delete_http_route(namespace, route_name, api_instance=api_instance)
+        except Exception:
+            logger.exception(
+                "Failed to delete HTTPRoute %s/%s after the policy failure",
+                namespace,
+                route_name,
+            )
+        raise OidcPolicyError(
+            f"HTTPRoute {namespace}/{route_name} could not join "
+            f"SecurityPolicy {SHARED_OIDC_POLICY_NAME}: {e}"
+        ) from e
 
 
 # --- Cross-namespace plumbing ---------------------------------------------
@@ -706,13 +782,16 @@ def ensure_gateway_client_secret(
     ):
         return
     core_v1_api = core_v1_api or client.CoreV1Api()
-    source = core_v1_api.read_namespaced_secret(
-        GATEWAY_CLIENT_SECRET_NAME, GATEWAY_CLIENT_SECRET_NAMESPACE
-    )
+    # Target first: under the umbrella chart the Secret is already in the
+    # release namespace (written by the chart's secrets hook) and there
+    # is no ai-stack source to read.
     if secret_exists(
         namespace, GATEWAY_CLIENT_SECRET_NAME, core_v1_api=core_v1_api
     ):
         return
+    source = core_v1_api.read_namespaced_secret(
+        GATEWAY_CLIENT_SECRET_NAME, GATEWAY_CLIENT_SECRET_NAMESPACE
+    )
     core_v1_api.create_namespaced_secret(
         namespace,
         client.V1Secret(

@@ -2,10 +2,12 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    DateTime,
     ForeignKey,
     Integer,
     String,
     Table,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -83,6 +85,20 @@ class DBInferenceInstance(Base):
     # ``hf.co/<repo>:<quant>`` GGUF pull, or a hosted provider model id.
     # Every consumer reads ``instance.reference or instance.model.modelId``.
     reference = Column(String, nullable=True)
+    # Migration 0008. ``status`` is Pending, Running, Failed or Stopped,
+    # written by the platform (operations stream); NULL means "derive
+    # from the pod". ``last_error`` is the Helm or Kubernetes error
+    # text, at most 4000 characters.
+    status = Column(String, nullable=True)
+    last_error = Column(Text, nullable=True)
+    last_error_at = Column(DateTime, nullable=True)
+    # Chosen at launch; the server default keeps pre-0008 rows at 1.
+    replicas = Column(Integer, nullable=False, default=1, server_default="1")
+    gpu_count = Column(Integer, nullable=False, default=1, server_default="1")
+    # Kubernetes quantities such as "2" and "8Gi"; NULL means chart default.
+    cpu = Column(String, nullable=True)
+    memory = Column(String, nullable=True)
+    stopped_at = Column(DateTime, nullable=True)
 
     model = relationship("DBModel")
     engine = relationship("DBEngine")

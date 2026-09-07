@@ -77,8 +77,10 @@ Therefore `aiops-gateway` has exactly one redirect URI,
 and one `SecurityPolicy`, `aiops-workloads-oidc` in `ai-stack`
 (`workloads-oidc-policy.yaml`), targets the `sso` callback route
 (`infra/local/gateway/sso.yaml`) plus every instance browser route;
-`backend/utils/gateway.py` adds and removes the instance routes in its
-`targetRefs`.
+`backend/utils/gateway.py` adds and removes the instance routes in the
+`targetRefs` of the policy of the route's own namespace
+(the umbrella chart renders the same policy in its release namespace),
+and fails the instance install when the route cannot be attached.
 `make auth-up` creates the policy only when it is missing, so a re-import
 does not reset the list.
 See `docs/local-dev.md` section "Workload access".

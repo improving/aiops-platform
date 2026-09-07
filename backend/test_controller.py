@@ -1,4 +1,5 @@
 import base64
+import threading
 import uuid
 from unittest import mock
 
@@ -25,6 +26,8 @@ from schemas import (
     VectorDBSchema,
 )
 from utils import credentials, genid
+from utils.gateway import OidcPolicyError
+from utils.kubernetes_utils import PodStatus
 
 
 def test_controller():
@@ -392,9 +395,11 @@ async def test_get_chart_reports_broken_required_metadata():
         await get_chart(_helm_with_chart(metadata), "milvus", repo=CHART_REPO)
 
 
-def _milvus_instance():
+def _milvus_instance(vectordb_id=None):
+    # A fixed vectordb_id keeps a test off the global genid counter that
+    # the snapshot tests below depend on.
     vectordb = VectorDBSchema(
-        id=genid.uuid4(),
+        id=vectordb_id or genid.uuid4(),
         name="Milvus",
         chart_name="milvus",
         chart_repo="https://zilliztech.github.io/milvus-helm",
@@ -448,19 +453,25 @@ async def test_vectordb_controller_uninstalls_without_status_parsing():
 async def test_vectordb_controller_install_survives_broken_gateway_api(
     monkeypatch,
 ):
-    """A gateway HTTPRoute problem must not be mistaken for a Helm failure
-    and must not stop the install from succeeding (see
-    VectorDBController._ensure_gateway_routes)."""
+    """A problem with the SDK "-api" HTTPRoute must not be mistaken for a
+    Helm failure and must not stop the install from succeeding (see
+    VectorDBController._safe_gateway_call). The browser route and the
+    OIDC policy are reachable here."""
     monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
     helm = _helm_with_chart(MILVUS_CHART_METADATA)
     helm._command.install_or_upgrade = mock.AsyncMock()
-    api_instance = mock.Mock(spec=client.CustomObjectsApi)
-    api_instance.get_namespaced_custom_object.side_effect = ApiException(
-        status=500
-    )
+    api_instance, core = _gateway_mocks(shared_targets=["sso"])
+    policy_get = api_instance.get_namespaced_custom_object.side_effect
+
+    def get(group, version, namespace, plural, name):
+        if plural == "httproutes" and name.endswith("-api"):
+            raise ApiException(status=500)
+        return policy_get(group, version, namespace, plural, name)
+
+    api_instance.get_namespaced_custom_object.side_effect = get
     controller = VectorDBController(
         namespace="ai-stack",
-        core_v1_api=mock.Mock(),
+        core_v1_api=core,
         api_instance=api_instance,
         helm_client=helm,
     )
@@ -475,6 +486,160 @@ async def test_vectordb_controller_install_survives_broken_gateway_api(
         release,
         f"{release}-api",
     ]
+    patch_body = api_instance.patch_namespaced_custom_object.call_args.args[5]
+    assert _target_names(patch_body) == ["sso", release]
+
+
+@pytest.mark.asyncio
+async def test_vectordb_controller_install_fails_when_the_browser_route_fails(
+    monkeypatch,
+):
+    """The browser route is strict: when it cannot be created the install
+    fails before the policy step, so the shared OIDC policy never gets a
+    targetRef to a route that does not exist. The failure is not
+    mislabeled as a Helm failure (should-fix 5's OidcPolicyError rule
+    extended to route creation, not just the policy attach)."""
+    monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
+    helm = _helm_with_chart(MILVUS_CHART_METADATA)
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    api_instance, core = _gateway_mocks(shared_targets=["sso"])
+    policy_get = api_instance.get_namespaced_custom_object.side_effect
+
+    def get(group, version, namespace, plural, name):
+        if plural == "httproutes" and not name.endswith("-api"):
+            raise ApiException(status=500)
+        return policy_get(group, version, namespace, plural, name)
+
+    api_instance.get_namespaced_custom_object.side_effect = get
+    controller = VectorDBController(
+        namespace="ai-stack",
+        core_v1_api=core,
+        api_instance=api_instance,
+        helm_client=helm,
+    )
+    instance = _milvus_instance(vectordb_id=uuid.UUID(int=0x52))
+    release = controller._get_release_name(instance)
+
+    with pytest.raises(OidcPolicyError) as excinfo:
+        await controller.install(instance)
+
+    assert str(excinfo.value).startswith(
+        f"HTTPRoute ai-stack/{release} could not be created"
+    )
+    api_instance.create_namespaced_custom_object.assert_not_called()
+    api_instance.patch_namespaced_custom_object.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notebook_controller_install_fails_when_the_browser_route_fails(
+    monkeypatch,
+):
+    """The NotebooksController counterpart: the browser route is strict,
+    and a create failure must not be mislabeled as a Helm failure."""
+    monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
+    helm = _helm_with_chart(
+        {"apiVersion": "v2", "name": "kf-notebooks", "version": "0.1.0"}
+    )
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    api_instance, core = _gateway_mocks(shared_targets=["sso"])
+    api_instance.get_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    controller = NotebooksController(
+        api_instance=api_instance, core_v1_api=core, helm=helm
+    )
+    instance = _notebook(notebook_id=uuid.UUID(int=0x53))
+    release = controller._get_release_name(instance)
+
+    with pytest.raises(OidcPolicyError) as excinfo:
+        await controller.install(instance)
+
+    assert str(excinfo.value).startswith(
+        f"HTTPRoute {instance.namespace}/{release} could not be created"
+    )
+    api_instance.create_namespaced_custom_object.assert_not_called()
+    api_instance.patch_namespaced_custom_object.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_vectordb_controller_install_fails_closed_without_the_policy(
+    monkeypatch,
+):
+    """The browser route cannot join the OIDC policy (here: the policy
+    patch fails): the route is deleted again and the install raises, so
+    the create endpoint marks the row Failed and uninstalls the release.
+    A dashboard must never stay reachable without a login."""
+    monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
+    helm = _helm_with_chart(MILVUS_CHART_METADATA)
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    api_instance, core = _gateway_mocks(shared_targets=["sso"])
+    api_instance.patch_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    controller = VectorDBController(
+        namespace="ai-stack",
+        core_v1_api=core,
+        api_instance=api_instance,
+        helm_client=helm,
+    )
+    instance = _milvus_instance(vectordb_id=uuid.UUID(int=0x51))
+    release = controller._get_release_name(instance)
+
+    with pytest.raises(OidcPolicyError) as excinfo:
+        await controller.install(instance, credential="s3cret")
+
+    # Not wrapped as a Helm failure: Helm succeeded, the gateway refused.
+    assert str(excinfo.value).startswith(
+        f"HTTPRoute ai-stack/{release} could not join SecurityPolicy "
+        f"{SHARED_OIDC}"
+    )
+    routes = [
+        r["metadata"]["name"] for r in _created(api_instance, "HTTPRoute")
+    ]
+    assert routes == [release, f"{release}-api"]
+    deletes = [
+        (c.args[3], c.args[4])
+        for c in api_instance.delete_namespaced_custom_object.call_args_list
+    ]
+    assert deletes == [("httproutes", release)]
+    # Nothing after the strict step ran: no API-key policy.
+    assert _created(api_instance, "SecurityPolicy") == []
+
+
+@pytest.mark.asyncio
+async def test_notebook_controller_install_fails_closed_without_sso_route(
+    monkeypatch,
+):
+    """No policy in the namespace and no sso callback route to build one
+    from (an AIOPS_NAMESPACE where neither make auth-up nor the chart
+    installed the policy): the notebook route is deleted again and the
+    install raises with the policy named."""
+    monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
+    helm = _helm_with_chart(
+        {"apiVersion": "v2", "name": "kf-notebooks", "version": "0.1.0"}
+    )
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    api_instance, core = _gateway_mocks(sso_route=False)
+    controller = NotebooksController(
+        api_instance=api_instance, core_v1_api=core, helm=helm
+    )
+    instance = _notebook()
+    release = controller._get_release_name(instance)
+
+    with pytest.raises(OidcPolicyError) as excinfo:
+        await controller.install(instance)
+
+    assert SHARED_OIDC in str(excinfo.value)
+    assert "no sso HTTPRoute" in str(excinfo.value)
+    assert _created(api_instance, "SecurityPolicy") == []
+    assert _created(api_instance, "BackendTrafficPolicy") == []
+    api_instance.delete_namespaced_custom_object.assert_called_once_with(
+        "gateway.networking.k8s.io",
+        "v1",
+        instance.namespace,
+        "httproutes",
+        release,
+    )
 
 
 # --- Task 10: gateway policies per instance --------------------------------
@@ -482,13 +647,18 @@ async def test_vectordb_controller_install_survives_broken_gateway_api(
 SHARED_OIDC = "aiops-workloads-oidc"
 
 
-def _gateway_mocks(*, secret_exists=False, shared_targets=None):
+def _gateway_mocks(
+    *, secret_exists=False, shared_targets=None, sso_route=True
+):
     """A CustomObjectsApi whose objects are all missing (404), except the
-    shared OIDC policy when shared_targets is given, and a CoreV1Api whose
-    Secrets exist or not and whose Services exist."""
+    shared OIDC policy when shared_targets is given and the sso callback
+    HTTPRoute (which lets the policy be created from scratch), and a
+    CoreV1Api whose Secrets exist or not and whose Services exist."""
     api_instance = mock.Mock(spec=client.CustomObjectsApi)
 
     def get(group, version, namespace, plural, name):
+        if plural == "httproutes" and name == "sso" and sso_route:
+            return {"metadata": {"name": "sso", "namespace": namespace}}
         if plural == "securitypolicies" and name == SHARED_OIDC:
             if shared_targets is None:
                 raise ApiException(status=404)
@@ -538,7 +708,12 @@ def _target_names(body):
     return [r["name"] for r in body["spec"]["targetRefs"]]
 
 
-def _notebook():
+def _notebook(notebook_id=None):
+    # A fixed notebook_id keeps a test off the global genid counter the
+    # snapshot tests below depend on (see _milvus_instance); omitting the
+    # kwarg entirely (rather than passing id=None) keeps the default
+    # genid factory for every existing caller.
+    extra = {"id": notebook_id} if notebook_id is not None else {}
     return NotebookInstanceSchema(
         name="t10-nb",
         type="jupyter",
@@ -547,6 +722,7 @@ def _notebook():
         resources_memory="1Gi",
         nvidia_gpu=False,
         storage_size="5Gi",
+        **extra,
     )
 
 
@@ -578,7 +754,7 @@ async def test_notebook_controller_install_protects_route(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_notebook_controller_uninstall_removes_policies_before_route(
+async def test_notebook_controller_uninstall_removes_route_before_policies(
     monkeypatch,
 ):
     monkeypatch.setenv("AIOPS_PARENT_DOMAIN", "127.0.0.1.nip.io")
@@ -602,10 +778,12 @@ async def test_notebook_controller_uninstall_removes_policies_before_route(
         (c[0], c.args[3] if c[0] == "delete" else c.args[4])
         for c in manager.mock_calls
     ]
+    # The route goes first so a failed Helm uninstall never leaves a
+    # route without its OIDC target (N5 of the PR 25 review).
     assert steps == [
+        ("delete", "httproutes"),
         ("delete", "backendtrafficpolicies"),
         ("patch", SHARED_OIDC),
-        ("delete", "httproutes"),
     ]
     patch_body = api_instance.patch_namespaced_custom_object.call_args.args[5]
     assert _target_names(patch_body) == ["sso"]
@@ -677,9 +855,9 @@ async def test_vectordb_controller_uninstall_removes_policies(monkeypatch):
         for c in api_instance.delete_namespaced_custom_object.call_args_list
     ]
     assert deletes == [
-        ("securitypolicies", f"{release}-api-apikey"),
         ("httproutes", release),
         ("httproutes", f"{release}-api"),
+        ("securitypolicies", f"{release}-api-apikey"),
     ]
     patch_body = api_instance.patch_namespaced_custom_object.call_args.args[5]
     assert _target_names(patch_body) == ["sso"]
@@ -831,9 +1009,17 @@ async def test_create_inference_instance_stores_and_delete_removes_credential(
     model = _seeded(client_, "models", lambda m: m["category"] == "llm")
     engine = _seeded(client_, "engines", lambda e: e["name"] == "vLLM")
 
+    # get_controller is called from api.inference_instance (create,
+    # delete) and api.inference_status (the list route's refresh).
+    get_ctrl = mock.Mock()
     with (
-        mock.patch("api.inference_instance.get_controller") as get_ctrl,
+        mock.patch("api.inference_instance.get_controller", get_ctrl),
+        mock.patch("api.inference_status.get_controller", get_ctrl),
         mock.patch("utils.credentials.get_core_v1_client") as get_core_v1,
+        mock.patch(
+            "api.inference_status.get_pod_status_and_readiness",
+            return_value=PodStatus(False, "Unknown"),
+        ),
     ):
         controller = get_ctrl.return_value
         controller.namespace = "ai-stack"
@@ -879,7 +1065,7 @@ async def test_create_inference_instance_stores_and_delete_removes_credential(
 
 
 @pytest.mark.asyncio
-async def test_create_inference_instance_rolls_back_credential_on_install_failure(
+async def test_create_inference_instance_keeps_the_row_on_install_failure(
     monkeypatch,
 ):
     monkeypatch.setenv("HF_API_TOKEN", "hf-test-token")
@@ -888,13 +1074,25 @@ async def test_create_inference_instance_rolls_back_credential_on_install_failur
     model = _seeded(client_, "models", lambda m: m["category"] == "llm")
     engine = _seeded(client_, "engines", lambda e: e["name"] == "vLLM")
 
+    # get_controller is called from api.inference_instance (create,
+    # delete) and api.inference_status (the list route's refresh).
+    get_ctrl = mock.Mock()
     with (
-        mock.patch("api.inference_instance.get_controller") as get_ctrl,
+        mock.patch("api.inference_instance.get_controller", get_ctrl),
+        mock.patch("api.inference_status.get_controller", get_ctrl),
         mock.patch("utils.credentials.get_core_v1_client") as get_core_v1,
+        mock.patch(
+            "api.inference_status.get_pod_status_and_readiness",
+            return_value=PodStatus(False, "Unknown"),
+        ),
     ):
         controller = get_ctrl.return_value
         controller.namespace = "ai-stack"
+        controller.get_pod_labels.return_value = (
+            "app.kubernetes.io/instance=vllm-x,app.kubernetes.io/name=vllm"
+        )
         controller.install = mock.AsyncMock(side_effect=RuntimeError("boom"))
+        controller.uninstall = mock.AsyncMock()
         core_v1 = get_core_v1.return_value
 
         before = {
@@ -910,19 +1108,26 @@ async def test_create_inference_instance_rolls_back_credential_on_install_failur
             c.kwargs["body"].metadata.name
             for c in core_v1.create_namespaced_secret.call_args_list
         }
-        deleted = {
+        assert len(created) == 2
+        # The row stays, marked Failed, and its credential stays with it
+        # until the row is deleted.
+        core_v1.delete_namespaced_secret.assert_not_called()
+        controller.uninstall.assert_awaited_once()
+
+        after = {
+            i["id"]: i
+            for i in client_.get("/v1alpha1/inferenceInstance").json()
+        }
+        (new_id,) = set(after) - before
+        assert after[new_id]["status"] == "Failed"
+        assert "boom" in after[new_id]["last_error"]
+        deleted = client_.delete(f"/v1alpha1/inferenceInstance/{new_id}")
+        assert deleted.status_code == 200, deleted.text
+        deleted_names = {
             c.kwargs["name"]
             for c in core_v1.delete_namespaced_secret.call_args_list
         }
-        # The credential that install() failed to use is cleaned up, not
-        # left behind alongside the row that no longer exists.
-        assert deleted == created
-        assert len(created) == 2
-
-    after = {
-        i["id"] for i in client_.get("/v1alpha1/inferenceInstance").json()
-    }
-    assert after == before
+        assert deleted_names == created
 
 
 @pytest.mark.asyncio
@@ -1105,3 +1310,259 @@ async def test_ollama_controller_helm_values_uses_the_serving_option_reference()
     )
     values = await controller.prepare_helm_values(instance, engine_chart)
     assert values["models"]["pull"] == ["hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0"]
+
+
+@pytest.mark.asyncio
+async def test_gpu_count_helm_values(snapshot):
+    """Spec 6.3: gpu_count 1, 2 and 4 for vLLM and TGI, verified by
+    rendered values only (lab check pending)."""
+    charts = {
+        "vllm": EngineChartsSchema(
+            id=genid.uuid4(),
+            engine="vllm",
+            chart_type="llm",
+            chart_repo="https://infracloudio.github.io/charts",
+            chart_name="vllm",
+        ),
+        "huggingface": EngineChartsSchema(
+            id=genid.uuid4(),
+            engine="huggingface",
+            chart_type="llm",
+            chart_repo="https://infracloudio.github.io/charts",
+            chart_name="text-generation-inference",
+        ),
+    }
+    model = ModelSchema(
+        id=genid.uuid4(),
+        name="test-model",
+        modelId="org/model",
+        category="llm",
+        size=1,
+    )
+    for engine_name, chart in charts.items():
+        controller = get_controller(engine_name, core_v1_api=mock.Mock())
+        for gpu_count in (1, 2, 4):
+            instance = InferenceInstanceSchema(
+                id=genid.uuid4(),
+                model=model,
+                engine=EngineSchema(id=genid.uuid4(), name=engine_name),
+                gpu_count=gpu_count,
+                replicas=2,
+                cpu="8",
+                memory="32Gi",
+                config=InferenceInstanceConfigParamsSchema(id=genid.uuid4()),
+            )
+            values = await controller.prepare_helm_values(instance, chart)
+            assert values["replicaCount"] == 2
+            assert values["resources"]["limits"]["nvidia.com/gpu"] == gpu_count
+            assert values["resources"]["requests"] == {
+                "nvidia.com/gpu": gpu_count,
+                "cpu": "8",
+                "memory": "32Gi",
+            }
+            if engine_name == "vllm":
+                args = values["args"] or []
+                assert ("--tensor-parallel-size" in args) == (gpu_count > 1)
+                if gpu_count > 1:
+                    index = args.index("--tensor-parallel-size")
+                    assert args[index + 1] == str(gpu_count)
+            else:
+                env = {e["name"]: e.get("value") for e in values["env"]}
+                assert ("NUM_SHARD" in env) == (gpu_count > 1)
+                if gpu_count > 1:
+                    assert env["NUM_SHARD"] == str(gpu_count)
+            snapshot.assert_match(
+                yaml.dump(values), f"{engine_name}-gpu-{gpu_count}.yaml"
+            )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("category", ["embedding", "reranker"])
+async def test_nim_templates_keep_their_defaults_without_cpu_and_memory(
+    category,
+):
+    """The NIM embedding and reranker templates carry their own cpu and
+    memory defaults through Jinja's default(), which only fills undefined
+    values: an unset cpu/memory must not reach the context as None."""
+    controller = get_controller("nim", core_v1_api=mock.Mock())
+    model = ModelSchema(
+        id=genid.uuid4(),
+        name="nv-embed",
+        modelId="nvidia/x",
+        category=category,
+    )
+    chart = EngineChartsSchema(
+        id=genid.uuid4(),
+        engine="nim",
+        chart_type=category,
+        chart_repo="https://helm.ngc.nvidia.com/nim/charts/",
+        chart_name=f"nim-{category}-1.0.0.tgz",
+    )
+    unset = InferenceInstanceSchema(
+        id=genid.uuid4(),
+        model=model,
+        engine=EngineSchema(id=genid.uuid4(), name="nim"),
+        gpu_count=2,
+        config=InferenceInstanceConfigParamsSchema(id=genid.uuid4()),
+    )
+    context = controller._get_base_context(unset)
+    assert set(context["resources"]["requests"]) == {"gpu"}
+    values = await controller.prepare_helm_values(unset, chart)
+    assert values["resources"]["requests"]["memory"] == "16Gi"
+    assert values["resources"]["requests"]["cpu"] == "4000m"
+    assert values["resources"]["limits"]["memory"] == "32Gi"
+    assert values["resources"]["limits"]["nvidia.com/gpu"] == 2
+    assert "None" not in yaml.dump(values)
+
+    given = unset.model_copy(update={"cpu": "8000m", "memory": "64Gi"})
+    values = await controller.prepare_helm_values(given, chart)
+    assert values["resources"]["requests"]["memory"] == "64Gi"
+    assert values["resources"]["limits"]["cpu"] == "8000m"
+
+
+def test_vllm_keeps_a_user_supplied_tensor_parallel_size():
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    instance.gpu_count = 4
+    instance.config.args = {"--tensor-parallel-size": "2"}
+    context = controller._get_engine_specific_context(instance, chart)
+    names = [a["name"] for a in context["args"]]
+    assert names.count("--tensor-parallel-size") == 1
+    assert (
+        context["args"][names.index("--tensor-parallel-size")]["value"] == "2"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ollama_renders_cpu_and_memory_from_the_row():
+    controller = get_controller("ollama", core_v1_api=mock.Mock())
+    engine = EngineSchema(id=genid.uuid4(), name="Ollama", cpu=True)
+    model = ModelSchema(
+        id=genid.uuid4(), name="q", modelId="qwen3:0.6b", category="llm"
+    )
+    chart = EngineChartsSchema(
+        id=genid.uuid4(),
+        engine="ollama",
+        chart_type="llm",
+        chart_repo="https://infracloudio.github.io/charts",
+        chart_name="ollama",
+    )
+    instance = InferenceInstanceSchema(
+        id=genid.uuid4(),
+        model=model,
+        engine=engine,
+        gpu_count=4,
+        replicas=1,
+        cpu="2",
+        memory="6Gi",
+        config=InferenceInstanceConfigParamsSchema(id=genid.uuid4()),
+    )
+    values = await controller.prepare_helm_values(instance, chart)
+    assert values["replicaCount"] == 1
+    assert values["resources"] == {
+        "requests": {"cpu": "2", "memory": "6Gi"},
+        "limits": {"cpu": "2", "memory": "6Gi"},
+    }
+    assert "nvidia.com/gpu" not in yaml.dump(values)
+
+
+def test_merge_values_is_recursive_and_does_not_mutate():
+    from controller.base_controller import merge_values
+
+    base = {"replicaCount": 1, "resources": {"limits": {"cpu": "1"}}}
+    merged = merge_values(
+        base, {"replicaCount": 0, "resources": {"limits": {"memory": "1Gi"}}}
+    )
+    assert merged == {
+        "replicaCount": 0,
+        "resources": {"limits": {"cpu": "1", "memory": "1Gi"}},
+    }
+    assert base == {"replicaCount": 1, "resources": {"limits": {"cpu": "1"}}}
+    assert merge_values(base, None) is base
+
+
+@pytest.mark.asyncio
+async def test_upgrade_merges_overrides_into_the_values():
+    instance, chart = _inference_instance_and_chart()
+    helm = mock.Mock()
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    controller = VLLMController(
+        namespace="ai-stack", core_v1_api=mock.Mock(), helm_client=helm
+    )
+    controller._add_and_update_helm_repo = mock.AsyncMock(
+        return_value=mock.Mock(
+            ref="vllm", repo=chart.chart_repo, metadata=mock.Mock(version="1")
+        )
+    )
+    await controller.upgrade(instance, chart, overrides={"replicaCount": 0})
+    values = helm._command.install_or_upgrade.await_args.args[2]
+    assert values["replicaCount"] == 0
+    # The rest of the rendered values is untouched by the override.
+    assert values["service"] == {"type": "ClusterIP", "port": 80}
+    assert values["resources"]["limits"]["nvidia.com/gpu"] == 1
+
+
+@pytest.mark.asyncio
+async def test_constructing_a_controller_builds_no_client(monkeypatch):
+    """Construction is cheap: neither the kube config nor `helm version`
+    (the Helm client's constructor) runs until the first install or
+    upgrade, so request handlers and the pollers can build one per call."""
+    monkeypatch.delenv("AIOPS_PARENT_DOMAIN", raising=False)
+    helm = mock.Mock()
+    helm._command.install_or_upgrade = mock.AsyncMock()
+    helm_factory = mock.Mock(return_value=helm)
+    core_factory = mock.Mock(return_value=mock.Mock())
+    monkeypatch.setattr("controller.base_controller.HelmClient", helm_factory)
+    monkeypatch.setattr(
+        "controller.base_controller.get_core_v1_client", core_factory
+    )
+    instance, chart = _inference_instance_and_chart()
+
+    controller = get_controller("vllm")
+    assert controller.namespace == "ai-stack"
+    await controller.prepare_helm_values(instance, chart)
+    helm_factory.assert_not_called()
+    core_factory.assert_not_called()
+
+    controller._add_and_update_helm_repo = mock.AsyncMock(
+        return_value=mock.Mock(
+            ref="vllm", repo=chart.chart_repo, metadata=mock.Mock(version="1")
+        )
+    )
+    await controller.upgrade(instance, chart, overrides={"replicaCount": 2})
+    helm_factory.assert_called_once_with()
+    helm._command.install_or_upgrade.assert_awaited_once()
+    # Built once, then reused.
+    assert controller.helm is controller.helm
+    await controller.upgrade(instance, chart)
+    helm_factory.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_ensure_helm_builds_the_client_off_the_event_loop(monkeypatch):
+    """should-fix 1 (PR 25 review): pyhelm3.Client.__init__ ends in a
+    blocking `helm version` subprocess. stop/resume/scale used to build
+    the whole controller -- Helm client included -- inside
+    asyncio.to_thread; _ensure_helm must keep that seam even though
+    construction is now lazy, so the first build never runs inline on
+    the request loop."""
+    main_thread = threading.current_thread()
+    built_off_loop = threading.Event()
+
+    def fake_helm_client():
+        if threading.current_thread() is main_thread:
+            raise AssertionError("HelmClient() ran on the event loop thread")
+        built_off_loop.set()
+        return mock.Mock()
+
+    monkeypatch.setattr(
+        "controller.base_controller.HelmClient", fake_helm_client
+    )
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+
+    helm = await controller._ensure_helm()
+
+    assert built_off_loop.is_set()
+    assert controller.helm is helm
+    # Cached: a second call does not build another one.
+    assert await controller._ensure_helm() is helm

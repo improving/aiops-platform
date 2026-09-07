@@ -5,11 +5,18 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import configure_mappers, sessionmaker
 
+from db.database import Base
 from db.db import refresh_db
 from db.migrate import alembic_config, upgrade_to_head
+from models.api_token import ApiToken
+from models.audit_event import AuditEvent
+from models.inference_instance import DBInferenceInstance
+from models.invitation import Invitation
+from models.membership import Membership
 from models.organization import DEFAULT_ORG_SLUG
+from models.user import User
 
 BASELINE_REVISION = "0001"
 TENANT_TABLES = (
@@ -58,6 +65,38 @@ notebooks_table = sa.table(
     sa.column("nvidia_gpu", sa.Boolean()),
 )
 
+# The 0008 enterprise tables and the columns it adds to existing ones.
+ENTERPRISE_TABLES = ("invitations", "audit_events", "api_tokens")
+ENTERPRISE_COLUMNS: dict[str, set[str]] = {
+    "memberships": {"created_at", "invited_by"},
+    "inference_instances": {
+        "status",
+        "last_error",
+        "last_error_at",
+        "replicas",
+        "gpu_count",
+        "cpu",
+        "memory",
+        "stopped_at",
+    },
+    "vectordb_instances": {
+        "status",
+        "last_error",
+        "last_error_at",
+        "stopped_at",
+    },
+    "notebooks": {"status", "last_error", "last_error_at", "stopped_at"},
+}
+
+# A pre-0008 inference instance row, typed like the tables above.
+inference_instances_table = sa.table(
+    "inference_instances",
+    sa.column("id", sa.UUID()),
+    sa.column("status", sa.String()),
+    sa.column("replicas", sa.Integer()),
+    sa.column("gpu_count", sa.Integer()),
+)
+
 
 def make_engine(tmp_path):
     # Not setup_engine(): in TEST_MODE that consumes a genid value and
@@ -80,6 +119,10 @@ def table_names(engine):
 
 def column_names(engine, table):
     return {c["name"] for c in sa.inspect(engine).get_columns(table)}
+
+
+def index_names(engine, table):
+    return {i["name"] for i in sa.inspect(engine).get_indexes(table)}
 
 
 def organizations(engine):
@@ -115,7 +158,7 @@ def test_upgrade_fresh_database(tmp_path):
     )
     assert current_revision(engine) == head_revision()
     # A mis-numbered file would still satisfy the dynamic check above.
-    assert head_revision() == "0007"
+    assert head_revision() == "0008"
     assert {"organizations", "users", "memberships"} <= table_names(engine)
     assert "model_serving_options" in table_names(engine)
     assert "reference" in column_names(engine, "inference_instances")
@@ -220,7 +263,7 @@ def test_registry_migration_seeds_serving_options_from_category_and_model_id(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0007"
+    assert current_revision(engine) == head_revision() == "0008"
     with engine.connect() as conn:
         rows = conn.execute(
             sa.select(
@@ -289,3 +332,120 @@ def test_refresh_db_leaves_a_clean_upgraded_schema(tmp_path):
     assert "seed" not in names
     assert names, "load_initial_data seeds the models table"
     assert [slug for _, slug in organizations(engine)] == [DEFAULT_ORG_SLUG]
+
+
+def test_metadata_declares_the_enterprise_tables():
+    """The model files the streams import declare the tables and
+    columns of 0008, ``Membership.user`` still resolves now that
+    ``memberships`` has two foreign keys to ``users``, and the
+    NOT NULL resource counts carry the same server default as the
+    migration."""
+    configure_mappers()
+
+    assert Invitation.__tablename__ == "invitations"
+    assert AuditEvent.__tablename__ == "audit_events"
+    assert ApiToken.__tablename__ == "api_tokens"
+    assert set(ENTERPRISE_TABLES) <= set(Base.metadata.tables)
+    for table, columns in ENTERPRISE_COLUMNS.items():
+        declared = set(Base.metadata.tables[table].columns.keys())
+        assert columns <= declared, table
+
+    assert Membership.user.property.mapper.class_ is User
+    assert DBInferenceInstance.__table__.c.replicas.server_default.arg == "1"
+    assert DBInferenceInstance.__table__.c.gpu_count.server_default.arg == "1"
+    assert AuditEvent.__table__.c.at.index is True
+    assert AuditEvent.__table__.c.org_id.index is True
+
+
+def test_enterprise_migration_adds_tables_and_columns_and_downgrades(
+    tmp_path,
+):
+    """0008: the three tables and every added column exist at head and
+    match the model files column for column, and one downgrade step
+    removes all of them again (SQLite batch mode, which recreates the
+    table, so named constraints matter)."""
+    engine = make_engine(tmp_path)
+
+    upgrade_to_head(engine)
+
+    assert current_revision(engine) == head_revision() == "0008"
+    assert set(ENTERPRISE_TABLES) <= table_names(engine)
+    assert column_names(engine, "invitations") == {
+        "id",
+        "org_id",
+        "email",
+        "role",
+        "invited_by",
+        "created_at",
+        "accepted_at",
+        "accepted_user_id",
+    }
+    assert column_names(engine, "audit_events") == {
+        "id",
+        "at",
+        "org_id",
+        "actor_id",
+        "actor_label",
+        "action",
+        "resource_kind",
+        "resource_id",
+        "outcome",
+        "request_id",
+        "detail",
+    }
+    assert column_names(engine, "api_tokens") == {
+        "id",
+        "user_id",
+        "org_id",
+        "name",
+        "prefix",
+        "token_hash",
+        "scope",
+        "created_at",
+        "expires_at",
+        "last_used_at",
+        "revoked_at",
+    }
+    assert {"ix_audit_events_at", "ix_audit_events_org_id"} <= index_names(
+        engine, "audit_events"
+    )
+    for table, columns in ENTERPRISE_COLUMNS.items():
+        assert columns <= column_names(engine, table), table
+    # The streams import the models and the database runs 0008: the
+    # two must agree on every column name of every table this
+    # migration touches.
+    for table in ENTERPRISE_TABLES + tuple(ENTERPRISE_COLUMNS):
+        declared = set(Base.metadata.tables[table].columns.keys())
+        assert column_names(engine, table) == declared, table
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0007")
+
+    assert current_revision(engine) == "0007"
+    assert not set(ENTERPRISE_TABLES) & table_names(engine)
+    for table, columns in ENTERPRISE_COLUMNS.items():
+        assert not columns & column_names(engine, table), table
+
+
+def test_enterprise_migration_defaults_replicas_and_gpu_count(tmp_path):
+    """A row that exists before 0008 reads replicas 1, gpu_count 1 and
+    status NULL afterwards: the NOT NULL server defaults survive the
+    SQLite batch recreate."""
+    engine = make_engine(tmp_path)
+    with engine.begin() as conn:
+        command.upgrade(alembic_config(conn), "0007")
+    instance_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(inference_instances_table.insert().values(id=instance_id))
+
+    upgrade_to_head(engine)
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            sa.select(
+                inference_instances_table.c.status,
+                inference_instances_table.c.replicas,
+                inference_instances_table.c.gpu_count,
+            ).where(inference_instances_table.c.id == instance_id)
+        ).one()
+    assert row == (None, 1, 1)

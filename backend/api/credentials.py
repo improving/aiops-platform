@@ -10,13 +10,15 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from auth.current_user import ROLE_ADMIN, CurrentUser, get_current_user
+from audit import record
+from auth.current_user import CurrentUser, get_current_user
 from auth.policy import authorize_write
+from auth.roles import ROLE_ADMIN
 from db.database import get_db
 from logger import setup_logger
 from models.inference_instance import DBInferenceInstance
@@ -54,6 +56,7 @@ class CredentialSchema(BaseModel):
     response_model=CredentialSchema,
 )
 def get_credential(
+    request: Request,
     kind: CredentialKind = Path(description="vdb or inf"),
     resource_id: UUID = Path(description="The id of the instance"),
     reveal: bool = Query(
@@ -100,8 +103,18 @@ def get_credential(
         )
     if first_time:
         credential.shown_at = datetime.now()
-        db.commit()
-        db.refresh(credential)
+    record(
+        db,
+        user=user,
+        action="reveal",
+        resource_kind="credentials",
+        resource_id=str(resource_id),
+        outcome=200,
+        request_id=request.state.request_id,
+        detail={"kind": kind},
+    )
+    db.commit()
+    db.refresh(credential)
     return CredentialSchema(
         key=CREDENTIAL_KEY, value=value, shown_at=credential.shown_at
     )

@@ -14,6 +14,8 @@ import { RefreshButton } from "../RefreshButton";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
 import { CardGridSkeleton } from "@/components/LoadingState";
 import { CopyButton } from "@/components/CopyButton";
+import { StatusBadge } from "@/components/instances/StatusBadge";
+import { ErrorBanner } from "@/components/instances/ErrorBanner";
 import {
   ListControls,
   ShowMore,
@@ -119,31 +121,45 @@ export default function NotebookList() {
                   }
                   description={`ID: ${notebook.id}`}
                   content={
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                        {notebook.type}
-                      </span>
-                      {notebook.type == "jupyter" && (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
-                          {notebook.framework || "N/A"}
-                        </span>
-                      )}
-                      {notebook.nvidia_gpu && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                          GPUs: {notebook.resources_gpu}
-                        </span>
-                      )}
-                      {notebook.resources_cpu && (
+                    <>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <StatusBadge
+                          ready={notebook.ready}
+                          status={notebook.status}
+                          label={notebook.status || "Pending"}
+                        />
                         <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                          CPU: {notebook.resources_cpu}
+                          {notebook.type}
                         </span>
-                      )}
-                      {notebook.resources_memory && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                          Mem: {notebook.resources_memory}
-                        </span>
-                      )}
-                    </div>
+                        {notebook.type == "jupyter" && (
+                          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                            {notebook.framework || "N/A"}
+                          </span>
+                        )}
+                        {notebook.nvidia_gpu && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                            GPUs: {notebook.resources_gpu}
+                          </span>
+                        )}
+                        {notebook.resources_cpu && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                            CPU: {notebook.resources_cpu}
+                          </span>
+                        )}
+                        {notebook.resources_memory && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                            Mem: {notebook.resources_memory}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mb-3">
+                        <ErrorBanner
+                          compact
+                          error={notebook.last_error}
+                          at={notebook.last_error_at}
+                        />
+                      </div>
+                    </>
                   }
                   footer={
                     <div className="flex items-center gap-2">

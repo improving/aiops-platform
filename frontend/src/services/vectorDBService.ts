@@ -4,6 +4,7 @@ import {
   VectorDBInstanceSchema,
   VectorDBCredentialSchema,
 } from "@/types/vectordb";
+import { InstanceEvent, LogsQuery, PodLogs } from "@/types/models";
 
 export const vectorDBService = {
   getVectorDBs: async () => {
@@ -38,6 +39,29 @@ export const vectorDBService = {
 
   deleteVectorDBInstance: async (id: string) => {
     await api.delete(`/api/v1alpha1/vectordb_instances/${id}`);
+  },
+
+  getVectorDBInstanceLogs: async (id: string, query: LogsQuery) => {
+    const response = await api.get<PodLogs>(
+      `/api/v1alpha1/vectordb_instances/${id}/logs`,
+      { params: query }
+    );
+    return response.data;
+  },
+
+  getVectorDBInstanceEvents: async (id: string) => {
+    const response = await api.get<InstanceEvent[]>(
+      `/api/v1alpha1/vectordb_instances/${id}/events`
+    );
+    return response.data;
+  },
+
+  // Vector databases get restart only (spec 6.3).
+  restartVectorDBInstance: async (id: string) => {
+    const response = await api.post<VectorDBInstanceSchema>(
+      `/api/v1alpha1/vectordb_instances/${id}/restart`
+    );
+    return response.data;
   },
 
   // Reveals the instance API key. The backend returns the value only once:

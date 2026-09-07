@@ -16,6 +16,7 @@ nodeSelector:
 persistence:
   enabled: true
   existingClaim: nim-pvc
+replicaCount: 1
 resources:
   limits:
     nvidia.com/gpu: 1

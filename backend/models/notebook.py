@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 
 from db.database import Base
@@ -34,3 +42,9 @@ class Notebook(Base):
     owner_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # Migration 0008: Pending, Running, Failed or Stopped, written by
+    # the platform; NULL means "derive from the pod".
+    status = Column(String, nullable=True)
+    last_error = Column(Text, nullable=True)
+    last_error_at = Column(DateTime, nullable=True)
+    stopped_at = Column(DateTime, nullable=True)

@@ -1,4 +1,6 @@
 import os
+from datetime import UTC, datetime
+from typing import NamedTuple
 
 from fastapi import HTTPException
 from kubernetes import client, config
@@ -40,6 +42,57 @@ def get_core_v1_client():
 def get_batch_v1_client():
     api_client = get_kubernetes_api_client()
     return client.BatchV1Api(api_client=api_client)
+
+
+def get_apps_v1_client():
+    api_client = get_kubernetes_api_client()
+    return client.AppsV1Api(api_client=api_client)
+
+
+# The annotation `kubectl rollout restart` sets; changing it rolls the pods.
+RESTARTED_AT_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
+
+
+def restart_workload(namespace, labels, apps_v1=None) -> str:
+    """Roll the Deployment (else the StatefulSet) matching ``labels`` the
+    way ``kubectl rollout restart`` does. Returns ``"<Kind>/<name>"``;
+    raises LookupError when nothing matches (a failed install)."""
+    apps_v1 = apps_v1 or get_apps_v1_client()
+    body = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        RESTARTED_AT_ANNOTATION: datetime.now(UTC).isoformat(
+                            timespec="seconds"
+                        )
+                    }
+                }
+            }
+        }
+    }
+    candidates = (
+        (
+            "Deployment",
+            apps_v1.list_namespaced_deployment,
+            apps_v1.patch_namespaced_deployment,
+        ),
+        (
+            "StatefulSet",
+            apps_v1.list_namespaced_stateful_set,
+            apps_v1.patch_namespaced_stateful_set,
+        ),
+    )
+    for kind, list_fn, patch_fn in candidates:
+        items = list_fn(namespace=namespace, label_selector=labels).items
+        if items:
+            name = items[0].metadata.name
+            patch_fn(name=name, namespace=namespace, body=body)
+            logger.info("Restarted %s/%s in %s", kind, name, namespace)
+            return f"{kind}/{name}"
+    raise LookupError(
+        f"No Deployment or StatefulSet matches {labels} in {namespace}"
+    )
 
 
 def get_kubernetes_api_client():
@@ -104,55 +157,96 @@ def delete_config_map(namespace, config_map_name):
         raise
 
 
-def get_pod_status_and_readiness(namespace, pod_labels):
+# Container reasons that mean the workload is not going to come up on its
+# own (spec 6.1); the poller turns them into status Failed.
+FAILURE_REASONS = frozenset(
+    {
+        "CrashLoopBackOff",
+        "ImagePullBackOff",
+        "ErrImagePull",
+        "OOMKilled",
+        "Error",
+    }
+)
+
+
+class PodStatus(NamedTuple):
+    """What the pods behind an instance report. The first two fields are
+    the (ready, status) pair this function always returned; ``failure``
+    is the first container reason from FAILURE_REASONS with its message."""
+
+    ready: bool
+    status: str
+    failure: tuple[str, str] | None = None
+
+
+def _first_failure(pods) -> tuple[str, str] | None:
+    """(reason, message) of the first container in a failure state.
+
+    A pod being deleted (stop, scale, a Recreate restart) reports
+    terminated.reason "Error" for its SIGTERM exit; it is skipped, or
+    Stopped and Pending would flicker to Failed for a few seconds."""
+    for pod in pods:
+        if getattr(pod.metadata, "deletion_timestamp", None):
+            continue
+        statuses = list(pod.status.init_container_statuses or []) + list(
+            pod.status.container_statuses or []
+        )
+        for cs in statuses:
+            state = cs.state
+            if state is None:
+                continue
+            if state.waiting and state.waiting.reason in FAILURE_REASONS:
+                return state.waiting.reason, state.waiting.message or ""
+            if state.terminated and state.terminated.reason in FAILURE_REASONS:
+                return state.terminated.reason, state.terminated.message or ""
+    return None
+
+
+def get_pod_status_and_readiness(
+    namespace, pod_labels, core_v1=None
+) -> PodStatus:
+    """Readiness, the first container's state as a word, and the first
+    failure reason with its message, for the pods matching pod_labels."""
     try:
-        core_v1_api = get_core_v1_client()
-        # Query pods
-        pods = core_v1_api.list_namespaced_pod(
+        core_v1 = core_v1 or get_core_v1_client()
+        pods = core_v1.list_namespaced_pod(
             namespace=namespace, label_selector=pod_labels
         )
-
-        # Check if any pod is ready
-        instance_ready = any(
-            pod.status.phase == "Running"
-            and all(
-                container.ready for container in pod.status.container_statuses
-            )
-            for pod in pods.items
-        )
-
-        instance_status = "Unknown"
-        if pods.items:
-            pod = pods.items[0]
-            container_status = get_container_status_obj(pod)
-
-            if container_status:
-                logger.debug(
-                    f"Pod Name: {pod.metadata.name}, Status: {container_status}"
-                )
-                if (
-                    not container_status.started
-                    and container_status.state.waiting
-                ):
-                    instance_status = container_status.state.waiting.reason
-                elif (
-                    not container_status.started
-                    and container_status.state.terminated
-                ):
-                    instance_status = "Terminated"
-                elif container_status.started or (
-                    not container_status.started
-                    and container_status.state.running.started_at
-                ):
-                    instance_status = "Running"
-                else:
-                    instance_status = container_status.state
     except client.exceptions.ApiException as e:
         logger.exception(f"Error checking pod status and readiness: {e}")
-        instance_ready = False
-        instance_status = "Unknown"
+        return PodStatus(False, "Unknown")
 
-    return instance_ready, instance_status
+    # A pod being deleted (stop, scale, a Recreate restart) may still
+    # answer Ready while it drains; it is not the instance's readiness.
+    instance_ready = any(
+        pod.status.phase == "Running"
+        and not getattr(pod.metadata, "deletion_timestamp", None)
+        and bool(pod.status.container_statuses)
+        and all(c.ready for c in pod.status.container_statuses)
+        for pod in pods.items
+    )
+
+    instance_status = "Unknown"
+    if pods.items:
+        pod = pods.items[0]
+        container_status = get_container_status_obj(pod)
+        if container_status:
+            logger.debug(
+                f"Pod Name: {pod.metadata.name}, Status: {container_status}"
+            )
+            state = container_status.state
+            if not container_status.started and state.waiting:
+                instance_status = state.waiting.reason
+            elif not container_status.started and state.terminated:
+                instance_status = "Terminated"
+            elif container_status.started or (
+                state.running and state.running.started_at
+            ):
+                instance_status = "Running"
+    return PodStatus(
+        instance_ready, instance_status, _first_failure(pods.items)
+    )
 
 
 async def get_job_status(job_name, namespace):

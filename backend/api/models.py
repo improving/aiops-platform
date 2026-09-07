@@ -5,11 +5,11 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from auth.current_user import (
-    ROLE_ADMIN,
     CurrentUser,
     get_current_user,
-    require_admin,
+    require_platform_admin,
 )
+from auth.roles import ROLE_ADMIN
 from db.database import get_db
 from models.engines import DBEngine
 from models.inference_instance import DBInferenceInstance
@@ -129,7 +129,7 @@ def get_model_serving_options(
 def create_model(
     model: ModelSchema,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     """
     Create a new model in the database: an alias for the registry's
@@ -162,7 +162,7 @@ def update_model(
     id: uuid.UUID,
     model: ModelSchema,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     """
     Update an existing model in the database.
@@ -192,7 +192,7 @@ def update_model(
 def delete_model(
     id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     """
     Delete a model from the database.

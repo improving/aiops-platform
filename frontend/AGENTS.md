@@ -117,7 +117,24 @@ pnpm e2e:ui                               # Playwright UI mode
   card title links to it. The header name there is `api-key` (the model instance page's is `x-api-key`).
 - Card lists (`InferenceEndpoints`, `VectorDBEndpoints`, `NotebookList`) share `src/components/ListControls.tsx`:
   `useListState` + `applyListControls` (status filter, name/status sort, 12 per page with "Show more").
+  `applyListControls`'s `ready` filter is optional -- a caller that omits it (`MembersTable`) also passes
+  `showStatusFilter={false}` to `ListControls` so the Status combobox does not render; `sortKey`/`direction`
+  let a caller replace the default name sort while `state.sort` is still at its default.
   The empty-state call to action is keyed on the raw list, not the filtered one.
+- Instance operations (#15, #16): `src/components/instances/` holds the pieces shared by the three instance kinds --
+  `StatusBadge` (`Ready` when `ready`, else the persisted `status`, else `Pending`), `ErrorBanner` (`role="alert"`, `last_error`
+  with a `Copy error` button), `LogsPanel` (Container and Lines comboboxes, Previous switch, `role="group"` "Log output"),
+  `EventsPanel` (table captioned "Events") and `InstanceActions` (an "Actions" menu whose items open confirmation dialogs;
+  a kind passes only the callbacks it supports, vector databases `onRestart` only, notebooks none).
+  The three detail pages mount Logs and Events as tabs (the inference page keeps `?tab=`), the cards show the badge, the
+  banner and, for inference, the replica count. `usePolling` treats `Stopped` as terminal. The launch wizard's Deploy Config
+  tab has GPU count (hidden for a `cpu` serving option), Replicas, CPU and Memory (`type="text"` inputs, so they keep the
+  `textbox` role); they are sent as top-level `gpu_count`, `replicas`, `cpu`, `memory`. The fast tier stubs every instance
+  route with `page.route` (`e2e/fast/instance-operations.spec.ts`); `e2e/cluster/day2-ops.spec.ts` runs the real flow on kind.
+- `src/lib/runtimeConfig.ts` fetches `GET /api/v1alpha1/config/ui` once (`RuntimeConfigProvider` in `app/layout.tsx`)
+  and `useRuntimeConfig()` gives `GrafanaEmbed`, `JaegerEmbed`, `NotConfigured` and `Develop` the Grafana, Langflow and Jaeger URLs,
+  each falling back to its `NEXT_PUBLIC_*` value; consumers render nothing until `loaded` is true.
+  `e2e/fast/runtime-config.spec.ts` stubs the endpoint with `page.route`.
 
 ## Authentication
 
@@ -134,7 +151,8 @@ pnpm e2e:ui                               # Playwright UI mode
   move it into a server action (Auth.js issue #13388 on Next 16). Sign-out is `signOut({ redirect: false })` followed by
   a navigation to `session.endSessionUrl` so the Keycloak SSO session ends too.
 - The Playwright fast tier runs with `AUTH_MODE=disabled` and `NEXT_PUBLIC_AUTH_MODE=disabled`
-  (set in `playwright.config.ts`), so specs must not depend on the user menu; its managed backend also has
+  (set in `playwright.config.ts`), so specs must not depend on the session; the header renders `DevUserMenu`
+  (the organization block without sign-out) in that mode; its managed backend also has
   `AIOPS_CHAT_MOCK=true`, so `chat.spec.ts` gets a canned streamed echo through the real route handler.
 - The `cluster` tier logs in for real:
   the `setup` project (`e2e/auth.setup.ts`) signs alice, bob and admin into Keycloak through its own login form
@@ -146,6 +164,25 @@ pnpm e2e:ui                               # Playwright UI mode
   `BackendApi` (the `api` fixture) instead fetches a client-credentials token from `aiops-automation`
   when `AUTH_MODE` is not `disabled`, for calls made directly against the backend rather than through a
   logged-in page.
+
+## Organizations, audit and tokens
+
+- `src/lib/orgCookie.ts`: the switcher writes `aiops_org` (path `/`, SameSite Lax, one year); `src/proxy.ts` and `src/app/api/chat/route.ts`
+  turn it into `X-Org`, and in `AUTH_MODE=disabled` only turn `aiops_dev_user` into `X-Dev-User`.
+  `services/api.ts` clears the cookie and reloads once (a `sessionStorage` guard) when the backend answers 403 `You are not a member of this organization`.
+- `src/hooks/useOrg.ts` `useOrg()` reads `GET /v1alpha1/organizations/current` and exposes `org`, `role`, `isAdmin`, `isPlatformAdmin`;
+  the new pages and `UserMenu.tsx` gate on it, so menu visibility follows the membership role. `src/lib/roles.ts` `isAdmin(session)` still serves
+  `/providers` and `/models/registry` (follow-up: move them to `useOrg()`).
+- `UserMenu.tsx` exports `UserMenu` (oidc), `DevUserMenu` (disabled) and the shared `OrganizationMenuItems`: the active organization,
+  a "Switch organization" submenu (`menuitemradio` per membership, `<name> · <role>`), "Manage organization" and "Audit log" (admins), "API tokens".
+- Pages: `/organization` (`components/organization/`: summary, members with a `Role for <email>` select and `Remove`, invitations with `Copy sign-in URL` and `Withdraw`,
+  `Invite a member` and `Create organization` dialogs), `/audit` (`components/audit/AuditPage.tsx`: filters, the `Audit events` table, `Export CSV` through `format=csv`),
+  `/settings/tokens` (`components/tokens/`: the `API tokens` table with `Revoke`, the `Create token` dialog whose second face shows the token once with `Copy API token` and a `curl example`).
+  Types live in `src/types/organization.ts`, calls in `services/{orgService,auditService,tokenService}.ts`.
+  Every table uses `ListControls`; the audit page keeps `useListState`/`applyListControls`/`ShowMore` but renders its own filters and sorts newest first through `applyListControls`'s `sortKey`/`direction` option (`Date.parse(e.at)`, `"desc"`), passing no `ready`.
+- Fast tier: `asUser(name)` in `e2e/fixtures.ts` opens a context with the `aiops_dev_user` cookie for `dev`, `alice`, `bob`, `viewer` or `outsider`
+  (the cluster tier keeps the saved Keycloak states); `BackendApi.withHeaders({...})` adds `X-Org` or a token bearer to every call --
+  through `userApi` the proxy replaces it with the `aiops_org` cookie, so pinning an organization there needs a cookie-scoped context instead (see `orgScopedApi` in `e2e/cluster/tenancy-isolation.spec.ts`).
 
 ## Conventions
 

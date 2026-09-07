@@ -1,24 +1,24 @@
 """The ext-authz endpoint the gateway calls for every workload request."""
 
 import uuid
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
 from core import create_app
+from db.database import get_db_direct
+from models.membership import Membership
 from models.notebook import Notebook
 from models.vectordb_instance import DBVectorDBInstance
-from test_auth import (  # noqa: F401 (fixtures)
+from testing.rows import (
     NOTEBOOKS,
     add_row,
-    bearer,
     default_org_id,
     delete_rows,
-    make_token,
-    oidc_client,
-    rsa_key,
     user_id,
 )
+from testing.tokens import bearer, make_token
 from utils.gateway import id8
 from utils.hostnames import parse_hostname
 
@@ -236,6 +236,122 @@ def test_missing_token_is_401(oidc_client, alices_notebook):  # noqa: F811
     response = oidc_client.get(ROUTE, headers=host("nb", alices_notebook))
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_member_of_the_resource_organization_is_rescoped(
+    oidc_client,  # noqa: F811
+    tokens,
+    users,
+    other_org,  # noqa: F811
+):
+    """Bob's first membership is ``default``; a vector database in
+    ``other`` is authorized as a member of ``other``. Alice is not a
+    member there and stays denied."""
+    db = get_db_direct()
+    try:
+        db.add(
+            Membership(
+                user_id=user_id("bob"),
+                org_id=other_org,
+                role="member",
+                created_at=datetime.now(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    vectordb_id = uuid.UUID(
+        oidc_client.get("/v1alpha1/vectordb", headers=tokens["alice"]).json()[
+            0
+        ]["id"]
+    )
+    instance_id = add_row(
+        DBVectorDBInstance(
+            vectordb_id=vectordb_id, org_id=other_org, owner_id=user_id("bob")
+        )
+    )
+    try:
+        allowed = oidc_client.get(
+            ROUTE, headers=tokens["bob"] | host("vdb", instance_id)
+        )
+        assert allowed.status_code == 200, allowed.text
+        assert allowed.headers["X-Auth-Org"] == "other"
+        assert allowed.headers["X-Auth-User-Sub"] == "bob"
+        denied = oidc_client.get(
+            ROUTE, headers=tokens["alice"] | host("vdb", instance_id)
+        )
+        assert denied.status_code == 403
+    finally:
+        delete_rows(DBVectorDBInstance, instance_id)
+        db = get_db_direct()
+        try:
+            db.query(Membership).filter(
+                Membership.user_id == user_id("bob"),
+                Membership.org_id == other_org,
+            ).delete()
+            db.commit()
+        finally:
+            db.close()
+
+
+def test_legacy_row_with_no_organization_is_rescoped_to_default(
+    oidc_client,  # noqa: F811
+    tokens,
+    users,
+    other_org,  # noqa: F811
+):
+    """A pre-tenancy row (no org_id) belongs to the default organization
+    (auth/policy.py Policy.can_read); a caller currently active in
+    another organization is re-scoped back to default when they are
+    also a member there."""
+    db = get_db_direct()
+    try:
+        db.add(
+            Membership(
+                user_id=user_id("bob"),
+                org_id=other_org,
+                role="member",
+                created_at=datetime.now(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    legacy = add_row(
+        Notebook(
+            name="legacy-bob",
+            namespace="ai-stack",
+            type="vscode",
+            nvidia_gpu=False,
+            owner_id=user_id("bob"),
+        )
+    )
+    try:
+        # Bob's active organization is "other"; the resource is a legacy
+        # row with no organization at all.
+        headers = tokens["bob"] | host("nb", legacy) | {"X-Org": "other"}
+        allowed = oidc_client.get(ROUTE, headers=headers)
+        assert allowed.status_code == 200, allowed.text
+        assert allowed.headers["X-Auth-Org"] == "default"
+        assert allowed.headers["X-Auth-User-Sub"] == "bob"
+
+        # Alice has no membership in "other", so she reaches this call
+        # already active in "default": no re-scope is needed either way.
+        denied = oidc_client.get(
+            ROUTE, headers=tokens["alice"] | host("nb", legacy)
+        )
+        assert denied.status_code == 403
+    finally:
+        delete_rows(Notebook, legacy)
+        db = get_db_direct()
+        try:
+            db.query(Membership).filter(
+                Membership.user_id == user_id("bob"),
+                Membership.org_id == other_org,
+            ).delete()
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_disabled_mode_runs_as_the_dev_admin():

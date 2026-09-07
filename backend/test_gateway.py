@@ -502,8 +502,23 @@ def _shared_policy(*routes, rv="7"):
     }
 
 
-def test_add_oidc_target_creates_shared_policy_when_missing(gateway_env):
+def _api_without_policy(namespace, *, sso_route=True):
+    """Every object is missing (404) except, when sso_route, the ``sso``
+    HTTPRoute of ``namespace``."""
     api_instance = _api()
+
+    def get(group, version, ns, plural, name):
+        if sso_route and plural == "httproutes" and name == "sso":
+            assert ns == namespace
+            return {"metadata": {"name": "sso"}}
+        raise ApiException(status=404)
+
+    api_instance.get_namespaced_custom_object.side_effect = get
+    return api_instance
+
+
+def test_add_oidc_target_creates_shared_policy_when_missing(gateway_env):
+    api_instance = _api_without_policy("ai-stack")
     gateway.add_oidc_target(
         "ai-stack", "qdrant-abc", api_instance=api_instance
     )
@@ -568,16 +583,126 @@ def test_add_oidc_target_gives_up_after_five_conflicts(gateway_env):
     assert api_instance.patch_namespaced_custom_object.call_count == 5
 
 
-def test_add_oidc_target_skips_other_namespaces(gateway_env, caplog):
+def test_add_oidc_target_raises_without_policy_or_sso_route(gateway_env):
+    """No policy and no callback route in the namespace: nothing could
+    ever complete a login there, so the route must not stay exposed."""
+    api_instance = _api_without_policy("tenant-a", sso_route=False)
+    with pytest.raises(gateway.OidcPolicyError) as excinfo:
+        gateway.add_oidc_target(
+            "tenant-a", "qdrant-abc", api_instance=api_instance
+        )
+    assert "tenant-a/aiops-workloads-oidc" in str(excinfo.value)
+    api_instance.create_namespaced_custom_object.assert_not_called()
+    api_instance.patch_namespaced_custom_object.assert_not_called()
+
+
+def test_add_oidc_target_patches_the_policy_of_the_routes_namespace(
+    gateway_env,
+):
+    """The chart renders the policy in its release namespace; the route
+    there joins that policy, not the one in ai-stack."""
+    api_instance = _api(get=_shared_policy("sso"))
+    gateway.add_oidc_target(
+        "tenant-a", "qdrant-abc", api_instance=api_instance
+    )
+    api_instance.get_namespaced_custom_object.assert_called_once_with(
+        "gateway.envoyproxy.io",
+        "v1alpha1",
+        "tenant-a",
+        "securitypolicies",
+        "aiops-workloads-oidc",
+    )
+    args, _ = api_instance.patch_namespaced_custom_object.call_args
+    assert args[:5] == (
+        "gateway.envoyproxy.io",
+        "v1alpha1",
+        "tenant-a",
+        "securitypolicies",
+        "aiops-workloads-oidc",
+    )
+    assert args[5]["spec"]["targetRefs"] == [_ref("sso"), _ref("qdrant-abc")]
+
+
+def test_add_oidc_target_raises_when_the_patch_fails(gateway_env):
+    api_instance = _api(get=_shared_policy("sso"))
+    api_instance.patch_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    with pytest.raises(ApiException):
+        gateway.add_oidc_target(
+            "ai-stack", "qdrant-abc", api_instance=api_instance
+        )
+    api_instance.patch_namespaced_custom_object.assert_called_once()
+
+
+def test_add_oidc_target_raises_when_the_read_fails(gateway_env):
     api_instance = _api()
-    gateway.add_oidc_target("team-a", "qdrant-abc", api_instance=api_instance)
-    api_instance.get_namespaced_custom_object.assert_not_called()
-    assert "team-a" in caplog.text
+    api_instance.get_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    with pytest.raises(ApiException):
+        gateway.add_oidc_target(
+            "ai-stack", "qdrant-abc", api_instance=api_instance
+        )
+    api_instance.create_namespaced_custom_object.assert_not_called()
 
 
 def test_add_oidc_target_no_op_without_settings():
     api_instance = _api()
     gateway.add_oidc_target(
+        "ai-stack", "qdrant-abc", api_instance=api_instance
+    )
+    api_instance.get_namespaced_custom_object.assert_not_called()
+
+
+def test_protect_browser_route_attaches(gateway_env):
+    api_instance = _api(get=_shared_policy("sso"))
+    gateway.protect_browser_route(
+        "tenant-a", "qdrant-abc", api_instance=api_instance
+    )
+    args, _ = api_instance.patch_namespaced_custom_object.call_args
+    assert args[2] == "tenant-a"
+    assert args[5]["spec"]["targetRefs"] == [_ref("sso"), _ref("qdrant-abc")]
+    api_instance.delete_namespaced_custom_object.assert_not_called()
+
+
+def test_protect_browser_route_deletes_the_route_and_raises(gateway_env):
+    api_instance = _api(get=_shared_policy("sso"))
+    api_instance.patch_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    with pytest.raises(gateway.OidcPolicyError) as excinfo:
+        gateway.protect_browser_route(
+            "tenant-a", "qdrant-abc", api_instance=api_instance
+        )
+    assert "aiops-workloads-oidc" in str(excinfo.value)
+    assert "tenant-a/qdrant-abc" in str(excinfo.value)
+    api_instance.delete_namespaced_custom_object.assert_called_once_with(
+        "gateway.networking.k8s.io",
+        "v1",
+        "tenant-a",
+        "httproutes",
+        "qdrant-abc",
+    )
+
+
+def test_protect_browser_route_raises_even_when_the_delete_fails(
+    gateway_env,
+):
+    api_instance = _api_without_policy("tenant-a", sso_route=False)
+    api_instance.delete_namespaced_custom_object.side_effect = ApiException(
+        status=500
+    )
+    with pytest.raises(gateway.OidcPolicyError):
+        gateway.protect_browser_route(
+            "tenant-a", "qdrant-abc", api_instance=api_instance
+        )
+    api_instance.delete_namespaced_custom_object.assert_called_once()
+
+
+def test_protect_browser_route_no_op_without_settings():
+    api_instance = _api()
+    gateway.protect_browser_route(
         "ai-stack", "qdrant-abc", api_instance=api_instance
     )
     api_instance.get_namespaced_custom_object.assert_not_called()
@@ -593,6 +718,16 @@ def test_remove_oidc_target(gateway_env):
         "metadata": {"resourceVersion": "7"},
         "spec": {"targetRefs": [_ref("sso"), _ref("other")]},
     }
+
+
+def test_remove_oidc_target_in_any_namespace(gateway_env):
+    api_instance = _api(get=_shared_policy("sso", "qdrant-abc"))
+    gateway.remove_oidc_target(
+        "tenant-a", "qdrant-abc", api_instance=api_instance
+    )
+    args, _ = api_instance.patch_namespaced_custom_object.call_args
+    assert args[2] == "tenant-a"
+    assert args[5]["spec"]["targetRefs"] == [_ref("sso")]
 
 
 def test_remove_oidc_target_absent_or_missing_policy(gateway_env):
@@ -676,13 +811,15 @@ def test_ensure_gateway_client_secret_copies(gateway_env):
         data={"client-secret": "ZGV2"},
     )
     core.read_namespaced_secret.side_effect = [
-        source,
         ApiException(status=404),
+        source,
     ]
     gateway.ensure_gateway_client_secret("team-a", core_v1_api=core)
+    # The target is checked first: under the chart the Secret is already
+    # in the release namespace and there is no ai-stack source to read.
     assert core.read_namespaced_secret.call_args_list == [
-        mock.call("aiops-gateway-oidc", "ai-stack"),
         mock.call("aiops-gateway-oidc", "team-a"),
+        mock.call("aiops-gateway-oidc", "ai-stack"),
     ]
     core.create_namespaced_secret.assert_called_once()
     ns, body = core.create_namespaced_secret.call_args.args
@@ -702,6 +839,9 @@ def test_ensure_gateway_client_secret_skips_source_namespace_and_existing(
     core.read_namespaced_secret.assert_not_called()
     core.read_namespaced_secret.return_value = client.V1Secret()
     gateway.ensure_gateway_client_secret("team-a", core_v1_api=core)
+    core.read_namespaced_secret.assert_called_once_with(
+        "aiops-gateway-oidc", "team-a"
+    )
     core.create_namespaced_secret.assert_not_called()
 
 

@@ -15,12 +15,7 @@ from models.inference_instance import DBInferenceInstance
 from models.models import DBModel
 from models.organization import Organization
 from models.provider import Provider, ProviderModel
-from test_auth import (  # noqa: F401 (fixtures)
-    bearer,
-    make_token,
-    oidc_client,
-    rsa_key,
-)
+from testing.tokens import bearer, make_token
 from utils import litellm as ll
 from utils.gateway import id8
 
@@ -386,9 +381,9 @@ def test_target_labels_covers_instances_and_hosted_models(client):
 
 
 def test_org_spend_endpoint(client, monkeypatch):
-    import api.organizations as orgs
+    import api.usage as usage
 
-    monkeypatch.setattr(orgs, "get_client", lambda: None)
+    monkeypatch.setattr(usage, "get_client", lambda: None)
     assert (
         client.get("/v1alpha1/organizations/current/spend").status_code == 503
     )
@@ -399,13 +394,13 @@ def test_org_spend_endpoint(client, monkeypatch):
         "max_budget": 10.0,
         "budget_reset_at": "2026-10-01T00:00:00Z",
     }
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
 
     def fake_ensure(db, org, core_v1=None):
         org.litellm_team_id = "t-1"
         return "sk-virtual"
 
-    monkeypatch.setattr(orgs, "ensure_org_key", fake_ensure)
+    monkeypatch.setattr(usage, "ensure_org_key", fake_ensure)
     response = client.get("/v1alpha1/organizations/current/spend")
     assert response.status_code == 200
     assert response.json() == {
@@ -423,7 +418,7 @@ def test_org_spend_endpoint(client, monkeypatch):
 
 
 def test_put_budget_calls_update_team_budget_and_persists(client, monkeypatch):
-    import api.organizations as orgs
+    import api.usage as usage
 
     litellm = mock.Mock()
     litellm.team_info.return_value = {
@@ -431,13 +426,13 @@ def test_put_budget_calls_update_team_budget_and_persists(client, monkeypatch):
         "max_budget": 25.0,
         "budget_reset_at": "2026-10-01T00:00:00Z",
     }
-    monkeypatch.setattr(orgs, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
 
     def fake_ensure(db, org, core_v1=None):
         org.litellm_team_id = "t-9"
         return "sk-virtual"
 
-    monkeypatch.setattr(orgs, "ensure_org_key", fake_ensure)
+    monkeypatch.setattr(usage, "ensure_org_key", fake_ensure)
 
     response = client.put(
         "/v1alpha1/organizations/current/budget", json={"budget_usd": 25.0}

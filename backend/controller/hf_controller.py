@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 
@@ -107,6 +108,15 @@ class HuggingFaceController(Controller):
             for key, value in instance.config.env_vars.items():
                 default_env[key] = value
 
+        # Spec 6.3: TGI shards across the GPUs. The chart renders command
+        # and env only, and the launcher reads NUM_SHARD as --num-shard.
+        if (
+            instance.model.category == "llm"
+            and instance.gpu_count > 1
+            and "NUM_SHARD" not in default_env
+        ):
+            default_env["NUM_SHARD"] = str(instance.gpu_count)
+
         # Create the final env_vars list
         for key, value in default_env.items():
             env_vars.append(
@@ -124,7 +134,7 @@ class HuggingFaceController(Controller):
         instance: InferenceInstanceSchema,
         engineChart: EngineChartsSchema,
     ):
-        self.create_ns_if_needed()
+        await asyncio.to_thread(self.create_ns_if_needed)
         await self._create_hf_api_token_secret()
         await super().install(instance, engineChart)
 
@@ -145,7 +155,11 @@ class HuggingFaceController(Controller):
         )
 
         try:
-            self.core_v1_api.create_namespaced_secret(self.namespace, secret)
+            await asyncio.to_thread(
+                self.core_v1_api.create_namespaced_secret,
+                self.namespace,
+                secret,
+            )
             self.logger.info(f"Secret '{secret_name}' created successfully")
         except ApiException as e:
             if e.status == 409:

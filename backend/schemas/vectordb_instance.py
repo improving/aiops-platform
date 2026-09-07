@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -17,6 +18,10 @@ class VectorDBInstanceSchema(BaseModel):
     api_endpoint: str | None = None
     ready: bool | None = False
     status: str | None = None
+    # Operations (#15): set by the platform, read by the UI.
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+    stopped_at: datetime | None = None
 
     model_config = {
         "from_attributes": True,

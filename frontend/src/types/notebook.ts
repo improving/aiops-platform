@@ -13,7 +13,10 @@ export interface Notebook {
   service_port: number;
   created_at: string;
   updated_at: string;
-  status: string;
+  status: string | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
+  stopped_at?: string | null;
   ready: boolean;
   endpoint: string;
 }

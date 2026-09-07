@@ -5,6 +5,7 @@ from kubernetes import client
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from api.instance_inspection import InstanceKind, add_inspection_routes
 from auth.current_user import CurrentUser, get_current_user, require_writer
 from auth.policy import authorize_read, authorize_write, org_scope
 from controller.vectordb_controller import VectorDBController
@@ -17,11 +18,20 @@ from schemas.vectordb import VectorDBSchema
 from schemas.vectordb_instance import VectorDBInstanceSchema
 from utils.credentials import (
     delete_credential,
+    find_credential,
     generate_secret,
     store_credential,
 )
 from utils.gateway import gateway_settings, instance_url
+from utils.instance_status import (
+    STATUS_FAILED,
+    STATUS_PENDING,
+    apply_pod_status,
+    mark_failed,
+    refresh_stale,
+)
 from utils.kubernetes_utils import (
+    get_default_namespace,
     get_pod_status_and_readiness,
     get_service_endpoint,
 )
@@ -51,11 +61,7 @@ def list_vectordb_instances(
         .all()
     )
     for instance in vectordb_instances:
-        instance_ready, instance_status = check_pod_status_and_readiness(
-            instance
-        )
-        instance.ready = instance_ready
-        instance.status = instance_status
+        instance.ready, _ = check_pod_status_and_readiness(instance, db)
     return vectordb_instances  # SQLAlchemy will handle the conversion
 
 
@@ -93,12 +99,9 @@ def get_vectordb_instance(
             )
         authorize_read(user, vectordb_instance, "vector database instance")
 
-        instance_ready, instance_status = check_pod_status_and_readiness(
-            vectordb_instance
+        vectordb_instance.ready, _ = check_pod_status_and_readiness(
+            vectordb_instance, db
         )
-
-        vectordb_instance.ready = instance_ready
-        vectordb_instance.status = instance_status
 
         return vectordb_instance
     except HTTPException:
@@ -107,6 +110,37 @@ def get_vectordb_instance(
     except Exception as e:
         logger.exception(f"Error in get_vectordb_instance: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def _find_vectordb_instance(
+    db: Session, id: uuid.UUID, user: CurrentUser
+) -> DBVectorDBInstance:
+    instance = (
+        db.query(DBVectorDBInstance)
+        .filter(DBVectorDBInstance.id == id)
+        .filter(org_scope(DBVectorDBInstance, user))
+        .first()
+    )
+    if not instance:
+        raise HTTPException(
+            status_code=404, detail="Vector database instance not found"
+        )
+    return instance
+
+
+VECTORDB_KIND = InstanceKind(
+    label="vector database instance",
+    find=_find_vectordb_instance,
+    authorize_read=authorize_read,
+    authorize_write=authorize_write,
+    make_controller=lambda db, row: VectorDBController(),
+    namespace=lambda controller, row: controller.namespace,
+    pod_labels=lambda db, controller, row: controller.get_pod_labels(row),
+    # Vector databases get restart only (spec 6.3): no stop/resume yet.
+    restart=True,
+    response_model=VectorDBInstanceSchema,
+)
+add_inspection_routes(router, "/v1alpha1/vectordb_instances", VECTORDB_KIND)
 
 
 @router.post(
@@ -157,6 +191,7 @@ async def create_vectordb_instance(
         endpoint=vectordb_instance.endpoint,
         org_id=user.org_id,
         owner_id=user.id,
+        status=STATUS_PENDING,
     )
     db.add(dbVectorDBInstance)
     db.commit()
@@ -183,20 +218,26 @@ async def create_vectordb_instance(
             dbVectorDBInstance.id,
             value,
         )
+    except Exception as e:
+        logger.exception(f"Failed to store the credential: {str(e)}")
+        mark_failed(db, dbVectorDBInstance, e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to store the credential: {str(e)}",
+        )
+
+    try:
         await controller.install(instanceSchema, credential=value)
     except Exception as e:
         logger.exception(f"Failed to install Helm chart: {str(e)}")
+        mark_failed(db, dbVectorDBInstance, e)
         try:
-            delete_credential(
-                db, controller.namespace, KIND_VECTORDB, dbVectorDBInstance.id
-            )
+            await controller.uninstall(instanceSchema)
         except Exception:
             logger.exception(
-                "Failed to remove the credential of %s after a failed install",
+                "Failed to uninstall the release of %s after a failed install",
                 dbVectorDBInstance.id,
             )
-        db.delete(dbVectorDBInstance)
-        db.commit()
         raise HTTPException(
             status_code=500, detail=f"Failed to install Helm chart: {str(e)}"
         )
@@ -252,7 +293,10 @@ async def update_vectordb_instance(
     try:
         await controller.upgrade(instanceSchema)
     except Exception as e:
+        # The gateway may have deleted the browser route (fail closed):
+        # the row must not keep saying Ready with an endpoint.
         logger.exception(f"Failed to upgrade Helm chart: {str(e)}")
+        mark_failed(db, dbVectorDBInstance, e)
         raise HTTPException(
             status_code=500, detail=f"Failed to upgrade Helm chart: {str(e)}"
         )
@@ -293,55 +337,93 @@ async def delete_vectordb_instance(
         )
     authorize_write(user, dbVectorDBInstance, "vector database instance")
 
-    controller = VectorDBController()
-    instanceSchema = VectorDBInstanceSchema(
-        id=dbVectorDBInstance.id,
-        vectorDB=VectorDBSchema.model_validate(dbVectorDBInstance.vectorDB),
-        configParams=dbVectorDBInstance.configParams,
-        endpoint=dbVectorDBInstance.endpoint,
-    )
-
+    # A Failed launch may have no release and no reachable cluster
+    # behind it (the install failed before or while talking to
+    # Kubernetes); its row must still be deletable, so for a Failed row
+    # a controller, uninstall or credential failure is logged, not fatal.
+    failed = dbVectorDBInstance.status == STATUS_FAILED
+    controller = None
     try:
-        await controller.uninstall(instanceSchema)
+        controller = VectorDBController()
     except Exception as e:
-        logger.exception(f"Failed to uninstall Helm chart: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to uninstall Helm chart: {str(e)}"
+        if not failed:
+            raise
+        logger.warning(
+            f"Deleting failed instance {id} without a controller: {e}"
         )
+
+    if controller is not None:
+        instanceSchema = VectorDBInstanceSchema(
+            id=dbVectorDBInstance.id,
+            vectorDB=VectorDBSchema.model_validate(
+                dbVectorDBInstance.vectorDB
+            ),
+            configParams=dbVectorDBInstance.configParams,
+            endpoint=dbVectorDBInstance.endpoint,
+        )
+        try:
+            await controller.uninstall(instanceSchema)
+        except Exception as e:
+            if not failed:
+                logger.exception(f"Failed to uninstall Helm chart: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to uninstall Helm chart: {str(e)}",
+                )
+            logger.warning(
+                f"Deleting failed instance {id}; uninstall failed: {e}"
+            )
 
     # After the release and its policy: a failure here keeps the row, so
     # a retry uninstalls again (a missing release is not an error) and
-    # deletes the Secrets.
+    # deletes the Secrets. The Secrets are written before the install,
+    # so a Failed row without a controller still has them: the namespace
+    # then comes from the credential row, else the default.
+    if controller is not None:
+        namespace = controller.namespace
+    else:
+        credential = find_credential(db, KIND_VECTORDB, dbVectorDBInstance.id)
+        namespace = (
+            credential.namespace if credential else get_default_namespace()
+        )
     try:
-        delete_credential(
-            db, controller.namespace, KIND_VECTORDB, dbVectorDBInstance.id
-        )
+        delete_credential(db, namespace, KIND_VECTORDB, dbVectorDBInstance.id)
     except Exception as e:
-        logger.exception(f"Failed to delete the credential: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Failed to delete the credential Secrets: {str(e)}",
+        if not failed:
+            logger.exception(f"Failed to delete the credential: {str(e)}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Failed to delete the credential Secrets: {str(e)}",
+            )
+        logger.warning(
+            f"Deleting failed instance {id}; credential delete failed: {e}"
         )
+        # The bookkeeping row goes with the instance row: nobody retries
+        # a deleted instance, and the Secrets carry MANAGED_BY_LABEL for
+        # an operator sweep.
+        credential = find_credential(db, KIND_VECTORDB, dbVectorDBInstance.id)
+        if credential is not None:
+            db.delete(credential)
 
     db.delete(dbVectorDBInstance)
     db.commit()
     return {"message": "Vector database instance deleted successfully"}
 
 
-def check_pod_status_and_readiness(instance: DBVectorDBInstance):
-    """
-    Check the status and readiness of a vector database instance's pod.
-
-    Args:
-        instance (DBVectorDBInstance): The vector database instance to check.
-
-    Returns:
-        tuple: A tuple containing the readiness status and the pod status.
-    """
-    controller = VectorDBController()
-    pod_labels = controller.get_pod_labels(instance)
-
-    return get_pod_status_and_readiness(controller.namespace, pod_labels)
+def check_pod_status_and_readiness(
+    instance: DBVectorDBInstance,
+    db: Session,
+    controller: VectorDBController | None = None,
+):
+    """Look at the pods, persist the derived status and return
+    (ready, persisted status). The poller passes one controller for the
+    whole tick; a request builds its own."""
+    controller = controller if controller is not None else VectorDBController()
+    pods = get_pod_status_and_readiness(
+        controller.namespace, controller.get_pod_labels(instance)
+    )
+    apply_pod_status(db, instance, pods)
+    return pods.ready, instance.status
 
 
 def update_all_vectordb_instance_endpoints(db: Session):
@@ -368,6 +450,13 @@ def update_all_vectordb_instance_endpoints(db: Session):
 
         for instance in instances:
             update_instance_endpoints(instance, db)
+
+        refresh_stale(
+            db,
+            DBVectorDBInstance,
+            check_pod_status_and_readiness,
+            VectorDBController,
+        )
     finally:
         db.close()
 

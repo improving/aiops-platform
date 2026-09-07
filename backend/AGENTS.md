@@ -23,7 +23,11 @@ Tests need `TEST_MODE=true`: `utils/genid.py` reads it at import to make ids det
 `conftest.py` defaults `TEST_MODE=true` and `AUTH_MODE=disabled`, so single-test commands work without them.
 The SQLite file name is deterministic too: a direct `pytest` run reuses the file of the previous run,
 so remove `tmp/*.db` (as `runtest.sh` does) when a run fails on a duplicate id.
-The Helm client runs `helm version` when a controller is constructed, so tests need the binary as well.
+Constructing an inference controller is cheap;
+its Helm client runs `helm version` on first use (chart lookup, install, upgrade, uninstall),
+so a test that reaches those passes `helm_client=` or needs the binary.
+Plain test helpers live in the `testing` package (`tokens.py`, `rows.py`, `pods.py`); `conftest.py` carries the
+shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); no test module imports another.
 
 ## Architecture
 
@@ -32,8 +36,9 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   FastAPI lifespan. `init_db` first runs the Alembic migrations (`db/migrate.py` `upgrade_to_head`,
   `alembic/versions/`) on the app engine; a database that predates Alembic is stamped `0001` first.
 - `api/*.py` are the routers (`/v1alpha1/...`): `models`, `engines`, `hosts`, `inference_instance`,
+  `inference_operations` (stop/resume/scale), `inference_status` (chart lookup, persisted status, the poller),
   `vectordb` and `vectordb_instance`, `notebooks`, `model_adapters`, `finetune`, `credentials`, `authz`, `chat`,
-  `organizations`.
+  `organizations`, `usage`. `instance_inspection.py` is not a router of its own; see "Operations".
   Create endpoints persist a row, then call a controller; on install failure they delete the row again.
   `inference_instance` requires `HF_API_TOKEN` for every engine except those in `NO_HF_TOKEN_ENGINES` (Ollama).
 - `controller/`: `base_controller.Controller` is the Helm workflow (fetch chart, render values, install, upgrade,
@@ -56,19 +61,21 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   lives in subclasses (for example `schemas/notebook.py` `NotebookCreateSchema`: DNS-1123 name, max 32 chars,
   because the chart cuts `<name>-<id>-kf-notebooks-<name>` at 41).
 - `utils/gateway.py` creates and deletes the `HTTPRoute`s and gateway `SecurityPolicy`/`BackendTrafficPolicy`
-  objects for every deployed instance:
-  browser hosts (`nb-<id8>`, `vdb-<id8>`) join the shared `add_oidc_target`/`remove_oidc_target` policy
-  `aiops-workloads-oidc`, SDK hosts (`vdb-<id8>-api`, `inf-<id8>`) get their own `apikey` policy once a
-  credential Secret exists, notebook routes get a `BackendTrafficPolicy` for long-lived WebSockets and `inf-` routes one with
-  `INFERENCE_TIMEOUTS` (no request timeout, 10 min idle) because Envoy's default 15 s cut streamed answers,
-  and `ensure_reference_grant`/`ensure_gateway_client_secret` extend the cross-namespace `ReferenceGrant`s
-  and copy the OIDC client Secret when `AIOPS_NAMESPACE` points somewhere other than `ai-stack`.
-  Every function is a no-op without `AIOPS_PARENT_DOMAIN`.
+  objects for every deployed instance: browser hosts (`nb-<id8>`, `vdb-<id8>`) join the shared
+  `aiops-workloads-oidc` policy of their own namespace (a SecurityPolicy cannot target another namespace's
+  route), SDK hosts (`vdb-<id8>-api`, `inf-<id8>`) get their own `apikey` policy, notebook routes get a
+  `BackendTrafficPolicy` for WebSockets and `inf-` routes one with no request timeout (Envoy's default 15 s cut
+  streamed answers). Every function is a no-op without `AIOPS_PARENT_DOMAIN`.
+  Browser routes fail closed (ADR 0002): a failed route create or a failed `protect_browser_route` policy
+  attach both delete the route again and raise `OidcPolicyError`, so install/upgrade never mislabels either as
+  a Helm error.
 - `utils/kubernetes_utils.py` resolves the fallback service endpoint used when the gateway is not configured
   (loads kube config, file then in-cluster; LoadBalancer ingress IP or hostname, else the cluster IP,
   and `None` while nothing is known so the scheduler keeps polling).
   `paths.py` anchors `templates/`, `raw_data/` and `tmp/` on the package directory,
   so the app works from any working directory.
+- `api/config.py` serves `GET /v1alpha1/config/ui` without a token (like `/health`), read from env at call
+  time, so the platform chart configures the UI's embeds without rebuilding the image (`test_config.py`).
 
 ## Authentication
 
@@ -80,11 +87,14 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   The fetch uses `urllib`: put a private CA in `SSL_CERT_FILE`.
 - `auth/current_user.py` `get_current_user` is the dependency on every route except `/health`
   (`HTTPBearer(auto_error=False)`, 401s carry `WWW-Authenticate: Bearer`, an unreachable JWKS is a 503).
-  It upserts `users` by `sub` and the membership in the `default` organization with the role from
-  `realm_access.roles` (`admin` > `member` > `viewer`; Keycloak owns the role, so a changed role is written back).
+  It upserts `users` by `sub`; the membership role is set once when the membership is created
+  (see "Tenancy, audit and tokens") and is never overwritten from the token.
   Client-credentials tokens (no `email`, `azp` set) become `svc:<azp>` with role `member`.
-  In `disabled` mode every request is the `dev` admin. `require_role(...)` wraps it
-  (`require_writer` on create routes, `require_admin` on `/reload-data` and `/refresh-db`).
+  In `disabled` mode every request is the `dev` admin, unless `TEST_MODE=true` also honours `X-Dev-User`
+  (see "Tenancy, audit and tokens"). `require_role(...)` wraps it
+  (`require_writer` on create routes, `require_platform_admin` on `/reload-data` and `/refresh-db`).
+  `auth/roles.py` (role constants) and `auth/errors.py` (`unauthorized`) are split out so `dev_users.py` can
+  raise a 401 without importing `current_user.py`, which imports `dev_users.py`.
 - `auth/policy.py`: list routes filter with `org_scope(model, user)`, create routes set `org_id`/`owner_id`,
   get/update/delete call `authorize_read`/`authorize_write` (403 `You do not own this <kind>`).
   `Policy.can_read` is same organization (rows with `org_id` NULL belong to `default`),
@@ -199,14 +209,11 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   Migration `0006` (`down_revision = "0005"`) adds `providers` and `provider_models`
   (`provider_models.provider_id` cascades in the ORM relationship and the FK, `ondelete="CASCADE"`, since
   SQLite does not enforce FK cascades on its own).
-  `api/chat.py` and `api/organizations.py` are the two callers outside `api/providers.py`: see their own bullets.
-- `api/organizations.py` `GET /v1alpha1/organizations/current/spend` (any member) and
-  `PUT /v1alpha1/organizations/current/budget` (`require_admin`, body `{"budget_usd": number | null}`) are the
-  budget half of Phase 2b: `PUT` stores `budget_usd` on the organization row first, then (outside
-  `AIOPS_CHAT_MOCK`) `ensure_org_key`s the LiteLLM team and calls `LiteLLMClient.update_team_budget`; both
-  routes answer the same document (`team_id`, `spend`, `max_budget`, `budget_reset_at` from `/team/info`, plus
-  `budget_usd` from the row). `AIOPS_CHAT_MOCK=true` skips LiteLLM on both: `PUT` just persists the row, `GET`
-  answers a canned `spend`/`budget_reset_at` alongside the real `budget_usd`.
+  `api/chat.py` and `api/usage.py` are the two callers outside `api/providers.py`: see their own bullets.
+- `api/usage.py` (its own router, next to the organizations one; imports `_current_org`/`_org_budget` from
+  `api/organizations.py`, never the reverse; `test_usage.py`/`test_chat.py` patch `get_client`/`ensure_org_key`
+  on it) is the spend and budget half of Phase 2b (routes and response shapes in docs/api.md); `PUT` stores
+  `budget_usd` on the row before it (outside `AIOPS_CHAT_MOCK`) calls `LiteLLMClient.update_team_budget`.
 - Usage: `GET /v1alpha1/organizations/current/usage?days=30` (any member, `days` clamped `1..90`, 422 outside
   it) reads `LiteLLMClient.spend_logs` for the caller's organization team since `days - 1` days ago at 00:00
   UTC through now, then aggregates by `(display name, model_group, day)`.
@@ -234,6 +241,41 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   and the other kinds `Policy.can_read`. 200 carries `X-Auth-User-Email`, `X-Auth-User-Sub`, `X-Auth-Org`;
   403 reuses `not_owner`; 404 covers unknown and unparsable hosts; one info log line per decision.
   `test_authz.py` imports the token helpers from `test_auth.py`.
+
+## Tenancy, audit and tokens
+
+Routes, parameters and response shapes are in docs/api.md; here, where things live and what bites:
+
+- `auth/current_user.py` `resolve_user` picks the active organization (`X-Org`, else first membership by
+  `created_at` then slug) and accepts pending invitations for the user's verified email; the realm role only
+  ever sets a *new* membership's role (see Authentication).
+- `auth/dev_users.py`: `X-Dev-User` (`AUTH_MODE=disabled` + `TEST_MODE=true`) names `dev`/`alice`/`bob`/`viewer`/`outsider`;
+  `ensure_dev_memberships` reseeds them every request, so a removed membership reappears on the next call.
+- `api/organizations.py` also owns membership admin and invitations; `api/audit.py` the audit log;
+  `api/tokens.py` personal tokens.
+- `audit/middleware.py` (outermost) writes one `AuditEvent` per non-`GET`/`HEAD`/`OPTIONS` `/v1alpha1/` request
+  (except chat, embeddings, rerank, `authz`); `audit/events.py` derives kind/id/action/actor from the request.
+- `auth/tokens.py`: `aiops_<8>_<32>`, `sha256(secret)` stored, `hmac.compare_digest` compared; resolved before
+  the JWT path.
+- Tests: `test_tenancy.py`, `test_audit.py`, `test_tokens.py` (oidc mode; disabled mode never resolves a
+  token). Rows inserted directly use fixed UUIDs so `genid` counters and snapshot ids do not move.
+
+## Operations
+
+Routes, parameters and the day-2 action semantics are in docs/api.md; here, where things live and what bites:
+
+- `utils/instance_status.py`: `mark_pending`/`mark_failed` (`last_error` capped at 4000 chars), `apply_pod_status`
+  (a pod with a `deletion_timestamp` counts for neither ready nor failed; only `resume` leaves `Stopped`) and
+  `refresh_stale` (one controller per scheduler tick). `NULL` status means "not looked at yet".
+  `READ_ONLY_STATUS_FIELDS` (inference only) is the columns a PUT may never set.
+- One `check_pod_status_and_readiness(instance, db, controller=None)` signature across the three routers;
+  `test_auth.py` monkeypatches it by name in `api.vectordb_instance` and `api.inference_instance`.
+  `utils/kubernetes_utils.py` `PodStatus` is the only return type, there is no tuple shim.
+- `api/instance_inspection.py` (`InstanceKind`, `add_inspection_routes`) is the shared logs/events/restart
+  layer; `utils/pod_inspection.py` does the Kubernetes reads. `api/inference_operations.py` is stop/resume/scale
+  on top of it; `api/inference_status.py` is the chart lookup and status-polling leaf both of it and
+  `api/inference_instance.py` import from.
+- `test_operations.py` and `test_pod_inspection.py` cover all of this with mocked Helm and Kubernetes clients.
 
 ## Model registry (Phase 3)
 
@@ -295,7 +337,7 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   `test_registry_importers.py` exercises every parser against a fixture recorded from the real API
   (`test_fixtures/*.json`, trimmed to a handful of entries) and every `search`/`fetch` against an
   `httpx.MockTransport`; importers never touch the network in tests.
-- `api/registry.py` (`/v1alpha1/registry`, `require_admin` on every write; `GET /` is open to members but
+- `api/registry.py` (`/v1alpha1/registry`, `require_platform_admin` on every write; `GET /` is open to members but
   always filtered to `status == "published"` for them, `?status=&source=&capability=&q=` for an admin) is the
   admin surface: `GET /search?source=huggingface|ollama|openrouter&q=&limit=` returns previews
   (`RegistryEntryPreviewSchema`, `already_imported` looked up by `(source, source_id)`);
@@ -330,6 +372,9 @@ The Helm client runs `helm version` when a controller is constructed, so tests n
   drop the spurious `NUMERIC` to `UUID` `alter_column` calls SQLite reflection produces).
   Data steps go through typed `sa.table()`/`sa.column()` objects so UUID binds work on SQLite and Postgres.
   `make db-migrate` applies them to the local Postgres; `uv run alembic history` shows the chain.
+- Migration `0008` is the single head; a stream's column goes into `0008` on `feat/enterprise-schema` and is
+  merged forward, never its own migration, so `upgrade_to_head` never sees a fork; `test_migrations.py` checks
+  every model agrees column for column.
 - Every `HTTPException` carries a human-readable string `detail`; the frontend shows it in a toast.
   Validation errors are 422, duplicates 409, an unreachable cluster 503.
 - `pyproject.toml` turns `DeprecationWarning` into errors in tests; add a targeted `filterwarnings` entry rather

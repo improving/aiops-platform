@@ -15,7 +15,10 @@ interface VectorDBInstanceSchema {
   // null when no gateway is configured.
   api_endpoint?: string | null;
   ready: boolean;
-  status: string;
+  status: string | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
+  stopped_at?: string | null;
 }
 
 // GET /api/v1alpha1/credentials/vdb/{id}: the value is returned once,

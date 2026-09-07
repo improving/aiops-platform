@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from utils import genid
 
@@ -51,8 +52,21 @@ class InferenceInstanceSchema(BaseModel):
     # launched from one; every consumer reads
     # ``instance.reference or instance.model.modelId``.
     reference: str | None = None
+    # Operations (#15, #16): set by the platform, read by the UI.
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+    stopped_at: datetime | None = None
+    # Launch resources (#16); the controllers render them into the values.
+    replicas: int = 1
+    gpu_count: int = 1
+    cpu: str | None = None
+    memory: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# A Kubernetes resource quantity: "4", "500m", "16Gi", "0.5".
+QUANTITY_PATTERN = r"^[0-9]+(\.[0-9]+)?(m|[EPTGMK]i?)?$"
 
 
 class InferenceInstanceCreateSchema(InferenceInstanceSchema):
@@ -62,6 +76,22 @@ class InferenceInstanceCreateSchema(InferenceInstanceSchema):
     name validation: it selects one of the model's serving options
     (schemas/serving_option.py) and its ``reference`` is persisted on
     the instance row instead of being echoed back on read.
+
+    The resource bounds live here for the same reason: rows written
+    before them must still serialize through InferenceInstanceSchema.
     """
 
     serving_option_id: uuid.UUID | None = None
+    replicas: int = Field(default=1, ge=1, le=16)
+    gpu_count: int = Field(default=1, ge=1, le=8)
+    cpu: str | None = Field(
+        default=None, pattern=QUANTITY_PATTERN, max_length=32
+    )
+    memory: str | None = Field(
+        default=None, pattern=QUANTITY_PATTERN, max_length=32
+    )
+
+    @field_validator("cpu", "memory", mode="before")
+    @classmethod
+    def empty_is_none(cls, value):
+        return None if value == "" else value

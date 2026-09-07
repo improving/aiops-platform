@@ -124,6 +124,13 @@ class VLLMController(Controller):
             for key, value in instance.config.args.items():
                 default_args[key] = value
 
+        # Spec 6.3: one shard per GPU unless the user set it themselves.
+        if instance.gpu_count > 1 and not (
+            default_args.keys()
+            & {"--tensor-parallel-size", "tensor-parallel-size"}
+        ):
+            default_args["--tensor-parallel-size"] = str(instance.gpu_count)
+
         # Create the final args list
         for key, value in default_args.items():
             if key in ("max_model_len", "port"):

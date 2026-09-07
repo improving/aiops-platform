@@ -24,11 +24,11 @@ from sqlalchemy.orm import Session
 from api.chat import chat_mock_enabled
 from api.providers import _add_model_row, _register
 from auth.current_user import (
-    ROLE_ADMIN,
     CurrentUser,
     get_current_user,
-    require_admin,
+    require_platform_admin,
 )
+from auth.roles import ROLE_ADMIN
 from db.database import get_db
 from models.finetune import DBFinetune
 from models.inference_instance import DBInferenceInstance
@@ -187,7 +187,7 @@ async def search_registry(
     q: str = "",
     limit: int = 20,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     """Previews for the "Import from Hugging Face"/"Add Ollama
     model"/"Add hosted model" dialogs; Ollama has no listing endpoint,
@@ -223,7 +223,7 @@ def _register_openrouter_model(
 async def import_entry(
     body: RegistryImportRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     if _already_imported(db, body.source, body.source_id):
         raise HTTPException(
@@ -303,7 +303,7 @@ async def import_entry(
 def manual_create(
     body: RegistryManualCreateRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     model = create_manual_model(
         db,
@@ -326,7 +326,7 @@ def update_entry(
     id: uuid.UUID,
     body: RegistryUpdateRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     model = db.query(DBModel).filter(DBModel.id == id).first()
     if model is None:
@@ -366,7 +366,7 @@ def update_entry(
 async def sync_entry(
     id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     model = db.query(DBModel).filter(DBModel.id == id).first()
     if model is None:
@@ -389,7 +389,7 @@ async def sync_entry(
 def delete_entry(
     id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_platform_admin),
 ):
     model = db.query(DBModel).filter(DBModel.id == id).first()
     if model is None:
