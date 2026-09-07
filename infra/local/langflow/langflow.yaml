@@ -49,6 +49,30 @@ spec:
             # no login screen inside the frame the gateway already put an
             # OIDC login in front of. Turn off for version 2 in favour of
             # per-user Langflow API keys.
+            # Langflow writes its database next to the installed package
+            # (/app/.venv/.../langflow/langflow.db), not into the mounted
+            # volume, so before these two every pod restart lost every flow
+            # -- and, because a restart also changes the auto-login user,
+            # left already-open browsers holding a token for a user that no
+            # longer exists. Point the config dir at the volume and keep the
+            # database in it.
+            - name: LANGFLOW_CONFIG_DIR
+              value: /app/langflow
+            - name: LANGFLOW_SAVE_DB_IN_CONFIG_DIR
+              value: "true"
+            # The Develop page embeds Langflow from its own gateway host,
+            # so its cookies are third-party there. Default SameSite=Lax
+            # cookies are not sent in that context, which left the frame
+            # stuck on "Loading..." while the same URL worked in a tab.
+            # None requires Secure, which the gateway's TLS provides.
+            - name: LANGFLOW_ACCESS_SAME_SITE
+              value: none
+            - name: LANGFLOW_ACCESS_SECURE
+              value: "true"
+            - name: LANGFLOW_REFRESH_SAME_SITE
+              value: none
+            - name: LANGFLOW_REFRESH_SECURE
+              value: "true"
             - name: LANGFLOW_AUTO_LOGIN
               value: "true"
             - name: LANGFLOW_HOST
@@ -132,13 +156,24 @@ spec:
 # does not hit it. https://langflow.127.0.0.1.nip.io/oauth2/callback is
 # registered as its own entry on the aiops-gateway client
 # (infra/local/auth/realm-aiops.json), alongside the sso callback.
-# extAuth (#30): the OIDC block alone only proves the realm authenticated
-# somebody, and the backend never saw the request, so "any member" was not
-# actually enforced and nothing was logged. The check below asks
-# /v1alpha1/authz/route the same way the instance routes do; there is no
-# per-owner rule to apply (one shared Langflow, no row to own), so it
-# allows any signed-in member and refuses script identities. The backend
-# Service is in this namespace, so no ReferenceGrant is needed.
+# No extAuth, and no forwarded access token. Both were tried (#30) and both
+# break Langflow, for the same reason:
+#   - forwardAccessToken puts the *platform's* Keycloak token in
+#     Authorization on every upstream request. Langflow reads that header
+#     as its own JWT and answers 401 "Invalid token" to every API call
+#     (measured: no header 403, foreign token 401, its own token 200), so
+#     the page loads and nothing in it works. The browser cannot recover,
+#     because the /api/v1/auto_login call that would mint a good token
+#     carries the same bad header.
+#   - ext-authz needs that header: it is how the platform token reaches
+#     /v1alpha1/authz/route (headersToExtAuth). Turning the forward off to
+#     save Langflow makes every ext-authz call 401 instead.
+# So the check cannot be added until something replaces the Authorization
+# header with a token Langflow accepts, which is the session bridge in
+# docs/superpowers/plans/2026-09-07-langflow-per-user-identity.md (#29).
+# Until then Langflow is protected by gateway OIDC alone: any realm user,
+# no per-member rule and no log. That is the state #30 set out to fix and
+# could not, so #30 is reopened rather than left half-applied.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
@@ -166,23 +201,14 @@ spec:
     redirectURL: https://langflow.127.0.0.1.nip.io/oauth2/callback
     logoutPath: /oauth2/logout
     cookieDomain: 127.0.0.1.nip.io
-    forwardAccessToken: true
+    # Same reason as the Langflow cookies above: the gateway's own OIDC
+    # cookies are third-party inside the Develop iframe, and without this
+    # the flow reached /oauth2/callback and answered "OAuth flow failed".
+    cookieConfig:
+      sameSite: None
+    forwardAccessToken: false
     refreshToken: true
     scopes:
       - openid
       - profile
       - email
-  extAuth:
-    headersToExtAuth:
-      - authorization
-      - cookie
-    http:
-      backendRefs:
-        - name: aiops-backend
-          port: 8000
-      path: /v1alpha1/authz/route
-      headersToBackend:
-        - x-auth-user-email
-        - x-auth-user-sub
-        - x-auth-org
-    failOpen: false

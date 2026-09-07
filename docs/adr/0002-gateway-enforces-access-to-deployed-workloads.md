@@ -103,7 +103,8 @@ That route was serving with nothing checking the key,
 so the failure makes an existing exposure visible rather than creating a new one.
 The fix for such a row is to delete and relaunch it.
 
-Amended 2026-09-07 (#30): Langflow is decided by the control plane too.
+Amended 2026-09-07 (#30), then reverted the same day; kept here as the record of why.
+The intent was: Langflow is decided by the control plane too.
 It keeps a `SecurityPolicy` of its own rather than joining the shared one,
 because its host is also its callback host,
 which is exactly the constraint that forced one shared policy on the instance routes
@@ -119,3 +120,12 @@ a personal token and a client-credentials service account both belong to callers
 and neither should open a browser application.
 The value is that the decision belongs to the platform, is attributable in the log,
 and now has one place to narrow when a tighter rule is wanted.
+
+The revert: ext-authz needs `forwardAccessToken`, because that is how the platform's token reaches
+`/v1alpha1/authz/route`. That same header goes to the workload, and Langflow reads it as its own JWT and
+answers 401 to every API call, so the page loads and nothing in it works
+(measured: no header 403, a foreign token 401, its own token 200), and the browser cannot recover because the
+call that would mint a good token carries the same bad header.
+Langflow therefore stays on gateway OIDC alone until something replaces that header with a token it accepts.
+That bridge is spiked and planned in `docs/superpowers/plans/2026-09-07-langflow-per-user-identity.md`,
+and the check returns with it.

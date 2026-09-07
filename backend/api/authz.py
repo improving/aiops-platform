@@ -15,8 +15,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from auth.current_user import (
-    AUTH_KIND_DEV,
-    AUTH_KIND_SESSION,
     AUTH_KIND_TOKEN,
     CurrentUser,
     as_member_of,
@@ -29,7 +27,7 @@ from models.inference_instance import DBInferenceInstance
 from models.notebook import Notebook
 from models.organization import DEFAULT_ORG_SLUG, Organization
 from models.vectordb_instance import DBVectorDBInstance
-from utils.hostnames import LANGFLOW_KIND, parse_hostname
+from utils.hostnames import parse_hostname
 from utils.ids import find_by_id8
 
 router = APIRouter()
@@ -44,48 +42,7 @@ _RULES: dict[str, tuple[type, str, Callable[[CurrentUser, object], bool]]] = {
     "inf": (DBInferenceInstance, "inference instance", Policy.can_read),
 }
 
-EXPECTED_HOSTS = "nb-<id>, vdb-<id>, vdb-<id>-api, inf-<id> or langflow"
-
-# Langflow is shared, not owned: there is one deployment and no row to
-# check ownership against, so the rule is "a signed-in platform member"
-# (design section 3.4, ADR 0002). Browser identities only: a personal
-# token and a client-credentials service account both belong to scripts
-# talking to the API, and neither should open a browser UI. Every caller
-# resolved this far already has a membership, so the value here is that
-# the decision is the platform's and is logged, and that there is now one
-# place to narrow it (a role, an organization setting) when that is
-# wanted.
-LANGFLOW_BROWSER_KINDS = frozenset({AUTH_KIND_SESSION, AUTH_KIND_DEV})
-
-
-def _identity_headers(user: CurrentUser) -> dict[str, str]:
-    """What the gateway copies to the upstream on an allow."""
-    return {
-        "X-Auth-User-Email": user.email or "",
-        "X-Auth-User-Sub": user.sub,
-        "X-Auth-Org": user.org_slug,
-    }
-
-
-def _authorize_langflow(
-    user: CurrentUser, host: str | None, forwarded_host: str | None
-) -> JSONResponse:
-    """Any signed-in member may open Langflow; scripts may not."""
-    decision = "allow" if user.auth_kind in LANGFLOW_BROWSER_KINDS else "deny"
-    logger.info(
-        "authz host=%r forwarded_host=%r sub=%s auth_kind=%s decision=%s",
-        host,
-        forwarded_host,
-        user.sub,
-        user.auth_kind,
-        decision,
-    )
-    if decision == "deny":
-        raise HTTPException(
-            status_code=403,
-            detail="Langflow is a browser application; sign in to open it",
-        )
-    return JSONResponse(content={}, headers=_identity_headers(user))
+EXPECTED_HOSTS = "nb-<id>, vdb-<id>, vdb-<id>-api or inf-<id>"
 
 
 def requested_host(host: str | None, forwarded_host: str | None) -> str:
@@ -123,8 +80,6 @@ def authorize_route(
             detail=f"Unknown host {requested!r}: expected {EXPECTED_HOSTS}",
         )
     kind, id8, _suffix = parsed
-    if kind == LANGFLOW_KIND:
-        return _authorize_langflow(user, host, x_forwarded_host)
     model, label, allowed = _RULES[kind]
     row = find_by_id8(db, model, id8)
     if row is None:
@@ -170,4 +125,11 @@ def authorize_route(
     )
     if decision == "deny":
         raise not_owner(label)
-    return JSONResponse(content={}, headers=_identity_headers(user))
+    return JSONResponse(
+        content={},
+        headers={
+            "X-Auth-User-Email": user.email or "",
+            "X-Auth-User-Sub": user.sub,
+            "X-Auth-Org": user.org_slug,
+        },
+    )
