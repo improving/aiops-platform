@@ -4,8 +4,11 @@ import uuid
 from datetime import datetime
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from api.authz import _authorize_langflow
+from auth.current_user import CurrentUser
 from core import create_app
 from db.database import get_db_direct
 from models.membership import Membership
@@ -101,7 +104,9 @@ def host(kind, instance_id, suffix=""):
         ("nb-1a2b3c4d", ("nb", "1a2b3c4d", "")),
         # Not an instance host, or another domain.
         (f"auth.{PARENT}", None),
-        (f"langflow.{PARENT}", None),
+        # Langflow is a shared host, not an instance: it parses, and
+        # carries no id (#30).
+        (f"langflow.{PARENT}", ("langflow", "", "")),
         ("nb-1a2b3c4d.other.test", None),
         (f"nb-1a2b3c4.{PARENT}", None),
         (f"nb-1a2b3c4d5.{PARENT}", None),
@@ -373,3 +378,83 @@ def test_disabled_mode_runs_as_the_dev_admin():
         assert response.headers["X-Auth-Org"] == "default"
     finally:
         delete_rows(Notebook, legacy)
+
+
+# --- Langflow (#30) ---------------------------------------------------------
+
+
+LANGFLOW_HOST = {"Host": f"langflow.{PARENT}"}
+
+
+def test_langflow_is_allowed_for_a_signed_in_member(
+    oidc_client,  # noqa: F811
+    tokens,
+):
+    """It is shared, so there is no row to own: any member may open it.
+    The point of the check is that the platform decides and logs it,
+    where before the gateway let in anyone the realm authenticated."""
+    response = oidc_client.get(ROUTE, headers=tokens["alice"] | LANGFLOW_HOST)
+
+    assert response.status_code == 200, response.text
+    assert response.headers["X-Auth-User-Sub"] == "alice"
+    assert response.headers["X-Auth-Org"]
+
+
+def test_langflow_subpaths_are_allowed_too(
+    oidc_client,  # noqa: F811
+    tokens,
+):
+    """Envoy appends the original method and path, and Langflow is a
+    single-page app with its own API and websockets underneath."""
+    for method, path in [
+        ("GET", ROUTE + "/langflow/ai-stack/x/api/v1/flows"),
+        ("POST", ROUTE + "/langflow/ai-stack/x/api/v1/build"),
+        ("HEAD", ROUTE + "/"),
+    ]:
+        response = oidc_client.request(
+            method, path, headers=tokens["alice"] | LANGFLOW_HOST
+        )
+        assert response.status_code == 200, (method, path, response.text)
+
+
+def test_langflow_is_denied_without_a_token(oidc_client):  # noqa: F811
+    response = oidc_client.get(ROUTE, headers=LANGFLOW_HOST)
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("auth_kind", "allowed"),
+    [
+        ("session", True),
+        ("dev", True),
+        ("token", False),
+        ("service", False),
+    ],
+)
+def test_langflow_allows_browser_identities_only(auth_kind, allowed):
+    """A personal token and a client-credentials service account belong
+    to scripts talking to the API; neither should open a browser
+    application. Checked directly on the rule, because minting a token
+    here would move the deterministic ids the other tests rely on.
+    """
+    user = CurrentUser(
+        id=uuid.UUID(int=1),
+        sub="alice",
+        email="alice@example.test",
+        name="Alice",
+        org_id=uuid.UUID(int=2),
+        role="member",
+        is_service=auth_kind == "service",
+        auth_kind=auth_kind,
+    )
+
+    if allowed:
+        response = _authorize_langflow(user, f"langflow.{PARENT}", None)
+        assert response.status_code == 200
+        assert response.headers["X-Auth-User-Sub"] == "alice"
+    else:
+        with pytest.raises(HTTPException) as excinfo:
+            _authorize_langflow(user, f"langflow.{PARENT}", None)
+        assert excinfo.value.status_code == 403
+        assert "browser" in excinfo.value.detail

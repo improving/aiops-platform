@@ -102,3 +102,20 @@ where it previously logged and carried on.
 That route was serving with nothing checking the key,
 so the failure makes an existing exposure visible rather than creating a new one.
 The fix for such a row is to delete and relaunch it.
+
+Amended 2026-09-07 (#30): Langflow is decided by the control plane too.
+It keeps a `SecurityPolicy` of its own rather than joining the shared one,
+because its host is also its callback host,
+which is exactly the constraint that forced one shared policy on the instance routes
+and does not apply to a policy whose own route is the callback.
+What it lacked was `extAuth`:
+the OIDC block alone proves only that the realm authenticated somebody,
+the backend never saw the request, and nothing was logged,
+so "Gateway OIDC, any member" was written down but never enforced.
+It now calls `GET /v1alpha1/authz/route` like every instance route.
+There is no row to own, so the rule is that any signed-in member may open it,
+and script identities may not:
+a personal token and a client-credentials service account both belong to callers of the API,
+and neither should open a browser application.
+The value is that the decision belongs to the platform, is attributable in the log,
+and now has one place to narrow when a tighter rule is wanted.

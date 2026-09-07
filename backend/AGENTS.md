@@ -241,7 +241,12 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   longer) one of the organization's. `AIOPS_CHAT_MOCK=true` serves three canned rows for `inst-mock` (two for
   the caller, one for `someone@example.com`) through the same visibility and aggregation code, so the fast
   tier's dev admin sees three rows and two users. 503 without a LiteLLM client, 502 on `LiteLLMError`.
-- `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check: `utils/hostnames.py`
+- `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check.
+  The shared Langflow host is decided here too (#30, ADR 0002): it is not an instance, so `parse_hostname`
+  answers `("langflow", "", "")` and the rule is "any signed-in member, no script identities"
+  (`LANGFLOW_BROWSER_KINDS`) rather than an ownership check; `infra/local/langflow/langflow.yaml` carries the
+  `extAuth` block that calls it, and `e2e/cluster/langflow-authz.spec.ts` covers both directions on a real gateway.
+  For instance hosts: `utils/hostnames.py`
   `parse_hostname` turns the `Host` (or `X-Forwarded-Host`) into `(kind, id8, suffix)`
   (`nb`, `vdb`, `vdb ... -api`, `inf`; the parent domain from `gateway_settings()`, or the first label without it),
   the row is found with `utils.ids.find_by_id8` (also used by `api/chat.py`), notebooks need `Policy.can_write`

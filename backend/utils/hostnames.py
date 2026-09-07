@@ -16,6 +16,12 @@ _LABEL = re.compile(
 )
 _KINDS_WITH_API_SUFFIX = ("vdb",)
 
+# Langflow is not an instance: one deployment per cluster on a fixed host
+# (infra/local/langflow/langflow.yaml). It is parsed here so the ext-authz
+# endpoint can decide who may open it, instead of the gateway letting in
+# anyone the realm authenticates (#30).
+LANGFLOW_KIND = "langflow"
+
 
 def parse_hostname(host: str) -> tuple[str, str, str] | None:
     """Split an instance host into ``(kind, id8, suffix)``.
@@ -23,14 +29,17 @@ def parse_hostname(host: str) -> tuple[str, str, str] | None:
     The host is lower-cased and a ``:port`` is dropped. With gateway
     settings present the part after the first label must be empty or the
     configured parent domain (another domain is not ours: ``None``).
-    Without settings only the first label is parsed. Anything that is not
-    an instance host (``auth``, ``langflow``, a bad id) is ``None``.
+    Without settings only the first label is parsed. The shared Langflow
+    host answers ``("langflow", "", "")``; it carries no instance id.
+    Anything else (``auth``, a bad id) is ``None``.
     """
     host = host.strip().lower().rsplit(":", 1)[0]
     label, _, rest = host.partition(".")
     settings = gateway_settings()
     if settings is not None and rest and rest != settings.parent_domain:
         return None
+    if label == LANGFLOW_KIND:
+        return LANGFLOW_KIND, "", ""
     match = _LABEL.match(label)
     if match is None:
         return None

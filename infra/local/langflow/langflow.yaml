@@ -132,9 +132,13 @@ spec:
 # does not hit it. https://langflow.127.0.0.1.nip.io/oauth2/callback is
 # registered as its own entry on the aiops-gateway client
 # (infra/local/auth/realm-aiops.json), alongside the sso callback.
-# No extAuth: design doc section 3.4 says Langflow is "Gateway OIDC, any
-# member" -- unlike notebooks and vector databases there is no per-owner
-# ownership check to make against the control plane.
+# extAuth (#30): the OIDC block alone only proves the realm authenticated
+# somebody, and the backend never saw the request, so "any member" was not
+# actually enforced and nothing was logged. The check below asks
+# /v1alpha1/authz/route the same way the instance routes do; there is no
+# per-owner rule to apply (one shared Langflow, no row to own), so it
+# allows any signed-in member and refuses script identities. The backend
+# Service is in this namespace, so no ReferenceGrant is needed.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
@@ -168,3 +172,17 @@ spec:
       - openid
       - profile
       - email
+  extAuth:
+    headersToExtAuth:
+      - authorization
+      - cookie
+    http:
+      backendRefs:
+        - name: aiops-backend
+          port: 8000
+      path: /v1alpha1/authz/route
+      headersToBackend:
+        - x-auth-user-email
+        - x-auth-user-sub
+        - x-auth-org
+    failOpen: false

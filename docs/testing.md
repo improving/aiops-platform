@@ -343,6 +343,8 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `registry-lifecycle.spec.ts`  | import `Qwen/Qwen3-0.6B-GGUF` from the live Hugging Face Hub, publish, launch on Ollama with the `hf.co/...` reference, chat once, delete the instance and the entry | 3 to 8 min |
 | `tenancy-isolation.spec.ts`   | admin creates `e2e-acme` and invites bob; bob switches organizations through the `aiops_org` cookie (`X-Org` works only on the direct `api` fixture) and cannot list or read alice's Ollama instance; a personal token lists instances, a read token cannot create, a revoked one answers 401; the audit page shows the launch | 1 to 5 min |
 | `day2-ops.spec.ts`            | launch `qwen3:0.6b` on Ollama with `cpu`/`memory` pinned to fit the lab node (verified against a real pod), Ready, logs and events from the UI and the API, restart (pod replaced), stop (pods gone, `Stopped`), resume (Ready again, one pod), delete | 2 to 12 min (first run pulls the model) |
+`e2e/cluster/langflow-authz.spec.ts` checks that the Langflow host is decided by the control plane:
+a signed-in member is let through, a context with no session is sent to Keycloak (#30).
 
 The cluster times assume the images are already on the kind node.
 The first pull of a notebook or Qdrant image adds minutes; the tests wait up to 6 minutes for a notebook and 5 for a vector DB.
