@@ -11,31 +11,27 @@ import {
 import { useRuntimeConfig } from "@/lib/runtimeConfig";
 
 /**
- * How to call one deployed model, split by where the caller runs.
+ * How to call one deployed model, split by where the caller sits.
  *
- * Two audiences were interleaved here before, which is what made the
- * section long: a client outside the cluster needs the gateway host and
- * the API key, and Langflow needs the in-cluster Service address and no
- * key at all. Neither reader wanted the other's half, and the base URL
- * and model were repeated four times between them.
- *
- * Each tab now answers one question, and answers it with labelled values
- * rather than a sentence describing them: the fields are the same shape
- * in both tabs, so the difference between them is the thing that stands
- * out.
+ * A client outside the cluster needs the gateway host and the API key.
+ * A flow in Langflow needs neither: the Develop page has provisioned the
+ * organization's LiteLLM into Langflow's "OpenAI Compatible" provider,
+ * so Langflow lists this model by its LiteLLM name, and that name is the
+ * one thing the Langflow tab has to say. Each tab answers its own
+ * question with labelled values rather than a sentence describing them.
  */
 export function InstanceAccess({
   endpoint,
-  clusterEndpoint,
   model,
-  workloadChecksApiKey = false,
+  litellmModelName,
   onShowApiKey,
   apiKeyLoading,
 }: {
   endpoint?: string | null;
-  clusterEndpoint?: string | null;
   model: string;
-  workloadChecksApiKey?: boolean;
+  /** The name LiteLLM, and so Langflow, knows this instance by;
+      null while the instance is not registered there. */
+  litellmModelName: string | null;
   onShowApiKey: () => void;
   apiKeyLoading?: boolean;
 }) {
@@ -46,16 +42,41 @@ export function InstanceAccess({
     <Tabs defaultValue="api" className="w-full">
       <TabsList>
         <TabsTrigger value="api">API access</TabsTrigger>
-        <TabsTrigger value="langflow" disabled={!clusterEndpoint}>
+        <TabsTrigger value="langflow" disabled={!litellmModelName}>
           Langflow
         </TabsTrigger>
       </TabsList>
 
       <TabsContent value="api" className="space-y-3">
-        <AccessFields label="API access fields" baseUrl={apiBase} model={model}>
-          <code className="text-xs">x-api-key</code>
-          <RevealKeyButton loading={apiKeyLoading} onClick={onShowApiKey} />
-        </AccessFields>
+        <dl
+          role="group"
+          aria-label="API access fields"
+          className="divide-y text-sm"
+        >
+          {apiBase ? (
+            <Field label="Base URL" value={apiBase} />
+          ) : (
+            // A state to name rather than a row to hide: the reader is
+            // looking for it.
+            <Row label="Base URL">
+              <span className="text-sm text-muted-foreground">
+                assigned once the instance is running
+              </span>
+            </Row>
+          )}
+          <Field label="Model" value={model} />
+          <Row label="Auth">
+            <code className="text-xs">x-api-key</code>
+            <Button
+              variant="outline"
+              size="sm"
+              loading={apiKeyLoading}
+              onClick={onShowApiKey}
+            >
+              Show API key
+            </Button>
+          </Row>
+        </dl>
         <p className="text-sm text-muted-foreground">
           The gateway rejects requests without the key, so the endpoint does not
           open in a browser.
@@ -70,34 +91,22 @@ export function InstanceAccess({
       </TabsContent>
 
       <TabsContent value="langflow" className="space-y-3">
-        {clusterEndpoint && (
+        {litellmModelName && (
           <>
-            <AccessFields
-              label="Langflow fields"
-              baseUrl={`${clusterEndpoint}/v1`}
-              model={model}
+            <dl
+              role="group"
+              aria-label="Langflow fields"
+              className="divide-y text-sm"
             >
-              {workloadChecksApiKey ? (
-                <>
-                  <code className="text-xs">api_key</code>
-                  <RevealKeyButton
-                    loading={apiKeyLoading}
-                    onClick={onShowApiKey}
-                  />
-                </>
-              ) : (
-                <span className="text-sm text-muted-foreground">
-                  none needed
-                </span>
-              )}
-            </AccessFields>
+              <Field label="Model name" value={litellmModelName} />
+              <Row label="Provider">
+                <span>OpenAI Compatible, served by LiteLLM</span>
+              </Row>
+            </dl>
             <p className="text-sm text-muted-foreground">
-              Langflow runs inside the cluster, so it reaches the model directly
-              and skips the gateway
-              {workloadChecksApiKey
-                ? " -- but this engine checks the key itself, so it is still required."
-                : ", which is what its check was."}{" "}
-              Put these in an <strong>OpenAI</strong> model component.
+              Langflow lists this name in its Language Model component once the
+              Develop page has synced your organization. No address and no key
+              to paste: both are already in Langflow.
             </p>
             {loaded && langflowUrl && (
               <Button asChild variant="outline" size="sm">
@@ -158,62 +167,7 @@ console.log(res.choices[0].message.content);`,
   ];
 }
 
-/**
- * The three fields both tabs answer, in the same order and shape.
- *
- * One component rather than two copies, so the parallel structure the
- * reader compares across is a fact of the code and not a coincidence
- * that survives until someone edits one tab. Only the Auth cell differs
- * between them, which is exactly the difference worth seeing, so it is
- * the one thing passed in.
- *
- * Quiet structure: the values are the loudest thing here, not the box.
- */
-function AccessFields({
-  label,
-  baseUrl,
-  model,
-  children,
-}: {
-  label: string;
-  /** Null before the gateway assigns a host, which is a state to name
-      rather than a row to hide: the reader is looking for it. */
-  baseUrl: string | null;
-  model: string;
-  /** The Auth cell. */
-  children: React.ReactNode;
-}) {
-  return (
-    <dl role="group" aria-label={label} className="divide-y text-sm">
-      {baseUrl ? (
-        <Field label="Base URL" value={baseUrl} />
-      ) : (
-        <Row label="Base URL">
-          <span className="text-sm text-muted-foreground">
-            assigned once the instance is running
-          </span>
-        </Row>
-      )}
-      <Field label="Model" value={model} />
-      <Row label="Auth">{children}</Row>
-    </dl>
-  );
-}
-
-function RevealKeyButton({
-  loading,
-  onClick,
-}: {
-  loading?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button variant="outline" size="sm" loading={loading} onClick={onClick}>
-      Show API key
-    </Button>
-  );
-}
-
+/** Quiet structure: the values are the loudest thing here, not the box. */
 function Row({
   label,
   children,

@@ -45,7 +45,8 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "https://sso.__PARENT_DOMAIN__/oauth2/callback"
+        "https://sso.__PARENT_DOMAIN__/oauth2/callback",
+        "https://langflow.__PARENT_DOMAIN__/oauth2/callback"
       ],
       "defaultClientScopes": [
         "aiops",

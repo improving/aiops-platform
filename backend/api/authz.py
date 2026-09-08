@@ -2,9 +2,10 @@
 
 Envoy sends the original ``Host`` and ``Authorization`` headers of every
 request to a workload host (``nb-<id8>``, ``vdb-<id8>``, ``vdb-<id8>-api``,
-``inf-<id8>``). The answer is 200 with identity headers the gateway copies
-to the upstream, 403 when the user may not use the instance, 404 when the
-host is not an instance, and 401 without a valid token (the dependency).
+``inf-<id8>``, ``langflow``). The answer is 200 with identity headers the
+gateway copies to the upstream, 403 when the user may not use the
+instance (or, on the Langflow host, is not a person), 404 when the host
+is neither, and 401 without a valid token (the dependency).
 See docs/superpowers/plans/2026-09-04-authentication.md, Task 9.
 """
 
@@ -27,7 +28,7 @@ from models.inference_instance import DBInferenceInstance
 from models.notebook import Notebook
 from models.organization import DEFAULT_ORG_SLUG, Organization
 from models.vectordb_instance import DBVectorDBInstance
-from utils.hostnames import parse_hostname
+from utils.hostnames import LANGFLOW_KIND, parse_hostname
 from utils.ids import find_by_id8
 
 router = APIRouter()
@@ -42,7 +43,44 @@ _RULES: dict[str, tuple[type, str, Callable[[CurrentUser, object], bool]]] = {
     "inf": (DBInferenceInstance, "inference instance", Policy.can_read),
 }
 
-EXPECTED_HOSTS = "nb-<id>, vdb-<id>, vdb-<id>-api or inf-<id>"
+EXPECTED_HOSTS = "nb-<id>, vdb-<id>, vdb-<id>-api, inf-<id> or langflow"
+
+NOT_A_PERSON = (
+    "Langflow opens for signed-in members only, "
+    "not for service accounts or personal tokens"
+)
+
+
+def _identity_headers(user: CurrentUser) -> dict[str, str]:
+    return {
+        "X-Auth-User-Email": user.email or "",
+        "X-Auth-User-Sub": user.sub,
+        "X-Auth-Org": user.org_slug,
+    }
+
+
+def _authorize_langflow(user: CurrentUser, requested: str) -> JSONResponse:
+    """Any member, signed in through a browser.
+
+    Langflow has no organizations: a flow author is a Langflow user
+    provisioned from the token itself, so the rule is membership, not
+    ownership -- and get_current_user only ever resolves a caller who
+    is a member of some organization. Service accounts and personal
+    tokens are refused here rather than left to Langflow: the policy
+    passes a bearer straight through (passThroughAuthHeader), and
+    Langflow would take an automation token for a person and create a
+    user for it, or answer a personal token with an unhelpful 401.
+    """
+    allowed = user.is_browser_session
+    logger.info(
+        "authz host=%r sub=%s langflow decision=%s",
+        requested,
+        user.sub,
+        "allow" if allowed else "deny-not-a-person",
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail=NOT_A_PERSON)
+    return JSONResponse(content={}, headers=_identity_headers(user))
 
 
 def requested_host(host: str | None, forwarded_host: str | None) -> str:
@@ -80,6 +118,8 @@ def authorize_route(
             detail=f"Unknown host {requested!r}: expected {EXPECTED_HOSTS}",
         )
     kind, id8, _suffix = parsed
+    if kind == LANGFLOW_KIND:
+        return _authorize_langflow(user, requested)
     model, label, allowed = _RULES[kind]
     row = find_by_id8(db, model, id8)
     if row is None:
@@ -125,11 +165,4 @@ def authorize_route(
     )
     if decision == "deny":
         raise not_owner(label)
-    return JSONResponse(
-        content={},
-        headers={
-            "X-Auth-User-Email": user.email or "",
-            "X-Auth-User-Sub": user.sub,
-            "X-Auth-Org": user.org_slug,
-        },
-    )
+    return JSONResponse(content={}, headers=_identity_headers(user))

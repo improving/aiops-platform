@@ -532,6 +532,36 @@ def test_remove_member_rules(client):
     assert missing.status_code == 404
 
 
+def test_remove_member_rotates_the_litellm_key(client, monkeypatch):
+    # The organization's key sits in every member's Langflow account, so
+    # removal rotates it first, and a rotation that fails keeps the
+    # member: the key is what the removal actually revokes.
+    from utils.litellm import LiteLLMError
+
+    rotated = []
+    monkeypatch.setattr(
+        "api.organizations.rotate_org_key",
+        lambda db, org: rotated.append(org.slug),
+    )
+    viewer_id = str(user_by_sub("dev:viewer").id)
+    removed = client.delete(
+        f"{CURRENT}/members/{viewer_id}", headers=dev("dev")
+    )
+    assert removed.status_code == 204
+    assert rotated == ["default"]
+
+    def failing(db, org):
+        raise LiteLLMError("LiteLLM unreachable: refused")
+
+    monkeypatch.setattr("api.organizations.rotate_org_key", failing)
+    # The dev seed has put the viewer back by now.
+    client.get(STATE_ROUTE, headers=dev("viewer"))
+    kept = client.delete(f"{CURRENT}/members/{viewer_id}", headers=dev("dev"))
+    assert kept.status_code == 502
+    assert "could not be rotated" in kept.json()["detail"]
+    assert memberships_of("dev:viewer") == {"default": "viewer"}
+
+
 def test_invitation_lifecycle(client):
     created = client.post(
         f"{CURRENT}/invitations",

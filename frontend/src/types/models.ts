@@ -4,11 +4,6 @@ interface InferenceInstance {
   engine: Engine;
   host: string;
   endpoint: string;
-  /** In-cluster Service URL; only callers inside the cluster can use it. */
-  clusterEndpoint?: string | null;
-  /** True when the workload checks the key itself, so an in-cluster
-      caller that skips the gateway still needs it (vLLM does). */
-  workloadChecksApiKey?: boolean;
   healthEndpoint: string;
   metricsEndpoint: string;
   ready: boolean;
@@ -368,3 +363,15 @@ export type {
   InstanceEvent,
   LogsQuery,
 };
+
+export interface LangflowModel {
+  name: string;
+  label: string;
+}
+
+/** What POST /v1alpha1/langflow/provision wrote for the caller. */
+export interface LangflowProvision {
+  langflow_user: string;
+  organization: string;
+  models: LangflowModel[];
+}

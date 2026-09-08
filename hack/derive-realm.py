@@ -36,7 +36,9 @@ def main() -> None:
     clients = {c["clientId"]: c for c in realm["clients"]}
     clients["aiops-ui"]["redirectUris"] = [f"https://ui.{PLACEHOLDER}/*"]
     clients["aiops-gateway"]["redirectUris"] = [
-        f"https://sso.{PLACEHOLDER}/oauth2/callback"
+        f"https://sso.{PLACEHOLDER}/oauth2/callback",
+        # Langflow's own policy has a callback of its own (langflow.enabled).
+        f"https://langflow.{PLACEHOLDER}/oauth2/callback",
     ]
     clients["aiops-gateway"]["secret"] = "${KEYCLOAK_CLIENT_SECRET}"
     clients["aiops-automation"]["secret"] = "${AUTOMATION_CLIENT_SECRET}"

@@ -344,3 +344,39 @@ def ensure_org_key(db, org, core_v1=None) -> str:
         db.commit()
     _org_key_cache[org.id] = (time.monotonic() + ORG_KEY_CACHE_SECONDS, key)
     return key
+
+
+def rotate_org_key(db, org, core_v1=None) -> None:
+    """Replace the organization's LiteLLM virtual key.
+
+    Called when a member is removed: the key sits in each member's
+    Langflow account (utils/langflow.py), and a copy cannot be
+    revoked, so the organization gets a new one. The new key goes into
+    the Secret and the cache before the old one is deleted, so a call
+    between the two steps still works. Every copy of the old key stops
+    working: members' Langflow accounts until their next Develop page
+    load, and another backend replica's cache for up to
+    ORG_KEY_CACHE_SECONDS. No-op without LiteLLM or before the
+    organization has a key.
+    """
+    litellm = get_client()
+    if litellm is None:
+        return
+    core_v1 = core_v1 or get_core_v1_client()
+    namespace = get_default_namespace()
+    secret_name = org_key_secret_name(org.id)
+    old = _read_secret_value(core_v1, secret_name, namespace)
+    if old is None:
+        return
+    key = litellm.generate_key(
+        org.litellm_team_id,
+        f"org-{org.slug}-chat",
+        {"aiops_org_id": str(org.id)},
+    )
+    _apply_secret(
+        core_v1,
+        namespace,
+        _secret_body(secret_name, namespace, {ORG_KEY_SECRET_KEY: key}),
+    )
+    _org_key_cache[org.id] = (time.monotonic() + ORG_KEY_CACHE_SECONDS, key)
+    litellm.delete_key(old)

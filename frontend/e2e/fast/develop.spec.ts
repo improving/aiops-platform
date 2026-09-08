@@ -1,15 +1,17 @@
 import { test, expect } from "../fixtures";
-import { AppShell } from "../pages/app-shell";
+import { DevelopPage } from "../pages/develop";
 
 test.describe("develop page", () => {
   test("explains that Langflow is not configured", async ({ page }) => {
-    const shell = new AppShell(page);
-    await shell.goto("/develop");
-    await shell.expectHeading("Interactively Develop AI Applications");
-    await expect(page.getByText("Langflow is not configured")).toBeVisible();
+    const develop = new DevelopPage(page);
+    await develop.open();
+    await develop.expectHeading("Interactively Develop AI Applications");
+    await expect(develop.notConfigured).toBeVisible();
     await expect(
       page.getByText("NEXT_PUBLIC_LANGFLOW_URL").first()
     ).toBeVisible();
-    await expect(page.locator("iframe")).toHaveCount(0);
+    await expect(develop.iframe).toHaveCount(0);
+    // No Langflow, nothing to provision: the panel stays away too.
+    await expect(develop.panel).toHaveCount(0);
   });
 });

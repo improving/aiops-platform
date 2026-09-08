@@ -1,13 +1,11 @@
-# Langflow behind the gateway (Task 11 of
-# docs/superpowers/plans/2026-09-04-authentication.md). Replaces the
-# docker-compose "langflow" profile: the Develop page now embeds
-# https://langflow.127.0.0.1.nip.io instead of http://localhost:7860, so
-# Langflow gets its own OIDC login instead of LANGFLOW_AUTO_LOGIN alone
-# securing it. LANGFLOW_AUTO_LOGIN stays true for version 1 (design doc
-# section 3.4): the gateway is Langflow's only ingress, so a second login
-# screen inside Langflow itself would be redundant, not additional
-# security. Applied by "make langflow-up" into the "ai-stack" namespace
-# that "make kind-up"/"make gateway-up" already create.
+# Langflow on platform identity (ADR 0002, design
+# docs/superpowers/specs/2026-09-08-langflow-native-identity-design.md).
+# The gateway logs the browser in against Keycloak, asks the control
+# plane whether this user may open Langflow (ext-authz), and forwards
+# the access token; Langflow verifies that token itself
+# (LANGFLOW_EXTERNAL_AUTH_*) and provisions a Langflow user per platform
+# user. No auto-login, no second login screen, no shared workspace.
+# Applied by "make langflow-up" into the "ai-stack" namespace.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -48,30 +46,90 @@ spec:
       labels:
         app.kubernetes.io/name: langflow
     spec:
+      # Langflow insists on https for the JWKS it verifies tokens against
+      # (http is allowed for localhost only), and the in-cluster Keycloak
+      # Service is plain http. So the pod reaches Keycloak the way a
+      # browser does: the public host, aliased to the gateway's ClusterIP
+      # ("make langflow-up" substitutes __GATEWAY_IP__), whose certificate
+      # the local CA signed. The init container builds a bundle of the
+      # image's roots plus that CA, the way the chart's backend does,
+      # because SSL_CERT_FILE replaces the roots rather than adding to
+      # them and Langflow still has to reach public APIs. The image has
+      # no system bundle under /etc/ssl; certifi's is the one it uses.
+      hostAliases:
+        - ip: __GATEWAY_IP__
+          hostnames:
+            - auth.127.0.0.1.nip.io
+      initContainers:
+        - name: ca-bundle
+          image: langflowai/langflow:1.12.0
+          command:
+            - sh
+            - -c
+            - cat "$(python -c 'import certifi; print(certifi.where())')" /etc/aiops/ca/ca.crt > /etc/aiops/bundle/ca.crt
+          volumeMounts:
+            - name: ca
+              mountPath: /etc/aiops/ca
+              readOnly: true
+            - name: ca-bundle
+              mountPath: /etc/aiops/bundle
       containers:
         - name: langflow
           image: langflowai/langflow:1.12.0
           env:
-            # Local development only, version 1 (design doc section 3.4):
-            # no login screen inside the frame the gateway already put an
-            # OIDC login in front of. Turn off for version 2 in favour of
-            # per-user Langflow API keys.
+            - name: SSL_CERT_FILE
+              value: /etc/aiops/bundle/ca.crt
+            - name: REQUESTS_CA_BUNDLE
+              value: /etc/aiops/bundle/ca.crt
             # Langflow writes its database next to the installed package
-            # (/app/.venv/.../langflow/langflow.db), not into the mounted
-            # volume, so before these two every pod restart lost every flow
-            # -- and, because a restart also changes the auto-login user,
-            # left already-open browsers holding a token for a user that no
-            # longer exists. Point the config dir at the volume and keep the
-            # database in it.
+            # unless told otherwise, and a restart then lost every flow.
+            # Keep the database and the signing key on the volume.
             - name: LANGFLOW_CONFIG_DIR
               value: /app/langflow
             - name: LANGFLOW_SAVE_DB_IN_CONFIG_DIR
               value: "true"
-            # The Develop page embeds Langflow from its own gateway host,
-            # so its cookies are third-party there. Default SameSite=Lax
-            # cookies are not sent in that context, which left the frame
-            # stuck on "Loading..." while the same URL worked in a tab.
-            # None requires Secure, which the gateway's TLS provides.
+            # Identity comes from the platform token the gateway forwards
+            # (forwardAccessToken below). Langflow verifies it against the
+            # realm's keys, fetched from the public issuer host through the
+            # gateway (see hostAliases above), and creates a user per
+            # `sub`, named after `preferred_username`.
+            - name: LANGFLOW_AUTO_LOGIN
+              value: "false"
+            - name: LANGFLOW_EXTERNAL_AUTH_ENABLED
+              value: "true"
+            - name: LANGFLOW_EXTERNAL_AUTH_PROVIDER
+              value: aiops
+            - name: LANGFLOW_EXTERNAL_AUTH_JWKS_URL
+              value: https://auth.127.0.0.1.nip.io/realms/aiops/protocol/openid-connect/certs
+            - name: LANGFLOW_EXTERNAL_AUTH_ISSUER
+              value: https://auth.127.0.0.1.nip.io/realms/aiops
+            - name: LANGFLOW_EXTERNAL_AUTH_AUDIENCE
+              value: aiops-api
+            # Nobody signs up and nobody is created inactive: users come
+            # from the token above, and only from there.
+            - name: LANGFLOW_ENABLE_SIGNUP
+              value: "false"
+            - name: LANGFLOW_NEW_USER_IS_ACTIVE
+              value: "false"
+            # The break-glass superuser, for recovering another user's
+            # flows or resetting a password through the API. Generated
+            # once by "make langflow-up", never a person's login. Not
+            # named "langflow": that user exists from the auto-login days
+            # with a password nobody knows, and is deactivated by
+            # infra/local/langflow/retire-shared-user.py.
+            - name: LANGFLOW_SUPERUSER
+              valueFrom:
+                secretKeyRef:
+                  name: langflow-superuser
+                  key: username
+            - name: LANGFLOW_SUPERUSER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langflow-superuser
+                  key: password
+            # Langflow sets cookies of its own only for a password login
+            # (the break-glass account). Cross-site inside the Develop
+            # iframe, so SameSite=None, which needs Secure.
             - name: LANGFLOW_ACCESS_SAME_SITE
               value: none
             - name: LANGFLOW_ACCESS_SECURE
@@ -81,19 +139,11 @@ spec:
             - name: LANGFLOW_REFRESH_SECURE
               value: "true"
             # Langflow refuses requests to private addresses (SSRF
-            # protection, on by default). A flow calling a deployed model
-            # goes to that model's ClusterIP Service, which is exactly
-            # such an address, so it is refused with "resolves to blocked
-            # IP address(es)". Allow the cluster's Service range and
-            # nothing wider: it is declared as `networking.serviceSubnet`
-            # in infra/local/kind-config.yaml, and the two must agree.
-            # It does mean a flow author can reach any Service in the
-            # cluster, which is a fair trade in a shared dev sandbox and
-            # deserves revisiting if Langflow is ever multi-tenant (#29).
+            # protection, on by default). Flows reach models through
+            # LiteLLM only (never a deployed model's Service directly),
+            # so only the LiteLLM Service is allowed; a hostname works.
             - name: LANGFLOW_SSRF_ALLOWED_HOSTS
-              value: 10.96.0.0/16
-            - name: LANGFLOW_AUTO_LOGIN
-              value: "true"
+              value: litellm.litellm.svc
             - name: LANGFLOW_HOST
               value: "0.0.0.0"
             - name: LANGFLOW_PORT
@@ -125,10 +175,19 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/langflow
+            - name: ca-bundle
+              mountPath: /etc/aiops/bundle
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: langflow
+        # infra/local/ca/ca.crt, published by "make langflow-up".
+        - name: ca
+          configMap:
+            name: aiops-ca
+        - name: ca-bundle
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -164,35 +223,26 @@ spec:
         - name: langflow
           port: 7860
 ---
-# Langflow's OWN SecurityPolicy, not a target added to the shared
-# aiops-workloads-oidc policy: this route has a host of its own
-# (langflow.127.0.0.1.nip.io), so it can also have a redirect URI and a
-# cookie suffix of its own -- the constraint that forced one shared
-# policy onto notebook/vector-database routes (gateway notes, "Spike
-# results": "Redirect URI: per-instance policies with a shared callback
-# host: NO-GO; one shared policy: GO") was specifically about routes that
-# share ONE callback host; a policy whose own route IS the callback host
-# does not hit it. https://langflow.127.0.0.1.nip.io/oauth2/callback is
-# registered as its own entry on the aiops-gateway client
-# (infra/local/auth/realm-aiops.json), alongside the sso callback.
-# No extAuth, and no forwarded access token. Both were tried (#30) and both
-# break Langflow, for the same reason:
-#   - forwardAccessToken puts the *platform's* Keycloak token in
-#     Authorization on every upstream request. Langflow reads that header
-#     as its own JWT and answers 401 "Invalid token" to every API call
-#     (measured: no header 403, foreign token 401, its own token 200), so
-#     the page loads and nothing in it works. The browser cannot recover,
-#     because the /api/v1/auto_login call that would mint a good token
-#     carries the same bad header.
-#   - ext-authz needs that header: it is how the platform token reaches
-#     /v1alpha1/authz/route (headersToExtAuth). Turning the forward off to
-#     save Langflow makes every ext-authz call 401 instead.
-# So the check cannot be added until something replaces the Authorization
-# header with a token Langflow accepts, which is the session bridge in
-# docs/superpowers/plans/2026-09-07-langflow-per-user-identity.md (#29).
-# Until then Langflow is protected by gateway OIDC alone: any realm user,
-# no per-member rule and no log. That is the state #30 set out to fix and
-# could not, so #30 is reopened rather than left half-applied.
+# Langflow's OWN SecurityPolicy, not a target on the shared
+# aiops-workloads-oidc policy: this route has a host of its own, so it
+# can carry a redirect URI of its own (registered on the aiops-gateway
+# client in infra/local/auth/realm-aiops.json next to the sso callback);
+# the constraint that forced one shared policy onto the instance routes
+# was routes sharing ONE callback host.
+#
+# forwardAccessToken is what makes identity work: Langflow reads the
+# forwarded platform token (LANGFLOW_EXTERNAL_AUTH_* above). It is also
+# what the ext-authz call needs, since the token is how the control
+# plane knows who is asking. passThroughAuthHeader lets a request that
+# already carries a bearer skip the OIDC redirect, so a caller with a
+# platform token -- the backend provisioning a user's Langflow account,
+# a script -- reaches Langflow's API through this same host, and both
+# ext-authz and Langflow still verify the token. Envoy Gateway insists
+# that pass-through comes with a JWT provider, so Envoy verifies such a
+# bearer too (jwt below). One trap, measured: a SecurityPolicy the
+# controller rejects (status Accepted=False) is not applied at all, and
+# the route it targets is then OPEN -- no login, no ext-authz. Check
+# the status after every change to this object.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
@@ -220,14 +270,47 @@ spec:
     redirectURL: https://langflow.127.0.0.1.nip.io/oauth2/callback
     logoutPath: /oauth2/logout
     cookieDomain: 127.0.0.1.nip.io
-    # Same reason as the Langflow cookies above: the gateway's own OIDC
-    # cookies are third-party inside the Develop iframe, and without this
-    # the flow reached /oauth2/callback and answered "OAuth flow failed".
+    # The gateway's cookies are third-party inside the Develop iframe;
+    # without this the flow reached /oauth2/callback and answered
+    # "OAuth flow failed".
     cookieConfig:
       sameSite: None
-    forwardAccessToken: false
+    forwardAccessToken: true
+    passThroughAuthHeader: true
     refreshToken: true
     scopes:
       - openid
       - profile
       - email
+  # The JWT provider pass-through requires: a bearer that skips the login
+  # is verified against the realm's keys (in-cluster, plain http is fine
+  # for Envoy) before ext-authz and Langflow see it. optional, because a
+  # browser's first request carries no bearer yet and must reach the
+  # OIDC redirect; an invalid bearer is still refused.
+  jwt:
+    optional: true
+    providers:
+      - name: keycloak
+        issuer: https://auth.127.0.0.1.nip.io/realms/aiops
+        audiences:
+          - aiops-api
+        remoteJWKS:
+          uri: http://keycloak.auth.svc:8080/realms/aiops/protocol/openid-connect/certs
+          backendRefs:
+            - name: keycloak
+              namespace: auth
+              port: 8080
+  extAuth:
+    headersToExtAuth:
+      - authorization
+      - cookie
+    http:
+      backendRefs:
+        - name: aiops-backend
+          port: 8000
+      path: /v1alpha1/authz/route
+      headersToBackend:
+        - x-auth-user-email
+        - x-auth-user-sub
+        - x-auth-org
+    failOpen: false

@@ -33,3 +33,6 @@ charts/**/charts/*.tgz
 
 # Agent worktrees created by Claude Code
 .claude/worktrees/
+
+# Plan-execution ledgers and briefs (superpowers:subagent-driven-development)
+.superpowers/

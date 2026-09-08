@@ -65,6 +65,8 @@ It is a monorepo assembled from four former repositories with their history (`MI
    both kinds of policy, plus the `HTTPRoute`s themselves, are created by `backend/utils/gateway.py`
    and are no-ops without `AIOPS_PARENT_DOMAIN` set,
    so a plain `uv run uvicorn` behaves exactly as before the gateway existed.
+   Langflow has a policy of its own with the same ext-authz check and runs on the forwarded token
+   (`infra/local/langflow/langflow.yaml`, ADR 0002).
 9. **Chat, embeddings and rerank go through the control plane and LiteLLM, never straight to a model.**
    Every deployed inference instance is registered in the LiteLLM proxy (`backend/utils/litellm.py`, namespace `litellm`,
    `make litellm-up`) as model `inst-<id8>` with its in-cluster Service URL and workload credential;

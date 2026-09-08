@@ -1,5 +1,4 @@
 {{- if .Values.gateway.enabled }}
-{{- $issuer := include "aiops-platform.issuer" . }}
 # The one OIDC + ext-authz policy for browser-facing workload routes
 # (infra/local/auth/workloads-oidc-policy.yaml). It lives in the release
 # namespace, which is also AIOPS_NAMESPACE (templates/backend/configmap.yaml),
@@ -21,19 +20,7 @@ spec:
       kind: HTTPRoute
       name: sso
   oidc:
-    provider:
-      issuer: {{ $issuer | quote }}
-      authorizationEndpoint: "{{ $issuer }}/protocol/openid-connect/auth"
-      tokenEndpoint: "{{ $issuer }}/protocol/openid-connect/token"
-      {{- if .Values.keycloak.enabled }}
-      # Same namespace as the policy: no ReferenceGrant needed.
-      backendRefs:
-        - name: {{ .Values.keycloak.fullnameOverride }}
-          port: {{ .Values.keycloak.service.ports.http }}
-      {{- end }}
-    clientID: aiops-gateway
-    clientSecret:
-      name: aiops-gateway-oidc
+    {{- include "aiops-platform.oidcProvider" . | nindent 4 }}
     redirectURL: "https://{{ include "aiops-platform.host" (dict "root" . "label" .Values.gateway.hosts.sso) }}/oauth2/callback"
     logoutPath: /oauth2/logout
     cookieDomain: {{ .Values.global.parentDomain | quote }}
@@ -43,18 +30,5 @@ spec:
       - openid
       - profile
       - email
-  extAuth:
-    headersToExtAuth:
-      - authorization
-      - cookie
-    http:
-      backendRefs:
-        - name: {{ include "aiops-platform.backendFullname" . }}
-          port: 8000
-      path: /v1alpha1/authz/route
-      headersToBackend:
-        - x-auth-user-email
-        - x-auth-user-sub
-        - x-auth-org
-    failOpen: false
+  {{- include "aiops-platform.extAuth" . | nindent 2 }}
 {{- end }}

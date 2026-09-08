@@ -116,7 +116,9 @@ secrets:
   # because the subchart values below reference it literally.
   # Keys: AUTH_SECRET, KEYCLOAK_CLIENT_SECRET, AUTOMATION_CLIENT_SECRET,
   # KEYCLOAK_ADMIN_PASSWORD, LITELLM_MASTER_KEY, LITELLM_SALT_KEY,
-  # DATABASE_USER, DATABASE_PASSWORD, HF_TOKEN, NGC_API_KEY.
+  # DATABASE_USER, DATABASE_PASSWORD, HF_TOKEN, NGC_API_KEY,
+  # LANGFLOW_SUPERUSER_PASSWORD (required in secrets.existingSecret when
+  # langflow.enabled: the hook backfills a generated Secret only).
   name: aiops-platform-secrets
   # A Secret of yours with the same keys. The pre-install hook copies it
   # into secrets.name on every install and upgrade; edit it and run
@@ -146,6 +148,8 @@ gateway:
     api: api
     auth: auth
     sso: sso
+    # Langflow's host is langflow.<parentDomain>, not a knob: the backend's
+    # ext-authz and the realm's callback name that label.
   tls:
     # The Secret the created Gateway's https listener terminates with, and
     # the Secret the Certificate below writes.
@@ -318,3 +322,34 @@ litellm:
       memory: 512Mi
     limits:
       memory: 2Gi
+
+langflow:
+  # Deploy Langflow behind the gateway on platform identity (ADR 0002):
+  # the policy forwards the access token, Langflow verifies it against
+  # the realm and keeps one Langflow user per platform user; ext-authz
+  # asks the backend who may open it. Off: ui.langflowUrl may still
+  # point at a Langflow of yours.
+  enabled: false
+  image:
+    repository: langflowai/langflow
+    tag: "1.12.0"
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests:
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  # Langflow refuses private addresses unless allowed (SSRF protection).
+  # Flows reach models through LiteLLM only, never a deployed model's
+  # Service, so only LiteLLM is allowed: empty means the bundled Service
+  # (litellm.fullnameOverride); name an external LiteLLM's host here when
+  # it is a private address. Hostnames, IPs and CIDRs are accepted.
+  ssrfAllowedHosts: ""
+  # Pod hostAliases, like frontend.hostAliases: Langflow fetches the
+  # realm's JWKS from the public issuer host over https (it refuses a
+  # plain-http URL), so on a cluster where that host does not resolve
+  # from a pod, alias it to the gateway. make chart-install sets it.
+  hostAliases: []

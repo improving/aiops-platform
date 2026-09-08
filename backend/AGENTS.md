@@ -171,6 +171,12 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   `ensure_org_key(db, org, core_v1=None)` creates the organization's LiteLLM team and one virtual key on first
   use, stores the key in Secret `org-<id8>-litellm-key` (`utils/credentials.py` `_secret_body`/`_apply_secret`,
   key `"key"`) and caches it in-process for 300 s (`_org_key_cache`, cleared by tests).
+  `rotate_org_key(db, org, core_v1=None)` replaces that key (new key into the Secret and the cache, then the
+  old one deleted in LiteLLM); `api/organizations.py` `remove_member` calls it before deleting the membership,
+  because every member's Langflow account holds a copy of the key (`utils/langflow.py`) that cannot be
+  revoked on its own, and answers 502 without removing anyone when the rotation fails. Two consequences:
+  members' Langflow copies stop working until their next Develop page load, and another backend replica
+  serves the old key from its cache for up to 300 s.
   `api/inference_instance.py` `register_instance`/`unregister_instance` call `get_client()` and
   `instance_litellm_params` around `controller.service_url(instance, engine_chart)` (the in-cluster
   `http://<service>.<namespace>.svc:<port>` URL, `base_controller.Controller.service_url`) to register/delete
@@ -242,15 +248,29 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   the caller, one for `someone@example.com`) through the same visibility and aggregation code, so the fast
   tier's dev admin sees three rows and two users. 503 without a LiteLLM client, 502 on `LiteLLMError`.
 - `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check.
-  Langflow is deliberately NOT among its hosts: adding it (#30) was reverted, because ext-authz needs
-  `forwardAccessToken`, and that header makes Langflow answer 401 to its own API. The manifest and ADR 0002
-  carry the detail, and the bridge that brings the check back is planned for #29. For instance hosts: `utils/hostnames.py`
+  The `langflow` host is a member rule (`_authorize_langflow`): any browser session is allowed, service
+  accounts and personal tokens answer 403 with `NOT_A_PERSON`, because that policy passes a bearer straight
+  through to Langflow (ADR 0002). For instance hosts: `utils/hostnames.py`
   `parse_hostname` turns the `Host` (or `X-Forwarded-Host`) into `(kind, id8, suffix)`
-  (`nb`, `vdb`, `vdb ... -api`, `inf`; the parent domain from `gateway_settings()`, or the first label without it),
+  (`nb`, `vdb`, `vdb ... -api`, `inf`, and `langflow` with an empty id;
+  the parent domain from `gateway_settings()`, or the first label without it),
   the row is found with `utils.ids.find_by_id8` (also used by `api/chat.py`), notebooks need `Policy.can_write`
   and the other kinds `Policy.can_read`. 200 carries `X-Auth-User-Email`, `X-Auth-User-Sub`, `X-Auth-Org`;
   403 reuses `not_owner`; 404 covers unknown and unparsable hosts; one info log line per decision.
-  `test_authz.py` imports the token helpers from `test_auth.py`.
+  `test_authz.py` takes its token helpers from `testing/tokens.py`.
+
+- `utils/langflow.py` and `api/langflow.py` (`POST /v1alpha1/langflow/provision`, docs/api.md) provision the
+  caller's Langflow account: Langflow's "OpenAI Compatible" provider variables `OPENAI_COMPATIBLE_BASE_URL`
+  (`LITELLM_CLUSTER_URL`, else `LITELLM_URL`, plus `/v1`; written first, since the key's check reads it) and
+  `OPENAI_COMPATIBLE_API_KEY` (`ensure_org_key`), created or updated in place. The backend holds no Langflow
+  credential: it forwards the caller's own bearer (the `HTTPBearer` dependency from `auth/current_user.py`),
+  which is why the endpoint answers 409 to anything but a browser session (`CurrentUser.is_browser_session`,
+  the same predicate `api/authz.py` uses for the Langflow host), before it even looks at LiteLLM.
+  The model list comes from `api.chat.list_targets(db, user, probe=False)` (names and labels, no pod probe)
+  and is passed in, so `utils/langflow.py` never imports from `api/`. `LANGFLOW_API_URL` is the
+  gateway host locally (`passThroughAuthHeader`) and the Service in the chart. `LangflowError` (Langflow's own
+  detail, 502) and `LiteLLMError` (502) are the two failure shapes; `AIOPS_CHAT_MOCK=true` answers with `inst-mock`
+  for the Playwright fast tier. `test_langflow.py` fakes Langflow with `httpx.MockTransport`.
 
 ## Tenancy, audit and tokens
 
@@ -294,7 +314,7 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   reads, and answers the question bypassing the gateway raises: does the workload check the credential itself?
   Only `VLLMController` sets it `True` today, because only its chart reads the credential Secret into
   `VLLM_API_KEY`; the Hugging Face, NIM and OPEA charts have no server-side key. Set it on any controller whose
-  chart gains one, or the UI will tell an in-cluster caller no key is needed and the workload will answer 401.
+  chart gains one. The UI no longer shows it (Langflow goes through LiteLLM since #29); it stays for API callers.
 - Pod logs are read with `_preload_content=False` and decoded in `utils/pod_inspection.py`:
   the client declares a `str` return, so on a body it did not decode it hands back `str(bytes)`,
   and the UI then shows `b'...'` with every newline as the two characters backslash and n.

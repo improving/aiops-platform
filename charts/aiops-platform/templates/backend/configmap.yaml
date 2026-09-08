@@ -13,7 +13,7 @@ data:
   # is not reachable from a pod on kind (nip.io resolves to the loopback
   # address) and needs the gateway's TLS elsewhere. OIDC_ISSUER above is
   # only compared with the token's iss claim.
-  OIDC_JWKS_URL: "http://{{ .Values.keycloak.fullnameOverride }}/realms/aiops/protocol/openid-connect/certs"
+  OIDC_JWKS_URL: {{ include "aiops-platform.envoyJwksUrl" . | quote }}
   {{- end }}
   DATABASE_URL: {{ include "aiops-platform.databaseUrl" . | quote }}
   DATABASE_NAME: {{ include "aiops-platform.databaseName" . | quote }}
@@ -25,7 +25,16 @@ data:
   {{- end }}
   LITELLM_URL: {{ include "aiops-platform.litellmUrl" . | quote }}
   GRAFANA_URL: {{ .Values.ui.grafanaUrl | quote }}
-  LANGFLOW_URL: {{ .Values.ui.langflowUrl | quote }}
+  LANGFLOW_URL: {{ include "aiops-platform.langflowUrl" . | quote }}
+  {{- if .Values.langflow.enabled }}
+  # The backend calls Langflow's API as the caller (utils/langflow.py):
+  # through the Service here, where Langflow verifies the token itself.
+  LANGFLOW_API_URL: "http://{{ include "aiops-platform.langflowFullname" . }}:7860"
+  {{- else if .Values.ui.langflowUrl }}
+  # A Langflow of yours, on platform identity: the same API through its
+  # public address (Langflow verifies the forwarded token there too).
+  LANGFLOW_API_URL: {{ .Values.ui.langflowUrl | quote }}
+  {{- end }}
   JAEGER_URL: {{ .Values.ui.jaegerUrl | quote }}
   {{- range $key, $value := .Values.backend.env }}
   {{ $key }}: {{ $value | quote }}

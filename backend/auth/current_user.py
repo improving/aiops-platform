@@ -78,6 +78,13 @@ class CurrentUser:
     def is_default_org(self) -> bool:
         return self.org_slug == DEFAULT_ORG_SLUG
 
+    @property
+    def is_browser_session(self) -> bool:
+        """A person signed in through the UI (or the dev user): the
+        kinds that may open Langflow and be provisioned there. Service
+        accounts and personal tokens are not people to Langflow."""
+        return self.auth_kind in (AUTH_KIND_SESSION, AUTH_KIND_DEV)
+
 
 @dataclass(frozen=True)
 class Identity:

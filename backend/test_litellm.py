@@ -1,3 +1,4 @@
+import base64
 import json
 import uuid
 from datetime import datetime
@@ -369,6 +370,50 @@ def test_errors_raise_litellm_error():
 def test_get_client_is_none_without_settings(monkeypatch):
     monkeypatch.delenv("LITELLM_URL", raising=False)
     assert ll.get_client() is None
+
+
+def test_rotate_org_key_replaces_then_deletes(monkeypatch):
+    from sqlalchemy.orm import Session
+
+    from models.organization import Organization
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.url.path, json.loads(request.content)))
+        if request.url.path == "/key/generate":
+            return httpx.Response(200, json={"key": "sk-new"})
+        if request.url.path == "/key/delete":
+            return httpx.Response(200, json={})
+        return httpx.Response(404)
+
+    monkeypatch.setattr(ll, "get_client", lambda: _client(handler))
+    stored = {"key": base64.b64encode(b"sk-old").decode()}
+    core_v1 = mock.Mock()
+    core_v1.read_namespaced_secret.return_value = mock.Mock(data=stored)
+    written = {}
+    core_v1.create_namespaced_secret.side_effect = lambda namespace, body: (
+        written.update(body.string_data)
+    )
+    org = Organization(
+        id=uuid.UUID("de5a0170-0000-4000-8000-000000000002"),
+        slug="acme",
+        name="Acme",
+        litellm_team_id="t-2",
+    )
+    ll._org_key_cache.clear()
+    ll.rotate_org_key(mock.Mock(spec=Session), org, core_v1)
+    # New key generated and stored before the old one goes.
+    assert [c[0] for c in calls] == ["/key/generate", "/key/delete"]
+    assert calls[0][1]["team_id"] == "t-2"
+    assert calls[1][1] == {"keys": ["sk-old"]}
+    assert written == {"key": "sk-new"}
+    assert ll.ensure_org_key(mock.Mock(spec=Session), org, core_v1) == "sk-new"
+    # Without a key there is nothing to rotate.
+    calls.clear()
+    core_v1.read_namespaced_secret.side_effect = ApiException(status=404)
+    ll.rotate_org_key(mock.Mock(spec=Session), org, core_v1)
+    assert calls == []
 
 
 def test_ensure_org_key_creates_team_key_and_secret(monkeypatch):

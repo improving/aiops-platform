@@ -15,7 +15,7 @@ The raw manifests under `infra/aiops/` remain for the lab until the chart is ver
 - cert-manager 1.21 when the chart should issue the certificate (`gateway.tls.certificate.create`);
   otherwise a TLS Secret for `*.<parent domain>` in the Gateway's namespace.
 - A parent domain with a wildcard DNS record pointing at the Gateway:
-  the chart creates `ui.`, `api.`, `auth.` and `sso.<parent domain>`,
+  the chart creates `ui.`, `api.`, `auth.`, `sso.` and, with Langflow, `langflow.<parent domain>`,
   and the backend creates `nb-`, `vdb-` and `inf-` hosts under it for every instance.
 - The Kubeflow notebook controller for notebooks (`make kind-up` installs it locally).
 - Images: `ghcr.io/infracloudio/aiops-backend` and `aiops-frontend` (`global.imageTag`, default `main`);
@@ -50,6 +50,7 @@ One Secret, `aiops-platform-secrets` (`secrets.name`, fixed because the subchart
 | `DATABASE_USER`, `DATABASE_PASSWORD` | the bundled Postgres (`postgres` superuser) and the backend, Keycloak and LiteLLM connections |
 | `HF_TOKEN` | the backend's `HF_API_TOKEN` (Hugging Face engines); empty by default |
 | `NGC_API_KEY` | NVIDIA NIM; empty by default |
+| `LANGFLOW_SUPERUSER_PASSWORD` | the bundled Langflow's break-glass superuser `aiops-admin` (`langflow.enabled`); required in `secrets.existingSecret` when Langflow is enabled, since the hook backfills a generated Secret only |
 
 On the first install a pre-install hook generates the Secret with random values (`secrets.generate=true`);
 on every later install or upgrade it keeps it.
@@ -86,7 +87,7 @@ so the first pod start creates the schema and the `default` organization;
 `kubectl -n aiops-platform logs deployment/aiops-platform-backend | grep -i alembic` shows them.
 Keycloak imports the realm `aiops` from the chart on its first start and skips the import afterwards;
 the realm's clients are `aiops-ui` (public, PKCE, redirect `https://ui.<parent domain>/*`),
-`aiops-gateway` (confidential, redirect `https://sso.<parent domain>/oauth2/callback`)
+`aiops-gateway` (confidential, redirects `https://sso.<parent domain>/oauth2/callback` and `https://langflow.<parent domain>/oauth2/callback`)
 and `aiops-automation` (client credentials).
 `keycloak.devUsers=true` adds `admin`, `alice` and `bob` (password equals the user name) for a demo; leave it off elsewhere.
 Without dev users, create people in the Admin Console (`https://auth.<parent domain>/admin/master/console/`, user `admin`, password from the Secret)
@@ -141,6 +142,33 @@ Every dependency has an `enabled` switch and an `external` block; the backend, t
 2. Set `litellm.enabled=false`, `litellm.external.url=https://<host>`, `litellm.external.existingSecret`.
 3. `helm upgrade`; instances deployed before the switch must be re-registered (delete and launch again).
    An empty `litellm.external.url` runs the backend without LiteLLM: chat falls back to the instance's gateway host, embeddings and rerank answer 503.
+
+## Langflow
+
+`langflow.enabled=true` deploys Langflow (`langflow.image`, a `ReadWriteOnce` volume of `langflow.persistence.size`)
+behind the gateway at `https://langflow.<parent domain>` on platform identity (ADR 0002):
+its own `SecurityPolicy` logs the browser in, asks the backend who may open it, forwards the access token,
+and Langflow verifies that token and keeps one Langflow user per platform user.
+The backend then provisions each member's Langflow account with the organization's LiteLLM
+(`LANGFLOW_API_URL` in the ConfigMap), so Langflow's model pickers list the organization's models.
+With `langflow.enabled: false` and `ui.langflowUrl` naming a Langflow of your own on platform identity,
+the backend provisions that one through its public address instead.
+Three values matter:
+
+- `langflow.ssrfAllowedHosts`: Langflow refuses private addresses otherwise.
+  Flows reach models through LiteLLM only, so the default (empty) allows just the bundled LiteLLM Service;
+  name an external LiteLLM's host here when it is a private address.
+- `langflow.hostAliases`: Langflow fetches the realm's JWKS from the public issuer host over https
+  (it refuses a plain-http URL), so on a cluster where that host does not resolve from a pod, alias it to the gateway,
+  as `make chart-install` does for `frontend.hostAliases`; `global.caSecret` makes the pod trust a private CA.
+- `LANGFLOW_SUPERUSER_PASSWORD` in the Secret: the break-glass superuser `aiops-admin`, never a person's login.
+
+Keycloak imports the realm once, so an existing install adds `https://langflow.<parent domain>/oauth2/callback`
+to the `aiops-gateway` client's redirect URIs in the Admin Console.
+A rejected `SecurityPolicy` is not applied at all and leaves its route open,
+so a post-install and post-upgrade hook Job (`<release>-policy-check`) waits until the controller reports `Accepted`
+on the workloads policy and on Langflow's, and fails the release otherwise;
+`kubectl -n <namespace> get securitypolicy -o jsonpath='{.items[*].status.ancestors[0].conditions}'` shows the reason.
 
 ## Backup and restore
 

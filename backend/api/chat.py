@@ -180,9 +180,12 @@ def instance_api_key(db: Session, instance) -> str | None:
     return read_credential_value(credential) if credential else None
 
 
-def list_instance_targets(db: Session, user: CurrentUser) -> list[dict]:
+def list_instance_targets(
+    db: Session, user: CurrentUser, *, probe: bool = True
+) -> list[dict]:
     """The deployed-instance chat/embedding/rerank targets of the
-    caller's organization."""
+    caller's organization. ``probe=False`` reads readiness from the
+    persisted status instead of asking the cluster per instance."""
     rows = (
         db.query(DBInferenceInstance)
         .filter(org_scope(DBInferenceInstance, user))
@@ -195,10 +198,13 @@ def list_instance_targets(db: Session, user: CurrentUser) -> list[dict]:
             row.endpoint and row.model.category == "llm"
         ):
             continue
-        try:
-            ready, _ = check_pod_status_and_readiness(row, db)
-        except Exception:
-            ready = False
+        if probe:
+            try:
+                ready, _ = check_pod_status_and_readiness(row, db)
+            except Exception:
+                ready = False
+        else:
+            ready = row.status == "Running"
         targets.append(
             {
                 "name": row.litellm_model_name or instance_model_name(row.id),
@@ -279,10 +285,14 @@ def target_labels(db: Session, user: CurrentUser) -> dict[str, str]:
     return labels
 
 
-def list_targets(db: Session, user: CurrentUser) -> list[dict]:
+def list_targets(
+    db: Session, user: CurrentUser, *, probe: bool = True
+) -> list[dict]:
     """Every chat/embedding/rerank target of the caller's organization:
     deployed instances, then hosted provider models."""
-    return list_instance_targets(db, user) + list_hosted_targets(db, user)
+    return list_instance_targets(db, user, probe=probe) + list_hosted_targets(
+        db, user
+    )
 
 
 def _last_user_text(body: dict) -> str:

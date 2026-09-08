@@ -343,9 +343,18 @@ Durations are from a local run on Apple silicon; CI is slower.
 | `registry-lifecycle.spec.ts`  | import `Qwen/Qwen3-0.6B-GGUF` from the live Hugging Face Hub, publish, launch on Ollama with the `hf.co/...` reference, chat once, delete the instance and the entry | 3 to 8 min |
 | `tenancy-isolation.spec.ts`   | admin creates `e2e-acme` and invites bob; bob switches organizations through the `aiops_org` cookie (`X-Org` works only on the direct `api` fixture) and cannot list or read alice's Ollama instance; a personal token lists instances, a read token cannot create, a revoked one answers 401; the audit page shows the launch | 1 to 5 min |
 | `day2-ops.spec.ts`            | launch `qwen3:0.6b` on Ollama with `cpu`/`memory` pinned to fit the lab node (verified against a real pod), Ready, logs and events from the UI and the API, restart (pod replaced), stop (pods gone, `Stopped`), resume (Ready again, one pod), delete | 2 to 12 min (first run pulls the model) |
-`e2e/cluster/langflow-authz.spec.ts` checks what gateway OIDC gives us on the Langflow host:
-a signed-in member reaches Langflow and its API answers, a context with no session is sent to Keycloak.
-The API assertion matters: Langflow's login page and its error state both answer 200 with the same title.
+`e2e/cluster/langflow-authz.spec.ts` checks Langflow on platform identity:
+a signed-in member is Langflow's user of the same name (`whoami` says `alice`, not a superuser);
+two members are two users, and a variable alice creates is not in bob's list;
+a browser holding Langflow's cookies from the auto-login days still gets in, because the bundle drops them and comes back through the login;
+a context with no session is sent to Keycloak;
+a client-credentials token is refused by the control plane with the reason;
+the Develop page provisions the organization into Langflow (the two `OPENAI_COMPATIBLE_*` variables land on alice's account,
+and Langflow's model list for that provider offers the organization's `inst-`/`prov-` names);
+and the Develop page's iframe renders Langflow's own chrome.
+Every assertion asks Langflow's API: its login page and its error state both answer 200 with the same title.
+The spec allows three console errors Langflow's bundle logs by design under external auth
+(the auto-login probe's 403, the refresh attempt's 401, its own "Duplicate request" line).
 
 The cluster times assume the images are already on the kind node.
 The first pull of a notebook or Qdrant image adds minutes; the tests wait up to 6 minutes for a notebook and 5 for a vector DB.

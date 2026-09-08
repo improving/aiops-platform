@@ -101,7 +101,7 @@ def host(kind, instance_id, suffix=""):
         ("nb-1a2b3c4d", ("nb", "1a2b3c4d", "")),
         # Not an instance host, or another domain.
         (f"auth.{PARENT}", None),
-        (f"langflow.{PARENT}", None),
+        (f"langflow.{PARENT}", ("langflow", "", "")),
         ("nb-1a2b3c4d.other.test", None),
         (f"nb-1a2b3c4.{PARENT}", None),
         (f"nb-1a2b3c4d5.{PARENT}", None),
@@ -373,3 +373,51 @@ def test_disabled_mode_runs_as_the_dev_admin():
         assert response.headers["X-Auth-Org"] == "default"
     finally:
         delete_rows(Notebook, legacy)
+
+
+LANGFLOW_HOST = {"Host": f"langflow.{PARENT}"}
+
+
+def test_a_member_may_open_langflow(oidc_client, tokens):  # noqa: F811
+    response = oidc_client.get(ROUTE, headers=tokens["alice"] | LANGFLOW_HOST)
+    assert response.status_code == 200, response.text
+    assert response.headers["X-Auth-User-Sub"] == "alice"
+    assert response.headers["X-Auth-Org"] == "default"
+
+
+def test_a_service_account_may_not_open_langflow(
+    oidc_client,  # noqa: F811
+    rsa_key,
+):
+    # No email and an azp of its own: what a client-credentials token
+    # looks like (auth/current_user.py turns it into svc:<azp>).
+    token = make_token(
+        rsa_key,
+        sub="service-account-aiops-automation",
+        email=None,
+        name=None,
+        azp="aiops-automation",
+    )
+    response = oidc_client.get(ROUTE, headers=bearer(token) | LANGFLOW_HOST)
+    assert response.status_code == 403
+    assert "service accounts" in response.json()["detail"]
+    assert "X-Auth-User-Sub" not in response.headers
+
+
+def test_a_personal_token_may_not_open_langflow(
+    oidc_client,  # noqa: F811
+    tokens,
+):
+    created = oidc_client.post(
+        "/v1alpha1/tokens",
+        json={"name": "langflow", "scope": "write"},
+        headers=tokens["alice"],
+    )
+    assert created.status_code == 201, created.text
+    secret = created.json()["token"]
+    response = oidc_client.get(
+        ROUTE,
+        headers={"Authorization": f"Bearer {secret}"} | LANGFLOW_HOST,
+    )
+    assert response.status_code == 403
+    assert "personal tokens" in response.json()["detail"]

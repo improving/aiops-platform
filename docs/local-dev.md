@@ -226,28 +226,76 @@ apply the same migrations without starting the API with `make db-migrate`.
 ## Langflow for the Develop page
 
 The Develop page embeds Langflow.
-Langflow used to run as a docker-compose profile on `localhost:7860`;
-it now runs in the kind cluster behind the gateway
-(`infra/local/langflow/langflow.yaml`), OIDC-protected the same way a
-notebook or vector database route is (see "Workload access" below), but
-with its own `SecurityPolicy` `langflow-oidc` rather than joining the
-shared `aiops-workloads-oidc` policy -- it owns a host of its own,
-`langflow.127.0.0.1.nip.io`, so it can also own a redirect URI and a
-cookie suffix of its own; `https://langflow.127.0.0.1.nip.io/oauth2/callback`
-is registered on the `aiops-gateway` client alongside the `sso` callback
-(`infra/local/auth/realm-aiops.json`).
-`make langflow-up` applies the manifests and waits for the Deployment
-(first image pull is about 2 GB); `make frontend` passes
-`NEXT_PUBLIC_LANGFLOW_URL` (default `LANGFLOW_URL`,
-`https://langflow.127.0.0.1.nip.io`) so the page embeds it.
-Without it the page shows a "Langflow is not configured" card, which is
-expected.
-`LANGFLOW_AUTO_LOGIN=true` stays set: the gateway is now Langflow's only
-ingress, so a second login screen inside the iframe would be redundant,
-not additional security (version 2 turns it off in favour of per-user
-Langflow API keys, design doc section 3.4).
+Langflow runs in the kind cluster behind the gateway
+(`infra/local/langflow/langflow.yaml`), on platform identity (ADR 0002,
+design `docs/superpowers/specs/2026-09-08-langflow-native-identity-design.md`):
+the gateway logs the browser in against Keycloak,
+asks the backend whether this member may open Langflow (ext-authz, the `langflow` host rule),
+and forwards the access token;
+Langflow verifies that token itself (`LANGFLOW_EXTERNAL_AUTH_*`)
+and keeps one Langflow user per platform user, named after the Keycloak username.
+So `GET https://langflow.127.0.0.1.nip.io/api/v1/users/whoami` names the person who is signed in,
+there is no second login screen, and flows are personal: they follow the person, not the organization.
+Langflow has its own `SecurityPolicy` `langflow-oidc` rather than joining the shared
+`aiops-workloads-oidc` policy, because it owns a host of its own and so can own a redirect URI
+(`https://langflow.127.0.0.1.nip.io/oauth2/callback` is registered on the `aiops-gateway` client
+alongside the `sso` callback, `infra/local/auth/realm-aiops.json`).
+
+`make langflow-up` does three things, all idempotent:
+it generates the break-glass superuser Secret `langflow-superuser` (`aiops-admin`, a random password, never printed) once;
+it publishes `infra/local/ca/ca.crt` as the ConfigMap `aiops-ca` and substitutes the gateway's ClusterIP into the manifest,
+because Langflow accepts an https JWKS URL only and the pod therefore fetches the realm's keys from
+`https://auth.127.0.0.1.nip.io` through the gateway, trusting the local CA;
+and it applies the manifest and waits for the rollout (the first image pull is about 2 GB).
+A Langflow volume from before the switch still holds the shared user `langflow`:
+run `make langflow-retire-shared-user` once to deactivate it through Langflow's API
+(`infra/local/langflow/retire-shared-user.py`, run inside the pod as the superuser; its flows are kept).
+Flows reach models through LiteLLM only, so the pod's `LANGFLOW_SSRF_ALLOWED_HOSTS` names just `litellm.litellm.svc`.
+`make frontend` passes `NEXT_PUBLIC_LANGFLOW_URL` (default `LANGFLOW_URL`, `https://langflow.127.0.0.1.nip.io`)
+so the page embeds it; without it the page shows a "Langflow is not configured" card, which is expected.
 `make langflow-down` removes the Deployment/Service/HTTPRoute/SecurityPolicy
-and keeps the PVC; `make db-down` only touches Postgres.
+and keeps the PVC and the superuser Secret; `make db-down` only touches Postgres.
+
+After every change to `langflow-oidc`, check that the controller accepted it:
+
+```bash
+kubectl -n ai-stack get securitypolicy langflow-oidc -o jsonpath='{.status.ancestors[0].conditions[0]}'
+```
+
+A rejected `SecurityPolicy` is not applied at all, and its route is then open, with no login and no ext-authz
+(measured: `passThroughAuthHeader` without a `jwt` block was rejected, and the host answered 200 to a request with no session).
+
+**The switch to platform identity, once.**
+Before 2026-09-08 every browser was the one auto-login superuser `langflow`.
+That user is deactivated, not deleted; its one flow and its variables are still in the database.
+To recover them, sign in as the break-glass superuser through a port-forward
+(nothing on the gateway host accepts a password login):
+
+```bash
+kubectl -n ai-stack port-forward deploy/langflow 7860
+pw=$(kubectl -n ai-stack get secret langflow-superuser -o jsonpath='{.data.password}' | base64 -d)
+tok=$(curl -s -d "username=aiops-admin" -d "password=$pw" http://localhost:7860/api/v1/login | jq -r .access_token)
+id=$(curl -s -H "Authorization: Bearer $tok" 'http://localhost:7860/api/v1/users/?limit=100' | jq -r '.users[] | select(.username=="langflow") | .id')
+curl -s -X PATCH -H "Authorization: Bearer $tok" -H 'content-type: application/json' -d '{"is_active": true}' http://localhost:7860/api/v1/users/$id
+curl -s -X PATCH -H "Authorization: Bearer $tok" -H 'content-type: application/json' -d '{"password": "<a new one>"}' http://localhost:7860/api/v1/users/$id/reset-password
+```
+
+then sign in as `langflow` on `http://localhost:7860`, export the flow, and deactivate the user again.
+A browser that opened Langflow before the switch still holds Langflow's own cookies for the shared user;
+they are harmless: the bundle sends the stale token, Envoy refuses it, the bundle drops its cookies
+and comes back through the gateway login (pinned by `e2e/cluster/langflow-authz.spec.ts`).
+
+**Calling Langflow's API.** `passThroughAuthHeader` is on, so a request carrying a Keycloak access token
+skips the gateway login and reaches Langflow as that person:
+
+```bash
+curl --cacert infra/local/ca/ca.crt -H "Authorization: Bearer $KEYCLOAK_ACCESS_TOKEN" https://langflow.127.0.0.1.nip.io/api/v1/users/whoami
+```
+
+A client-credentials token (`aiops-automation`) and a personal `aiops_…` token are refused by the control plane with
+`Langflow opens for signed-in members only, not for service accounts or personal tokens`;
+a bearer that is not a realm token is refused by Envoy's own JWT check.
+The backend uses this path to provision a member's Langflow account (`utils/langflow.py`).
 
 **Iframe caveat.** The Develop page's iframe is loaded from
 `http://localhost:3000`, a different origin than
@@ -257,31 +305,17 @@ that iframe only if the browser already holds them for that domain --
 i.e. only after the user has visited some `*.127.0.0.1.nip.io` host
 (Langflow itself, a notebook, `auth.127.0.0.1.nip.io`, ...) at least
 once in that browser and completed the Keycloak login there. On a first
-visit, or in a browser that blocks third-party cookies for the iframe's
-cross-site navigation, the gateway's 302 sends the frame to Keycloak's own
-login page, and Keycloak sends `content-security-policy: frame-ancestors
+visit, or once that session has expired, the gateway's 302 sends the
+frame to Keycloak's own login page, and Keycloak sends `content-security-policy: frame-ancestors
 'self'` (and `X-Frame-Options: SAMEORIGIN`) on that page -- so the browser
 refuses to render the login form inside the iframe at all rather than
 showing it: the frame goes blank, not to a visible login prompt (checked
 with `curl -sI https://auth.127.0.0.1.nip.io/...`, see "Keycloak").
 Langflow's own responses set neither header, so an *already-authenticated*
-load renders normally. There is no code change for this here (frontend
-files are out of scope for this task); the practical workaround is a
-plain link next to or instead of the iframe, "Open Langflow" pointing at
-`LANGFLOW_URL` in a new tab, so the login (and Langflow itself) can be
-completed as a normal top-level navigation.
-
-**Update, 2026-09-08.** The cross-site part of the caveat above is fixed:
-the gateway's OIDC cookies and Langflow's own access and refresh cookies
-are now `SameSite=None` with `Secure`, so they *are* sent inside the
-iframe and the frame authenticates on its own.
-
-That has a one-time cost. **A browser that opened Langflow before this
-change still holds the older cookies, which are not sent in the frame, so
-the Develop page fails there while the same URL works fine in its own
-tab.** Clear site data for `127.0.0.1.nip.io` and reload; a private
-window is the quickest way to confirm that is what it is. Once per
-browser, and only for browsers used before the change.
+load renders normally. The page says so and offers "open Langflow in a new tab":
+completing the login as a top-level navigation is the way back.
+The gateway's OIDC cookies are `SameSite=None` with `Secure`, so an authenticated browser's frame does
+authenticate on its own.
 
 ## LiteLLM
 

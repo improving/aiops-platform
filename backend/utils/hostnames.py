@@ -15,6 +15,9 @@ _LABEL = re.compile(
     r"^(?P<kind>nb|vdb|inf)-(?P<id8>[0-9a-f]{8})(?P<suffix>-api)?$"
 )
 _KINDS_WITH_API_SUFFIX = ("vdb",)
+# Langflow's host has no id: one Langflow, its own SecurityPolicy
+# (infra/local/langflow/langflow.yaml), the same ext-authz check.
+LANGFLOW_KIND = "langflow"
 
 
 def parse_hostname(host: str) -> tuple[str, str, str] | None:
@@ -24,13 +27,15 @@ def parse_hostname(host: str) -> tuple[str, str, str] | None:
     settings present the part after the first label must be empty or the
     configured parent domain (another domain is not ours: ``None``).
     Without settings only the first label is parsed. Anything that is not
-    an instance host (``auth``, ``langflow``, a bad id) is ``None``.
+    an instance host or Langflow (``auth``, a bad id) is ``None``.
     """
     host = host.strip().lower().rsplit(":", 1)[0]
     label, _, rest = host.partition(".")
     settings = gateway_settings()
     if settings is not None and rest and rest != settings.parent_domain:
         return None
+    if label == LANGFLOW_KIND:
+        return LANGFLOW_KIND, "", ""
     match = _LABEL.match(label)
     if match is None:
         return None

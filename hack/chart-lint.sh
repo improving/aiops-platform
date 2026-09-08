@@ -13,9 +13,12 @@ FAILURES=0
 pass() { printf "PASS  %s\n" "$1"; }
 fail() { printf "FAIL  %s\n" "$1" >&2; FAILURES=$((FAILURES + 1)); }
 # expect <name> <extended regex> <text>: the text matches.
-expect() { if printf '%s' "$3" | grep -qE -- "$2"; then pass "$1"; else fail "$1"; fi; }
+# Not grep -q: under pipefail an early match makes grep exit while printf is
+# still writing a render larger than the pipe buffer, and the SIGPIPE turns
+# a match into a failure. Reading to the end has no such race.
+expect() { if printf '%s' "$3" | grep -E -- "$2" >/dev/null; then pass "$1"; else fail "$1"; fi; }
 # reject <name> <extended regex> <text>: the text does not match.
-reject() { if printf '%s' "$3" | grep -qE -- "$2"; then fail "$1"; else pass "$1"; fi; }
+reject() { if printf '%s' "$3" | grep -E -- "$2" >/dev/null; then fail "$1"; else pass "$1"; fi; }
 
 helm dependency build "$CHART" >/dev/null
 helm lint --strict "$CHART"
@@ -24,6 +27,15 @@ helm lint --strict "$CHART" -f "$CHART/test/values-external.yaml"
 default=$(helm template aiops-platform "$CHART" -n aiops-platform)
 external=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-external.yaml")
 kind_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-kind.yaml")
+# test/values-kind.yaml is also the make chart-install fixture and keeps
+# Langflow off (a second 2 GB image next to the dev Langflow); this render
+# turns it on the way chart-install would.
+langflow_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-kind.yaml" \
+  --set langflow.enabled=true --set global.caSecret=aiops-platform-ca \
+  --set-json 'langflow.hostAliases=[{"ip":"10.96.0.10","hostnames":["auth.platform.127.0.0.1.nip.io"]}]')
+# Langflow of the operator's own, embedded and provisioned through its public address.
+external_langflow=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-external.yaml" \
+  --set ui.langflowUrl=https://langflow.example.com)
 
 # --- default values: everything bundled -------------------------------------
 expect "default renders the backend Deployment" 'name: aiops-platform-backend$' "$default"
@@ -45,6 +57,8 @@ reject "default realm has no dev users" '"username": "alice"' "$default"
 expect "default realm reads the gateway secret from the environment" '\$\{KEYCLOAK_CLIENT_SECRET\}' "$default"
 expect "default KC_HOSTNAME is the auth host" 'KC_HOSTNAME: "https://auth\.aiops\.example\.com"' "$default"
 expect "default ui route has a stream timeout" 'streamIdleTimeout: 10m' "$default"
+expect "default fails the release when a policy is not accepted" 'until accepted "\$policy"' "$default"
+expect "the policy check may read policies" 'resources: \["securitypolicies"\]' "$default"
 reject "default renders no Gateway" '^kind: Gateway$' "$default"
 # The backend attaches nb-/vdb- routes to the OIDC policy of its own
 # namespace: the policy must render without a namespace of its own (so it
@@ -81,6 +95,31 @@ expect "kind Certificate lives in the gateway namespace" 'namespace: envoy-gatew
 expect "kind realm carries the dev users" '"username": "alice"' "$kind_render"
 expect "kind routes attach to the dev Gateway" 'name: aiops$' "$kind_render"
 
+# --- Langflow ------------------------------------------------------------------
+reject "the default render has no Langflow" 'aiops-platform-langflow' "$default"
+expect "the Langflow render deploys it" 'name: aiops-platform-langflow$' "$langflow_render"
+expect "Langflow's policy forwards the token and passes a bearer through" 'passThroughAuthHeader: true' "$langflow_render"
+expect "pass-through comes with Envoy's own JWT check" 'name: keycloak$' "$langflow_render"
+expect "Langflow verifies against the public https JWKS" 'value: "https://auth\.platform\.127\.0\.0\.1\.nip\.io/realms/aiops/protocol/openid-connect/certs"' "$langflow_render"
+# Unquoted: toYaml renders hostAliases' hostnames bare, while route
+# hostnames are quoted, so this line can only be the pod's alias.
+expect "the pod aliases the auth host" '^ +- auth\.platform\.127\.0\.0\.1\.nip\.io$' "$langflow_render"
+expect "the realm registers the Langflow callback" 'langflow\.platform\.127\.0\.0\.1\.nip\.io/oauth2/callback' "$langflow_render"
+expect "the backend knows Langflow's Service" 'LANGFLOW_API_URL: "http://aiops-platform-langflow:7860"' "$langflow_render"
+reject "the chart sets no LITELLM_CLUSTER_URL (LITELLM_URL is already the Service)" 'LITELLM_CLUSTER_URL' "$langflow_render"
+expect "Langflow may reach the LiteLLM Service only" 'value: "aiops-litellm"$' "$langflow_render"
+expect "the policy check waits on Langflow's policy too" 'aiops-workloads-oidc aiops-platform-langflow-oidc' "$langflow_render"
+expect "both policies share one ext-authz path" '^2$' "$(printf '%s' "$langflow_render" | grep -c -- 'path: /v1alpha1/authz/route')"
+expect "an external Langflow gets the same API address" 'LANGFLOW_API_URL: "https://langflow\.example\.com"' "$external_langflow"
+if helm template aiops-platform "$CHART" -n aiops-platform --set langflow.enabled=true --set gateway.enabled=false >/dev/null 2>&1; then
+  fail "langflow.enabled without gateway.enabled is refused"
+else
+  pass "langflow.enabled without gateway.enabled is refused"
+fi
+expect "the UI embeds the bundled Langflow" 'LANGFLOW_URL: "https://langflow\.platform\.127\.0\.0\.1\.nip\.io"' "$langflow_render"
+expect "the superuser password comes from the platform Secret" 'key: LANGFLOW_SUPERUSER_PASSWORD$' "$langflow_render"
+expect "the hook generates the superuser password" 'LANGFLOW_SUPERUSER_PASSWORD\) rand 32' "$default"
+
 # --- the secrets hook -----------------------------------------------------------
 expect "default hook generates the platform Secret" 'value: "true"' "$(printf '%s' "$default" | grep -A1 -- 'name: GENERATE')"
 expect "default hook reads the gateway secret from the platform Secret" 'value: "aiops-platform-secrets"' "$(printf '%s' "$default" | grep -A1 -- 'name: KEYCLOAK_SECRET')"
@@ -92,7 +131,7 @@ expect "hook script is embedded" 'apply_secret aiops-gateway-oidc' "$default"
 expect "hook script patches missing keys into an existing Secret" 'kubectl.*patch secret' "$default"
 
 # --- never a credential in a render -------------------------------------------
-reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render"
+reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render$langflow_render"
 
 if (( FAILURES > 0 )); then
   echo "$FAILURES check(s) failed" >&2

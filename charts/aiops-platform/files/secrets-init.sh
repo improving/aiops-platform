@@ -22,7 +22,7 @@ rand() {
 # here cannot be missed by one of the two.
 KEYS="AUTH_SECRET KEYCLOAK_CLIENT_SECRET AUTOMATION_CLIENT_SECRET \
 KEYCLOAK_ADMIN_PASSWORD LITELLM_MASTER_KEY LITELLM_SALT_KEY \
-DATABASE_USER DATABASE_PASSWORD HF_TOKEN NGC_API_KEY"
+DATABASE_USER DATABASE_PASSWORD HF_TOKEN NGC_API_KEY LANGFLOW_SUPERUSER_PASSWORD"
 
 key_value() {
   # key_value <key>: the value to use when the key is (re)generated.
@@ -37,6 +37,7 @@ key_value() {
     DATABASE_PASSWORD) rand 24 ;;
     HF_TOKEN) echo "" ;;
     NGC_API_KEY) echo "" ;;
+    LANGFLOW_SUPERUSER_PASSWORD) rand 32 ;;
   esac
 }
 

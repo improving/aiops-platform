@@ -87,7 +87,7 @@ Notebooks have no actions.
 GET/POST      /v1alpha1/organizations                        (POST: platform admin; slug ^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$)
 GET           /v1alpha1/organizations/current                (adds member_count, is_platform_admin)
 GET           /v1alpha1/organizations/current/members         (admin)
-PUT/DELETE    /v1alpha1/organizations/current/members/{id}    (admin; last admin and removing yourself both answer 409)
+PUT/DELETE    /v1alpha1/organizations/current/members/{id}    (admin; last admin and removing yourself both answer 409; DELETE rotates the organization's LiteLLM key first, 502 and no removal when that fails)
 GET/POST      /v1alpha1/organizations/current/invitations     (admin)
 DELETE        /v1alpha1/organizations/current/invitations/{id} (admin; withdraw)
 ```
@@ -122,6 +122,29 @@ GET /v1alpha1/organizations/current/usage?days=30
 `usage` aggregates spend log rows for the last `days` (1 to 90, 422 outside that range) by target and by day;
 a member sees only their own rows, an admin every row including ones with no attributed user.
 Every route answers 503 without LiteLLM configured, 502 on a LiteLLM error.
+
+## Langflow
+
+`POST /v1alpha1/langflow/provision` writes the caller's Langflow "OpenAI Compatible" provider variables
+for the active organization and reports what Langflow now lists.
+It runs as the caller: the request's own Keycloak bearer is forwarded to Langflow,
+so it needs a browser session (the Develop page calls it on load), and it is idempotent.
+
+```json
+{
+  "langflow_user": "alice",
+  "organization": "Acme",
+  "models": [{"name": "inst-68ed7110", "label": "Qwen3 0.6B · Ollama"}]
+}
+```
+
+The variables it writes are `OPENAI_COMPATIBLE_BASE_URL` (the in-cluster LiteLLM address plus `/v1`)
+and `OPENAI_COMPATIBLE_API_KEY` (the organization's virtual key), Langflow global variables on the caller's account.
+`models` are the organization's chat targets by the names Langflow's pickers list live from LiteLLM,
+read from the database without a readiness probe.
+503 when `LANGFLOW_API_URL` or LiteLLM is not configured;
+409 for a personal token or a service account (`detail` says a browser session is needed);
+502 with Langflow's or LiteLLM's own detail when the write fails.
 
 ## Examples
 

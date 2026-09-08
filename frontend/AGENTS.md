@@ -139,23 +139,31 @@ pnpm e2e:ui                               # Playwright UI mode
   tab has GPU count (hidden for a `cpu` serving option), Replicas, CPU and Memory (`type="text"` inputs, so they keep the
   `textbox` role); they are sent as top-level `gpu_count`, `replicas`, `cpu`, `memory`. The fast tier stubs every instance
   route with `page.route` (`e2e/fast/instance-operations.spec.ts`); `e2e/cluster/day2-ops.spec.ts` runs the real flow on kind.
-- `components/instances/InstanceAccess.tsx` (#36) is the model instance page's Access block: two sub-tabs,
-  "API access" (the gateway host, the `x-api-key` reveal, and a "Code examples" button) and "Langflow"
-  (`clusterEndpoint`, the in-cluster Service address). Whether the Langflow tab asks for a key is not a
-  property of the tab but of the engine: skipping the gateway skips its key check, but vLLM reads the
-  credential itself, so `workloadChecksApiKey` on the instance decides between the reveal button and
-  "none needed". Saying "none needed" for every engine sent vLLM users to a 401. They were one block before, which repeated the
-  base URL and model four times and made every reader wade through the half that did not apply to them.
-  Both tabs use the same three labelled fields, so the difference between them is what stands out.
-  Each field table is a `role="group"` with an accessible name ("API access fields", "Langflow fields"): scope
-  specs to those, because the code examples contain the same URL. The Langflow tab is disabled without a
-  `clusterEndpoint`, and its "Open Langflow" link needs a `langflowUrl` from `useRuntimeConfig()`, which the
-  fast tier has to stub. The reveal button moved out of the old "API Key" detail row, which is now "Actions".
-  Both tabs render one `AccessFields`, differing only in the Auth cell they pass as children: the parallel
-  structure a reader compares across is then a property of the code, not a copy that survives until someone
-  edits one tab. The page has no separate "Endpoint" detail row any more -- Access shows the same host as a
-  copyable Base URL on the tab that opens by default, and Ready and Status carry the readiness its red/green
-  text repeated.
+- `components/instances/InstanceAccess.tsx` (#36, #29) is the model instance page's Access block: two sub-tabs,
+  "API access" (the gateway host as a copyable Base URL, the model, the `x-api-key` reveal, and a "Code examples"
+  button) and "Langflow" (the instance's `litellm_model_name`, the name Langflow lists under its "OpenAI
+  Compatible" provider once the Develop page has synced the organization, and nothing to paste). The Langflow
+  tab is disabled while `litellm_model_name` is null (not registered in LiteLLM), and its "Open Langflow" link
+  needs a `langflowUrl` from `useRuntimeConfig()`, which the fast tier has to stub. Each field table is a
+  `role="group"` with an accessible name ("API access fields", "Langflow fields"): scope specs to those, because
+  the code examples contain the same URL. `clusterEndpoint` and `workloadChecksApiKey` stay in the API for
+  other callers; the tab stopped showing the in-cluster Service address when LiteLLM became the way in.
+  The reveal button lives here, not in a detail row; the page has no separate "Endpoint" detail row either
+  (Access shows the same host as a copyable Base URL on the tab that opens by default, and Ready and Status
+  carry the readiness its red/green text repeated).
+- `components/develop/Develop.tsx` (#29) calls `POST /v1alpha1/langflow/provision` once per page load
+  (`services/langflowService.ts`, idempotent) and renders an `OrganizationPanel`, a `region` named
+  "Langflow for <organization>": one line with who the caller is in Langflow, the provider slot the platform
+  manages, a "Models (N)" `Combobox` (the search matches the name and the label, selecting an `option` copies
+  the name through `useCopy()` from `CopyButton.tsx`), a "Sync again" button and an "Open in a new tab" link,
+  plus the failure detail in a `role="alert"`; the names stay behind the picker so the editor keeps the page
+  (`h-[calc(100vh-18rem)]` like the chat page, the iframe `flex-1 min-h-0`). The sync keeps an in-flight ref:
+  strict mode in `next dev` mounts twice, and two concurrent creates of one Langflow variable fail.
+- `src/components/ui/combobox.tsx` `Combobox` is the one searchable dropdown (a `role="combobox"` trigger with
+  `aria-expanded`, a `Popover` holding a `Command` list that closes on select; `items` carry `value`,
+  `keywords`, an optional `node` and `onSelect`; `footer` renders under the list). The endpoint page's two
+  time-range pickers and the Develop page's model picker use it; do not hand-roll a fourth Popover + Command.
+  Under `AIOPS_CHAT_MOCK` the endpoint answers with `inst-mock`, which `e2e/fast/runtime-config.spec.ts` asserts.
 - `components/instances/CodeExamplesDialog.tsx` holds the worked examples: curl, Python and TypeScript, one at a
   time, rendered by `CodeSnippet` with `lang` and `wrap` set. Always pass the `lang` (`highlight(code, { lang })`,
   typed `LanguageName`): the default is JavaScript, whose comment rule reads the `//` in an `https://` URL as the

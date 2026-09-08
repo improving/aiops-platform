@@ -145,3 +145,97 @@ postgresql://{{ include "aiops-platform.databaseHost" . }}:{{ if .Values.postgre
 {{- required "backend.serviceAccount.name is required when backend.serviceAccount.create is false" .Values.backend.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "aiops-platform.langflowFullname" -}}
+{{ include "aiops-platform.fullname" . }}-langflow
+{{- end }}
+
+{{- define "aiops-platform.langflowImage" -}}
+{{ .Values.langflow.image.repository }}:{{ .Values.langflow.image.tag }}
+{{- end }}
+
+{{/*
+The Langflow URL the UI embeds: the bundled one when it is deployed behind
+the gateway, else whatever ui.langflowUrl says (empty shows the card).
+*/}}
+{{- define "aiops-platform.langflowUrl" -}}
+{{- if and .Values.langflow.enabled .Values.gateway.enabled -}}
+https://{{ include "aiops-platform.langflowHost" . }}
+{{- else -}}
+{{ .Values.ui.langflowUrl }}
+{{- end -}}
+{{- end }}
+
+{{/*
+The JWKS Langflow verifies tokens against: always the public https URL,
+because Langflow refuses a plain-http JWKS, so the in-cluster Keycloak
+Service is not an option here (the backend's OIDC_JWKS_URL is).
+langflow.hostAliases plus global.caSecret make it reachable on kind.
+*/}}
+{{- define "aiops-platform.jwksUrl" -}}
+{{ include "aiops-platform.issuer" . }}/protocol/openid-connect/certs
+{{- end }}
+
+{{/*
+The JWKS Envoy's own JWT check uses: the in-cluster Service over http
+when Keycloak is bundled (as the backend does), else the public one.
+*/}}
+{{- define "aiops-platform.envoyJwksUrl" -}}
+{{- if .Values.keycloak.enabled -}}
+http://{{ .Values.keycloak.fullnameOverride }}/realms/aiops/protocol/openid-connect/certs
+{{- else -}}
+{{ include "aiops-platform.jwksUrl" . }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Langflow's host: fixed at langflow.<parentDomain>, because the backend's
+ext-authz (backend/utils/hostnames.py) and the realm's callback
+(hack/derive-realm.py) name that label; a values knob would only break them.
+*/}}
+{{- define "aiops-platform.langflowHost" -}}
+langflow.{{ .Values.global.parentDomain }}
+{{- end }}
+
+{{/*
+The OIDC provider and client shared by the workloads policy and Langflow's:
+the realm's endpoints, the in-cluster Keycloak Service when it is bundled
+(same namespace as the policies, so no ReferenceGrant), and the gateway
+client whose secret the secrets hook writes to aiops-gateway-oidc.
+*/}}
+{{- define "aiops-platform.oidcProvider" -}}
+{{- $issuer := include "aiops-platform.issuer" . }}
+provider:
+  issuer: {{ $issuer | quote }}
+  authorizationEndpoint: "{{ $issuer }}/protocol/openid-connect/auth"
+  tokenEndpoint: "{{ $issuer }}/protocol/openid-connect/token"
+  {{- if .Values.keycloak.enabled }}
+  backendRefs:
+    - name: {{ .Values.keycloak.fullnameOverride }}
+      port: {{ .Values.keycloak.service.ports.http }}
+  {{- end }}
+clientID: aiops-gateway
+clientSecret:
+  name: aiops-gateway-oidc
+{{- end }}
+
+{{/*
+The ext-authz block shared by both policies: the backend decides who may
+open a host (backend/api/authz.py), and a backend it cannot reach means no.
+*/}}
+{{- define "aiops-platform.extAuth" -}}
+extAuth:
+  headersToExtAuth:
+    - authorization
+    - cookie
+  http:
+    backendRefs:
+      - name: {{ include "aiops-platform.backendFullname" . }}
+        port: 8000
+    path: /v1alpha1/authz/route
+    headersToBackend:
+      - x-auth-user-email
+      - x-auth-user-sub
+      - x-auth-org
+  failOpen: false
+{{- end }}

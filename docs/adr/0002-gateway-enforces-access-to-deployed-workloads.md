@@ -103,29 +103,34 @@ That route was serving with nothing checking the key,
 so the failure makes an existing exposure visible rather than creating a new one.
 The fix for such a row is to delete and relaunch it.
 
-Amended 2026-09-07 (#30), then reverted the same day; kept here as the record of why.
-The intent was: Langflow is decided by the control plane too.
+Amended 2026-09-07 for #30 (reverted the same day) and again 2026-09-08 (PR #38, which closes #29 and #30):
+
+Langflow is decided by the control plane too, and runs on platform identity.
 It keeps a `SecurityPolicy` of its own rather than joining the shared one,
 because its host is also its callback host,
 which is exactly the constraint that forced one shared policy on the instance routes
 and does not apply to a policy whose own route is the callback.
-What it lacked was `extAuth`:
-the OIDC block alone proves only that the realm authenticated somebody,
-the backend never saw the request, and nothing was logged,
-so "Gateway OIDC, any member" was written down but never enforced.
-It now calls `GET /v1alpha1/authz/route` like every instance route.
-There is no row to own, so the rule is that any signed-in member may open it,
+That policy forwards the access token and calls `GET /v1alpha1/authz/route` like every instance route.
+There is no row to own, so the rule for the `langflow` host is that any member with a browser session may open it,
 and script identities may not:
 a personal token and a client-credentials service account both belong to callers of the API,
 and neither should open a browser application.
+They are refused at the platform, with a reason, rather than left to Langflow,
+because a bearer skips the OIDC redirect on that host (`passThroughAuthHeader`, so the backend can call Langflow's API as the caller)
+and Langflow would otherwise turn an automation token into a person.
+Envoy Gateway requires that pass-through comes with a JWT provider, so Envoy verifies such a bearer as well.
+Langflow verifies the forwarded token itself
+(`LANGFLOW_EXTERNAL_AUTH_*`, against the realm's JWKS, issuer and the `aiops-api` audience)
+and provisions one Langflow user per platform `sub`, so nothing is minted and no header is rewritten.
 The value is that the decision belongs to the platform, is attributable in the log,
-and now has one place to narrow when a tighter rule is wanted.
+and has one place to narrow when a tighter rule is wanted.
 
-The revert: ext-authz needs `forwardAccessToken`, because that is how the platform's token reaches
-`/v1alpha1/authz/route`. That same header goes to the workload, and Langflow reads it as its own JWT and
-answers 401 to every API call, so the page loads and nothing in it works
-(measured: no header 403, a foreign token 401, its own token 200), and the browser cannot recover because the
-call that would mint a good token carries the same bad header.
-Langflow therefore stays on gateway OIDC alone until something replaces that header with a token it accepts.
-That bridge is spiked and planned in `docs/superpowers/plans/2026-09-07-langflow-per-user-identity.md`,
-and the check returns with it.
+The first attempt (#33, reverted in #34) failed because auto-login was still on:
+Langflow then read the forwarded token as one of its own and answered 401 to every API call.
+Two more things were measured on the way and are worth knowing:
+Langflow accepts an https JWKS URL only, so the pod fetches the keys from the public issuer host through the gateway
+(`hostAliases` plus the local CA bundled into `SSL_CERT_FILE`) rather than from the in-cluster Service;
+and a `SecurityPolicy` the controller rejects is not applied at all, which leaves its route open,
+so the policy's status must be checked after every change.
+The design and its measurements are in
+`docs/superpowers/specs/2026-09-08-langflow-native-identity-design.md`.

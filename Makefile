@@ -190,10 +190,27 @@ db-up: ## Start local Postgres (docker compose)
 db-down: ## Stop and remove local Postgres (data volume is kept; Langflow is untouched)
 	docker compose -f $(COMPOSE_FILE) down
 
-langflow-up: ## Serve Langflow behind the gateway (kind), OIDC-protected, at LANGFLOW_URL
-	kubectl apply -f infra/local/langflow/langflow.yaml
-	kubectl -n $(NAMESPACE) wait --for=condition=Available deployment/langflow --timeout=300s
-	@echo "Langflow: $(LANGFLOW_URL) (the frontend embeds it when NEXT_PUBLIC_LANGFLOW_URL is set; 'make frontend' sets it)"
+langflow-up: ## Serve Langflow behind the gateway (kind) on platform identity, at LANGFLOW_URL
+	@# The break-glass superuser: generated once, never printed. Platform users never use it.
+	@kubectl -n $(NAMESPACE) get secret langflow-superuser >/dev/null 2>&1 || \
+		kubectl -n $(NAMESPACE) create secret generic langflow-superuser \
+			--from-literal=username=aiops-admin \
+			--from-literal=password=$$(openssl rand -hex 24)
+	@# Langflow verifies tokens against the realm's JWKS over https only, so the pod
+	@# reaches Keycloak through the gateway: the local CA goes in as a ConfigMap and
+	@# the public auth host is aliased to the gateway's ClusterIP (see the manifest).
+	@test -s $(CA_CRT) || { echo "$(CA_CRT) is missing: run 'make gateway-up ca-export' first"; exit 1; }
+	kubectl -n $(NAMESPACE) create configmap aiops-ca --from-file=ca.crt=$(CA_CRT) --dry-run=client -o yaml | kubectl apply -f -
+	@envoy_ip=$$(kubectl -n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=aiops \
+		-o jsonpath='{.items[0].spec.clusterIP}'); \
+	if [ -z "$$envoy_ip" ]; then echo "no Envoy Service for gateway aiops; run 'make gateway-up' first"; exit 1; fi; \
+	echo "gateway ClusterIP: $$envoy_ip"; \
+	sed "s/__GATEWAY_IP__/$$envoy_ip/" infra/local/langflow/langflow.yaml | kubectl apply -f -
+	kubectl -n $(NAMESPACE) rollout status deployment/langflow --timeout=300s
+	@echo "Langflow: $(LANGFLOW_URL) (signed in as the platform user; 'make frontend' embeds it)"
+
+langflow-retire-shared-user: ## One-off after the switch to platform identity: deactivate the shared "langflow" user (keeps its flows)
+	kubectl -n $(NAMESPACE) exec -i deploy/langflow -- python - < infra/local/langflow/retire-shared-user.py
 
 LITELLM_URL ?= https://litellm.127.0.0.1.nip.io
 GRAFANA_URL ?= https://grafana.127.0.0.1.nip.io
@@ -241,7 +258,7 @@ litellm-down: ## Remove the LiteLLM release and its route (the litellm database 
 	kubectl delete -f infra/local/litellm/gateway.yaml --ignore-not-found
 	helm -n litellm uninstall litellm --ignore-not-found
 
-langflow-down: ## Remove the Langflow Deployment/Service/HTTPRoute/SecurityPolicy (the PVC is kept)
+langflow-down: ## Remove the Langflow Deployment/Service/HTTPRoute/SecurityPolicy (the PVC and the superuser Secret are kept)
 	kubectl -n $(NAMESPACE) delete deployment/langflow service/langflow httproute/langflow securitypolicy/langflow-oidc --ignore-not-found
 
 # --- platform chart (charts/aiops-platform, docs/install.md) --------------------
@@ -288,6 +305,7 @@ chart-install: chart-deps ## Install the platform chart on kind (namespace aiops
 		--set global.caSecret=$(CHART_CA_SECRET) \
 		--set gateway.tls.secretName=$(CHART_TLS_SECRET) \
 		--set-json 'frontend.hostAliases=[{"ip":"'"$$envoy_ip"'","hostnames":["auth.$(CHART_PARENT_DOMAIN)"]}]' \
+		--set-json 'langflow.hostAliases=[{"ip":"'"$$envoy_ip"'","hostnames":["auth.$(CHART_PARENT_DOMAIN)"]}]' \
 		--timeout 15m
 	kubectl -n $(GATEWAY_NAMESPACE) wait --for=condition=Ready certificate/$(CHART_RELEASE)-wildcard --timeout=180s
 	@# The dev Gateway terminates *.127.0.0.1.nip.io only (one label); add the
@@ -379,6 +397,8 @@ backend: $(CA_BUNDLE) ## Run the backend API with uv (needs helm on PATH and a k
 		AIOPS_CHARTS_DIR=$(PWD)/charts \
 		LITELLM_URL=$(LITELLM_URL) \
 		LITELLM_MASTER_KEY=$(LITELLM_MASTER_KEY) \
+		LANGFLOW_API_URL=$(LANGFLOW_URL) \
+		LITELLM_CLUSTER_URL=http://litellm.litellm.svc:4000 \
 		SSL_CERT_FILE=$(PWD)/$(CA_BUNDLE) \
 		REQUESTS_CA_BUNDLE=$(PWD)/$(CA_BUNDLE) \
 		uv run uvicorn app:app --reload --port 8000

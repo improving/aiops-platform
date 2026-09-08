@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ChevronDownIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import GrafanaEmbed from "@/components/GrafanaEmbed";
@@ -28,18 +27,7 @@ import { Input } from "@/components/ui/input";
 import { modelService, upstreamModel } from "@/services/modelService";
 import { useToast } from "@/components/hooks/use-toast";
 import { DeleteButton } from "@/components/DeleteButton";
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandInput,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { CommandList } from "@/components/ui/command";
+import { Combobox } from "@/components/ui/combobox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -82,13 +70,19 @@ export default function InferenceEndpointDetailsPage({
   const [selectedTimeRange, setSelectedTimeRange] = useState(
     timeRangeOptions[0]
   );
-  const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(
     searchParams.get("tab") || "details"
   );
   const [selectedAdapter, setSelectedAdapter] = useState<Adapter | null>(null);
   const [jaegerLimit, setJaegerLimit] = useState(20);
   const [now, setNow] = useState(() => Date.now());
+  const timeRangeItems = timeRangeOptions.map((option) => ({
+    value: option.label,
+    onSelect: () => {
+      setSelectedTimeRange(option);
+      setNow(Date.now());
+    },
+  }));
   const [credential, setCredential] = useState<Credential | null>(null);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
   const [credentialLoading, setCredentialLoading] = useState(false);
@@ -280,9 +274,10 @@ export default function InferenceEndpointDetailsPage({
                 <Label>Access</Label>
                 <InstanceAccess
                   endpoint={inferenceInstance.endpoint}
-                  clusterEndpoint={inferenceInstance.clusterEndpoint}
                   model={upstreamModel(inferenceInstance)}
-                  workloadChecksApiKey={inferenceInstance.workloadChecksApiKey}
+                  litellmModelName={
+                    inferenceInstance.litellm_model_name ?? null
+                  }
                   onShowApiKey={() => handleShowApiKey(false)}
                   apiKeyLoading={credentialLoading}
                 />
@@ -365,44 +360,11 @@ export default function InferenceEndpointDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="mb-4">
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-[200px] justify-between"
-                  >
-                    {selectedTimeRange.label}
-                    <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="Search time range..."
-                      className="h-9"
-                    />
-                    <CommandList>
-                      <CommandGroup>
-                        {timeRangeOptions.map((option) => (
-                          <CommandItem
-                            key={option.value}
-                            value={option.value.toString()}
-                            onSelect={() => {
-                              setSelectedTimeRange(option);
-                              setNow(Date.now());
-                              setOpen(false);
-                            }}
-                          >
-                            {option.label}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <Combobox
+                label={selectedTimeRange.label}
+                placeholder="Search time range..."
+                items={timeRangeItems}
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {dashboards.map((dashboard) => (
@@ -428,44 +390,11 @@ export default function InferenceEndpointDetailsPage({
           </CardHeader>
           <CardContent>
             <div className="flex flex-row items-center space-x-6">
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-[200px] justify-between"
-                  >
-                    {selectedTimeRange.label}
-                    <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="Search time range..."
-                      className="h-9"
-                    />
-                    <CommandList>
-                      <CommandGroup>
-                        {timeRangeOptions.map((option) => (
-                          <CommandItem
-                            key={option.value}
-                            value={option.value.toString()}
-                            onSelect={() => {
-                              setSelectedTimeRange(option);
-                              setNow(Date.now());
-                              setOpen(false);
-                            }}
-                          >
-                            {option.label}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <Combobox
+                label={selectedTimeRange.label}
+                placeholder="Search time range..."
+                items={timeRangeItems}
+              />
               <div className="flex flex-row items-center space-x-2">
                 <Label htmlFor="jaeger-limit" className="mb-1">
                   Limit

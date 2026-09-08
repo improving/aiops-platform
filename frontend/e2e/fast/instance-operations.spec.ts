@@ -222,11 +222,12 @@ test.describe("instance operations", () => {
     // #36: two audiences were interleaved in one block, repeating the
     // base URL and model four times. Each tab now answers one question:
     // a caller outside the cluster needs the gateway host and the key, a
-    // flow inside it needs the Service address and no key.
+    // flow in Langflow needs only the name Langflow lists, since the
+    // Develop page has put the organization's LiteLLM into Langflow.
     const ready = await mockInstance(api, {
       status: "Running",
       ready: true,
-      clusterEndpoint: "http://ollama-0000cafe.ai-stack.svc:80",
+      litellm_model_name: "inst-0000cafe",
     });
     await stubDetail(page, () => ready);
     await page.route("**/api/v1alpha1/config/ui", (route) =>
@@ -311,46 +312,22 @@ test.describe("instance operations", () => {
 
     await main.getByRole("tab", { name: "Langflow" }).click();
 
-    // The other address, no key, and no code examples to wade through.
+    // The name to pick, the provider slot it sits under, and nothing to
+    // paste: no Service address, no key, no code examples.
     const lfFields = main.getByRole("group", { name: "Langflow fields" });
-    await expect(lfFields).toContainText(
-      "http://ollama-0000cafe.ai-stack.svc:80/v1"
-    );
-    await expect(lfFields).toContainText("none needed");
+    await expect(lfFields).toContainText("inst-0000cafe");
+    await expect(lfFields).toContainText("OpenAI Compatible");
+    await expect(lfFields).not.toContainText("ai-stack.svc");
+    // Field passes its label through to CopyButton unchanged, so the
+    // accessible name is "Copy Model name"; match case-insensitively.
+    await expect(
+      lfFields.getByRole("button", { name: /copy model name/i })
+    ).toBeVisible();
     await expect(
       main.getByRole("group", { name: "curl example" })
     ).toBeHidden();
     await expect(
       main.getByRole("link", { name: "Open Langflow" })
-    ).toBeVisible();
-  });
-
-  test("the Langflow tab asks for a key only when the engine needs one", async ({
-    page,
-    api,
-  }) => {
-    // Skipping the gateway skips its key check, but vLLM reads the key
-    // itself, so an in-cluster caller still needs it. Saying "none
-    // needed" for every engine sent those users to a 401 with the page
-    // telling them the opposite.
-    const checks = await mockInstance(api, {
-      status: "Running",
-      ready: true,
-      clusterEndpoint: "http://vllm-0000cafe.ai-stack.svc:80",
-      workloadChecksApiKey: true,
-    });
-    await stubDetail(page, () => checks);
-
-    const details = new InferenceEndpointPage(page);
-    await details.open(ID);
-    await details.waitForLoaded();
-    const main = page.locator("main");
-    await main.getByRole("tab", { name: "Langflow" }).click();
-
-    const fields = main.getByRole("group", { name: "Langflow fields" });
-    await expect(fields).not.toContainText("none needed");
-    await expect(
-      fields.getByRole("button", { name: "Show API key" })
-    ).toBeVisible();
+    ).toHaveAttribute("href", "/develop");
   });
 });

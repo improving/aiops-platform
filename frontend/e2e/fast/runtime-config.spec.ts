@@ -7,6 +7,7 @@ import { DevelopPage } from "../pages/develop";
 test.describe("runtime UI configuration", () => {
   test("the develop page embeds the Langflow URL the backend serves", async ({
     page,
+    context,
   }) => {
     const langflowUrl = "https://langflow.example.test";
     await page.route("**/api/v1alpha1/config/ui", (route) =>
@@ -29,6 +30,23 @@ test.describe("runtime UI configuration", () => {
     await expect(develop.iframe).toHaveAttribute(
       "src",
       new RegExp(`^${langflowUrl.replace(/[.]/g, "\\.")}`)
+    );
+    // The managed fast backend runs with AIOPS_CHAT_MOCK, so provisioning
+    // answers with the canned organization and the mock model; the names
+    // live behind the "Models" picker so the editor keeps the page, the
+    // search matches the label too, and selecting copies the name.
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await expect(develop.panel).toContainText("OpenAI Compatible");
+    await expect(develop.models).toHaveText(/Models \(1\)/);
+    await expect(develop.panel).not.toContainText("inst-mock");
+    await develop.models.click();
+    await develop.modelSearch.fill("no such model");
+    await expect(page.getByText("No model matches.")).toBeVisible();
+    await develop.modelSearch.fill("mock");
+    await develop.modelOption("inst-mock").click();
+    await expect(develop.toast(/Copied/)).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      "inst-mock"
     );
   });
 

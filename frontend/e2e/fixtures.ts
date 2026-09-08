@@ -289,6 +289,16 @@ export class BackendApi {
     return this.token;
   }
 
+  /**
+   * The automation client's bearer, for a request made outside this helper
+   * (null with authMode "disabled"): a spec that must prove the gateway
+   * refuses a service account needs the raw token, not a call through here.
+   */
+  async accessToken(): Promise<string | null> {
+    const headers = await this.authHeaders();
+    return headers.Authorization?.replace(/^Bearer /, "") ?? null;
+  }
+
   private async authHeaders(): Promise<Record<string, string>> {
     // A caller-supplied bearer (a personal token) wins over the automation
     // token, and a 401 on it must surface instead of being retried.
