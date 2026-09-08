@@ -33,6 +33,13 @@ metadata:
     app.kubernetes.io/managed-by: aiops
 spec:
   replicas: 1
+  # Recreate, not the default RollingUpdate: one replica on a
+  # ReadWriteOnce volume, so a second pod cannot usefully start anyway,
+  # and on a single-node kind cluster the overlap is enough to push the
+  # node into memory pressure (seen: both pods unready, the API server
+  # briefly unreachable, chromadb restarted).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: langflow
@@ -73,6 +80,18 @@ spec:
               value: none
             - name: LANGFLOW_REFRESH_SECURE
               value: "true"
+            # Langflow refuses requests to private addresses (SSRF
+            # protection, on by default). A flow calling a deployed model
+            # goes to that model's ClusterIP Service, which is exactly
+            # such an address, so it is refused with "resolves to blocked
+            # IP address(es)". Allow the cluster's Service range and
+            # nothing wider: it is declared as `networking.serviceSubnet`
+            # in infra/local/kind-config.yaml, and the two must agree.
+            # It does mean a flow author can reach any Service in the
+            # cluster, which is a fair trade in a shared dev sandbox and
+            # deserves revisiting if Langflow is ever multi-tenant (#29).
+            - name: LANGFLOW_SSRF_ALLOWED_HOSTS
+              value: 10.96.0.0/16
             - name: LANGFLOW_AUTO_LOGIN
               value: "true"
             - name: LANGFLOW_HOST

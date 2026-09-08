@@ -8,6 +8,10 @@ from .base_controller import Controller
 
 
 class VLLMController(Controller):
+    # vllm serve rejects a request without VLLM_API_KEY, so the key is
+    # needed even on the in-cluster route that skips the gateway.
+    workload_checks_api_key = True
+
     def _get_engine_specific_context(
         self,
         instance: InferenceInstanceSchema,

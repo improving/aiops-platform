@@ -285,6 +285,16 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   layer; `utils/pod_inspection.py` does the Kubernetes reads. `api/inference_operations.py` is stop/resume/scale
   on top of it; `api/inference_status.py` is the chart lookup and status-polling leaf both of it and
   `api/inference_instance.py` import from.
+- `InferenceInstanceSchema.clusterEndpoint` is the in-cluster Service URL, set on every list and detail read by
+  `check_pod_status_and_readiness` (not a column, recomputed from the engine's naming rules). It is what a caller
+  inside the cluster must use: the gateway's `nip.io` hosts resolve to 127.0.0.1, which inside a pod is the pod.
+  It bypasses the gateway and its API-key policy. Controller mocks in tests must return a string from
+  `service_url`, or response validation fails.
+- `InferenceInstanceSchema.workloadChecksApiKey` is set from `Controller.workload_checks_api_key` on the same
+  reads, and answers the question bypassing the gateway raises: does the workload check the credential itself?
+  Only `VLLMController` sets it `True` today, because only its chart reads the credential Secret into
+  `VLLM_API_KEY`; the Hugging Face, NIM and OPEA charts have no server-side key. Set it on any controller whose
+  chart gains one, or the UI will tell an in-cluster caller no key is needed and the workload will answer 401.
 - Pod logs are read with `_preload_content=False` and decoded in `utils/pod_inspection.py`:
   the client declares a `str` return, so on a body it did not decode it hands back `str(bytes)`,
   and the UI then shows `b'...'` with every newline as the two characters backslash and n.

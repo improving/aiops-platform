@@ -51,7 +51,7 @@ import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { DetailSkeleton } from "@/components/LoadingState";
 import { CopyButton } from "@/components/CopyButton";
-import { CodeSnippet } from "@/components/CodeSnippet";
+import { InstanceAccess } from "@/components/instances/InstanceAccess";
 
 const timeRangeOptions = [
   { label: "Last 5 minutes", value: 5 * 60 * 1000 },
@@ -267,64 +267,30 @@ export default function InferenceEndpointDetailsPage({
                   .filter(Boolean)
                   .join(", ") || "defaults"}
               </DetailRow>
-              <DetailRow label="Endpoint" valueClassName="flex items-center">
-                <span
-                  className={
-                    inferenceInstance.ready ? "text-green-500" : "text-red-500"
-                  }
-                >
-                  {inferenceInstance.endpoint || "N/A"}
-                </span>
-                {inferenceInstance.endpoint && (
-                  <CopyButton
-                    label="endpoint"
-                    text={inferenceInstance.endpoint}
-                  />
-                )}
-              </DetailRow>
-              {inferenceInstance.endpoint && (
-                <div className="grid grid-cols-2 items-start gap-4">
-                  <Label>Access</Label>
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    <p>
-                      The endpoint is protected at the gateway: every request
-                      needs the API key in the <code>x-api-key</code> header, so
-                      it does not open in a browser. Use the Chat button, or an
-                      OpenAI-compatible client pointed at{" "}
-                      <code>{`${inferenceInstance.endpoint}/v1`}</code>.
-                    </p>
-                    <CodeSnippet
-                      label="curl example"
-                      code={`curl ${inferenceInstance.endpoint}/v1/chat/completions \\
-  -H "x-api-key: <api key>" -H "content-type: application/json" \\
-  -d '{"model":"${upstreamModel(inferenceInstance)}","messages":[{"role":"user","content":"Hello"}]}'`}
-                    />
-                    <CodeSnippet
-                      label="Python example"
-                      code={`from openai import OpenAI
+              {/* There is no separate Endpoint row: Access shows the same
+                  host as a copyable Base URL, on the tab that opens by
+                  default, and Ready and Status above already carry the
+                  readiness its red/green text was repeating.
 
-client = OpenAI(
-    base_url="${inferenceInstance.endpoint}/v1",
-    api_key="unused",
-    default_headers={"x-api-key": "<api key>"},
-)
-print(client.chat.completions.create(
-    model="${upstreamModel(inferenceInstance)}",
-    messages=[{"role": "user", "content": "Hello"}],
-).choices[0].message.content)`}
-                    />
-                  </div>
-                </div>
-              )}
-              <DetailRow label="API Key" valueClassName="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  loading={credentialLoading}
-                  onClick={() => handleShowApiKey(false)}
-                >
-                  Show API key
-                </Button>
+                  Not gated on the endpoint either: the key exists from
+                  the moment the row is created, and gating this was what
+                  made it unreachable while an instance was still
+                  starting, or on a cluster with no gateway at all. */}
+              <div className="grid grid-cols-2 items-start gap-4">
+                <Label>Access</Label>
+                <InstanceAccess
+                  endpoint={inferenceInstance.endpoint}
+                  clusterEndpoint={inferenceInstance.clusterEndpoint}
+                  model={upstreamModel(inferenceInstance)}
+                  workloadChecksApiKey={inferenceInstance.workloadChecksApiKey}
+                  onShowApiKey={() => handleShowApiKey(false)}
+                  apiKeyLoading={credentialLoading}
+                />
+              </div>
+              <DetailRow
+                label="Actions"
+                valueClassName="flex items-center gap-2"
+              >
                 {inferenceInstance.ready && (
                   <Button asChild variant="outline" size="sm">
                     <Link

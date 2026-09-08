@@ -1048,6 +1048,12 @@ async def test_create_inference_instance_stores_and_delete_removes_credential(
     # get_controller is called from api.inference_instance (create,
     # delete) and api.inference_status (the list route's refresh).
     get_ctrl = mock.Mock()
+    # The list route reads service_url for the response's clusterEndpoint,
+    # which is typed str | None: a bare Mock fails response validation.
+    get_ctrl.return_value.service_url.return_value = (
+        "http://vllm-00000000.ai-stack.svc:80"
+    )
+    get_ctrl.return_value.workload_checks_api_key = True
     with (
         mock.patch("api.inference_instance.get_controller", get_ctrl),
         mock.patch("api.inference_status.get_controller", get_ctrl),
@@ -1113,6 +1119,12 @@ async def test_create_inference_instance_keeps_the_row_on_install_failure(
     # get_controller is called from api.inference_instance (create,
     # delete) and api.inference_status (the list route's refresh).
     get_ctrl = mock.Mock()
+    # The list route reads service_url for the response's clusterEndpoint,
+    # which is typed str | None: a bare Mock fails response validation.
+    get_ctrl.return_value.service_url.return_value = (
+        "http://vllm-00000000.ai-stack.svc:80"
+    )
+    get_ctrl.return_value.workload_checks_api_key = True
     with (
         mock.patch("api.inference_instance.get_controller", get_ctrl),
         mock.patch("api.inference_status.get_controller", get_ctrl),

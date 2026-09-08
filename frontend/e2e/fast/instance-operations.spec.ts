@@ -214,4 +214,143 @@ test.describe("instance operations", () => {
     await expect(details.toast("Instance resumed")).toBeVisible();
     await expect(details.statusField()).toHaveText("Pending");
   });
+
+  test("Access splits API and Langflow, each with its own values", async ({
+    page,
+    api,
+  }) => {
+    // #36: two audiences were interleaved in one block, repeating the
+    // base URL and model four times. Each tab now answers one question:
+    // a caller outside the cluster needs the gateway host and the key, a
+    // flow inside it needs the Service address and no key.
+    const ready = await mockInstance(api, {
+      status: "Running",
+      ready: true,
+      clusterEndpoint: "http://ollama-0000cafe.ai-stack.svc:80",
+    });
+    await stubDetail(page, () => ready);
+    await page.route("**/api/v1alpha1/config/ui", (route) =>
+      route.fulfill({
+        json: {
+          grafanaUrl: "",
+          langflowUrl: "https://langflow.example.test",
+          jaegerUrl: "",
+          authMode: "disabled",
+        },
+      })
+    );
+
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    const main = page.locator("main");
+
+    // API access is the default: the gateway host, and the key lives here.
+    const apiFields = main.getByRole("group", { name: "API access fields" });
+    await expect(apiFields).toContainText("https://inf-0000cafe.example/v1");
+    await expect(
+      apiFields.getByRole("button", { name: "Show API key" })
+    ).toBeVisible();
+    // The examples are behind a button, not in the page flow: the fields
+    // are what people come back for, the code is read once.
+    await expect(main.getByRole("group", { name: "curl example" })).toHaveCount(
+      0
+    );
+    await main.getByRole("button", { name: "Code examples" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("group", { name: "curl example" })
+    ).toBeVisible();
+    await dialog.getByRole("tab", { name: "Python" }).click();
+    await expect(
+      dialog.getByRole("group", { name: "Python example" })
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("group", { name: "curl example" })
+    ).toBeHidden();
+    // Measure curl, not Python: the long single line that pushed the
+    // dialog past the viewport is curl's, and Python's longest line fits
+    // regardless, so measuring it proves nothing.
+    await dialog.getByRole("tab", { name: "curl" }).click();
+    const fits = await dialog
+      .getByRole("group", { name: "curl example" })
+      .evaluate((el) => {
+        const d = el.closest('[role="dialog"]') as HTMLElement;
+        return (
+          el.scrollWidth <= (el as HTMLElement).clientWidth &&
+          d.getBoundingClientRect().right <= window.innerWidth
+        );
+      });
+    expect(fits).toBe(true);
+    // And the highlighting is actually applied: the CSS variables were
+    // self-referencing once, which silently left every token the
+    // inherited colour and made the dependency pointless.
+    const coloured = await dialog
+      .getByRole("group", { name: "curl example" })
+      .evaluate((el) => {
+        const inherited = getComputedStyle(el).color;
+        const tokens = Array.from(
+          el.querySelectorAll<HTMLElement>("[class*=sh__token]")
+        );
+        // A token still wearing the surrounding text colour is one whose
+        // variable did not resolve. Counting distinct colours instead
+        // would pass while most of them were broken.
+        return {
+          total: tokens.length,
+          unresolved: tokens.filter(
+            (t) => getComputedStyle(t).color === inherited
+          ).length,
+        };
+      });
+    expect(coloured.total).toBeGreaterThan(5);
+    expect(coloured.unresolved).toBe(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    // The in-cluster address is not on this tab.
+    await expect(main).not.toContainText("ollama-0000cafe.ai-stack.svc");
+
+    await main.getByRole("tab", { name: "Langflow" }).click();
+
+    // The other address, no key, and no code examples to wade through.
+    const lfFields = main.getByRole("group", { name: "Langflow fields" });
+    await expect(lfFields).toContainText(
+      "http://ollama-0000cafe.ai-stack.svc:80/v1"
+    );
+    await expect(lfFields).toContainText("none needed");
+    await expect(
+      main.getByRole("group", { name: "curl example" })
+    ).toBeHidden();
+    await expect(
+      main.getByRole("link", { name: "Open Langflow" })
+    ).toBeVisible();
+  });
+
+  test("the Langflow tab asks for a key only when the engine needs one", async ({
+    page,
+    api,
+  }) => {
+    // Skipping the gateway skips its key check, but vLLM reads the key
+    // itself, so an in-cluster caller still needs it. Saying "none
+    // needed" for every engine sent those users to a 401 with the page
+    // telling them the opposite.
+    const checks = await mockInstance(api, {
+      status: "Running",
+      ready: true,
+      clusterEndpoint: "http://vllm-0000cafe.ai-stack.svc:80",
+      workloadChecksApiKey: true,
+    });
+    await stubDetail(page, () => checks);
+
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    const main = page.locator("main");
+    await main.getByRole("tab", { name: "Langflow" }).click();
+
+    const fields = main.getByRole("group", { name: "Langflow fields" });
+    await expect(fields).not.toContainText("none needed");
+    await expect(
+      fields.getByRole("button", { name: "Show API key" })
+    ).toBeVisible();
+  });
 });

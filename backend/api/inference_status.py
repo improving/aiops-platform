@@ -174,6 +174,11 @@ def check_pod_status_and_readiness(
         )
         return False, instance.status
     controller = controller or get_controller(engine.name)
+    # Not a column: set on the row so the response schema picks it up,
+    # recomputed on every read from the engine's own naming rules. This
+    # runs on every list and detail read, which is where the UI needs it.
+    instance.clusterEndpoint = controller.service_url(instance, engine_chart)
+    instance.workloadChecksApiKey = controller.workload_checks_api_key
     pods = _refresh_status(db, instance, controller, engine_chart)
     return pods.ready, instance.status
 

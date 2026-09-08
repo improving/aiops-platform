@@ -43,6 +43,15 @@ class InferenceInstanceSchema(BaseModel):
     host: str | None = None
     config: InferenceInstanceConfigParamsSchema | None = None
     endpoint: str | None = None
+    # The in-cluster Service URL, for callers that run inside the cluster
+    # and cannot use the gateway host: a nip.io name resolves to 127.0.0.1
+    # everywhere, which inside a pod is the pod itself. Computed per
+    # request from the engine's chart, never stored. Bypasses the gateway
+    # and its API-key policy, so it needs no key (see #36).
+    clusterEndpoint: str | None = None
+    # True when the workload itself checks the API key, so a caller on
+    # clusterEndpoint (which skips the gateway) still needs it.
+    workloadChecksApiKey: bool = False
     healthEndpoint: str | None = None
     metricsEndpoint: str | None = None
     ready: bool | None = False

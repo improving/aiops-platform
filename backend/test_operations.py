@@ -53,6 +53,10 @@ def inference_env(monkeypatch):
     controller.service_url.return_value = (
         "http://ollama-abcdef12.ai-stack.svc:80"
     )
+    # Both are read on every list and detail response and are typed, so a
+    # bare Mock fails response validation. Ollama is the fixture's engine
+    # and does not check the key itself; only vLLM does.
+    controller.workload_checks_api_key = False
     controller.install = mock.AsyncMock()
     controller.uninstall = mock.AsyncMock()
     controller.upgrade = mock.AsyncMock()
@@ -1291,3 +1295,30 @@ def test_a_failed_notebook_is_deletable_without_a_cluster(
             assert db.get(Notebook, stuck) is None
     finally:
         delete_rows(Notebook, failed, stuck, running)
+
+
+def test_the_response_carries_the_in_cluster_url_and_the_key_rule(
+    inference_env,
+):
+    """Both drive what the UI tells someone wiring a client up.
+
+    clusterEndpoint is the address a caller inside the cluster must use,
+    because the gateway host resolves to 127.0.0.1 there. workloadChecks-
+    ApiKey says whether that caller still needs the key: skipping the
+    gateway skips its check, but vLLM reads the key itself, so the answer
+    is per engine and the UI must not guess it from the engine name.
+    """
+    client, controller, _ = inference_env
+    created = _create(client)
+    try:
+        row = _get(client, created["id"])
+        assert (
+            row["clusterEndpoint"] == "http://ollama-abcdef12.ai-stack.svc:80"
+        )
+        assert row["workloadChecksApiKey"] is False
+
+        controller.workload_checks_api_key = True
+        assert _get(client, created["id"])["workloadChecksApiKey"] is True
+    finally:
+        controller.workload_checks_api_key = False
+        _delete(client, created["id"])

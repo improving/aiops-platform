@@ -170,6 +170,13 @@ class Controller(ABC):
     work off the event loop (``asyncio.to_thread``) too.
     """
 
+    # Does the workload check the API key itself, or only the gateway?
+    # Only vLLM does today (its chart reads the credential Secret into
+    # VLLM_API_KEY). It decides whether a caller that bypasses the
+    # gateway -- anything in-cluster, Langflow included -- still needs
+    # the key, so the UI must not guess it from the engine name.
+    workload_checks_api_key = False
+
     def __init__(
         self,
         namespace: str | None = None,

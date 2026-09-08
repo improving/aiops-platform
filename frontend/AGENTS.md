@@ -115,7 +115,10 @@ pnpm e2e:ui                               # Playwright UI mode
 - Copy actions use `src/components/CopyButton.tsx` (aria-label `Copy ${label}`, label passed through
   unchanged, no lowercasing): the label reads naturally after the word Copy, a lowercase phrase with
   acronyms and proper nouns kept, e.g. `endpoint`, `model id`, `API key`, `notebook URL`.
-  Code examples use `src/components/CodeSnippet.tsx` (`<pre role="group" aria-label>` plus a copy button).
+  Code examples use `src/components/CodeSnippet.tsx` (`<pre role="group" aria-label>` plus a copy button),
+  including the highlighted ones -- it takes an optional `lang` (highlight with `sugar-high`) and `wrap`
+  (wrap long lines and bound the height instead of scrolling sideways). Both default off, so an existing
+  caller renders exactly as before. There is no second code-block component.
   Do not inline `navigator.clipboard` calls in feature components.
 - `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) follows the same layout as the model
   instance detail page: status, endpoints with copy, a curl example, credential reveal and delete; the list
@@ -136,6 +139,37 @@ pnpm e2e:ui                               # Playwright UI mode
   tab has GPU count (hidden for a `cpu` serving option), Replicas, CPU and Memory (`type="text"` inputs, so they keep the
   `textbox` role); they are sent as top-level `gpu_count`, `replicas`, `cpu`, `memory`. The fast tier stubs every instance
   route with `page.route` (`e2e/fast/instance-operations.spec.ts`); `e2e/cluster/day2-ops.spec.ts` runs the real flow on kind.
+- `components/instances/InstanceAccess.tsx` (#36) is the model instance page's Access block: two sub-tabs,
+  "API access" (the gateway host, the `x-api-key` reveal, and a "Code examples" button) and "Langflow"
+  (`clusterEndpoint`, the in-cluster Service address). Whether the Langflow tab asks for a key is not a
+  property of the tab but of the engine: skipping the gateway skips its key check, but vLLM reads the
+  credential itself, so `workloadChecksApiKey` on the instance decides between the reveal button and
+  "none needed". Saying "none needed" for every engine sent vLLM users to a 401. They were one block before, which repeated the
+  base URL and model four times and made every reader wade through the half that did not apply to them.
+  Both tabs use the same three labelled fields, so the difference between them is what stands out.
+  Each field table is a `role="group"` with an accessible name ("API access fields", "Langflow fields"): scope
+  specs to those, because the code examples contain the same URL. The Langflow tab is disabled without a
+  `clusterEndpoint`, and its "Open Langflow" link needs a `langflowUrl` from `useRuntimeConfig()`, which the
+  fast tier has to stub. The reveal button moved out of the old "API Key" detail row, which is now "Actions".
+  Both tabs render one `AccessFields`, differing only in the Auth cell they pass as children: the parallel
+  structure a reader compares across is then a property of the code, not a copy that survives until someone
+  edits one tab. The page has no separate "Endpoint" detail row any more -- Access shows the same host as a
+  copyable Base URL on the tab that opens by default, and Ready and Status carry the readiness its red/green
+  text repeated.
+- `components/instances/CodeExamplesDialog.tsx` holds the worked examples: curl, Python and TypeScript, one at a
+  time, rendered by `CodeSnippet` with `lang` and `wrap` set. Always pass the `lang` (`highlight(code, { lang })`,
+  typed `LanguageName`): the default is JavaScript, whose comment rule reads the `//` in an `https://` URL as the
+  start of a line comment and greys out the rest of the curl command. Each `CodeExample` carries its own
+  `lang`, so this cannot be forgotten per snippet.
+  Its token colours are CSS variables (`--sh-*`) defined for both themes in `globals.css`, and each one must be
+  a complete colour: the highlighter writes `style="color:var(--sh-string)"` inline, so a variable whose value
+  is another `var(--sh-*)` reference resolves to nothing and the token silently inherits the surrounding text
+  colour. `e2e/fast/instance-operations.spec.ts` compares every token's computed colour against the inherited
+  one and fails when any of them match, which catches a broken variable that a colour count would not.
+  Two layout traps, both fixed and pinned by the same test: `DialogContent` ships `sm:max-w-lg`, so a wider
+  dialog needs `sm:max-w-3xl`, not `max-w-3xl`; and it is a grid, whose items default to their content width,
+  so the code needs `min-w-0` down the chain plus wrapping, or one long curl line pushes the dialog past the
+  viewport.
 - `src/lib/runtimeConfig.ts` fetches `GET /api/v1alpha1/config/ui` once (`RuntimeConfigProvider` in `app/layout.tsx`)
   and `useRuntimeConfig()` gives `GrafanaEmbed`, `JaegerEmbed`, `NotConfigured` and `Develop` the Grafana, Langflow and Jaeger URLs,
   each falling back to its `NEXT_PUBLIC_*` value; consumers render nothing until `loaded` is true.

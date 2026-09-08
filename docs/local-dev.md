@@ -271,6 +271,18 @@ plain link next to or instead of the iframe, "Open Langflow" pointing at
 `LANGFLOW_URL` in a new tab, so the login (and Langflow itself) can be
 completed as a normal top-level navigation.
 
+**Update, 2026-09-08.** The cross-site part of the caveat above is fixed:
+the gateway's OIDC cookies and Langflow's own access and refresh cookies
+are now `SameSite=None` with `Secure`, so they *are* sent inside the
+iframe and the frame authenticates on its own.
+
+That has a one-time cost. **A browser that opened Langflow before this
+change still holds the older cookies, which are not sent in the frame, so
+the Develop page fails there while the same URL works fine in its own
+tab.** Clear site data for `127.0.0.1.nip.io` and reload; a private
+window is the quickest way to confirm that is what it is. Once per
+browser, and only for browsers used before the change.
+
 ## LiteLLM
 
 `make litellm-up` runs the LiteLLM proxy (official Helm chart, `infra/local/litellm/values.yaml`) in namespace `litellm`,
