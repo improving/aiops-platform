@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CodeSnippet } from "@/components/CodeSnippet";
-import { CopyButton } from "@/components/CopyButton";
+import { MaskedSecret } from "@/components/MaskedSecret";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { tokenService } from "@/services/tokenService";
@@ -118,7 +118,7 @@ export function CreateTokenDialog({
       // secret instead of revealing it into a dialog nobody asked to see.
       if (!openRef.current) return;
       setCreated(token);
-      setCurl(curlExample(token.token, `${window.location.origin}/api`));
+      setCurl(curlExample("<token>", `${window.location.origin}/api`));
       onCreated();
     } catch (error) {
       toast(parseApiError(error));
@@ -139,21 +139,17 @@ export function CreateTokenDialog({
           <DialogTitle>Create token</DialogTitle>
           <DialogDescription>
             {created
-              ? "Copy the token now; it is not shown again."
+              ? "Copy or reveal the token now; it is not shown again."
               : "A personal token for curl, SDKs and CI, valid in this organization."}
           </DialogDescription>
         </DialogHeader>
         {created ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <code
-                className="break-all rounded-md bg-muted px-2 py-1 text-xs"
-                data-testid="new-token"
-              >
-                {created.token}
-              </code>
-              <CopyButton label="API token" text={created.token} />
-            </div>
+            <MaskedSecret
+              value={created.token}
+              label="API token"
+              testId="new-token"
+            />
             <CodeSnippet label="curl example" code={curl} />
             <p className="text-xs text-muted-foreground">
               This token acts in <span className="font-medium">{orgSlug}</span>,

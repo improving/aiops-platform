@@ -120,6 +120,15 @@ pnpm e2e:ui                               # Playwright UI mode
   (wrap long lines and bound the height instead of scrolling sideways). Both default off, so an existing
   caller renders exactly as before. There is no second code-block component.
   Do not inline `navigator.clipboard` calls in feature components.
+- Secrets (API keys, credentials, personal tokens) render through `src/components/MaskedSecret.tsx`
+  (`<MaskedSecret value label testId?>`): masked by default (a fixed-width `•` run, so neither the value nor
+  its length shows), a copy button that copies the real value without revealing it, and an eye that toggles it
+  on screen. This keeps secrets out of screen recordings and shared screens. Used by the model instance API-key
+  dialog (`InferenceEndpointDetails.tsx`), the vector-DB credential dialog (`ShowCredentialButton.tsx`) and the
+  new-token dialog (`CreateTokenDialog.tsx`); never print a secret into a `code`/`Input` directly. Curl and code
+  examples carry a `<api key>`/`<token>` placeholder, never the real value. The masked value is still in the DOM
+  when revealed, so a test that reads it (`getByLabel(label)` / `getByTestId`) must click "Reveal `<label>`"
+  first (see the tokens and vector-db page objects).
 - `/vector-databases/endpoints/[id]` (`VectorDBInstanceDetails.tsx`) follows the same layout as the model
   instance detail page: status, endpoints with copy, a curl example, credential reveal and delete; the list
   card title links to it. The header name there is `api-key` (the model instance page's is `x-api-key`).

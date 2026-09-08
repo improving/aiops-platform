@@ -40,6 +40,13 @@ export class TokensPage extends AppShell {
     await this.newToken.waitFor();
   }
 
+  /** The new token is masked; click the eye to read it off the page. */
+  async revealNewToken() {
+    await this.page
+      .getByRole("button", { name: "Reveal API token" })
+      .click();
+  }
+
   async revoke(name: string) {
     await this.tokenRow(name).getByRole("button", { name: "Revoke" }).click();
     await this.confirmDelete();

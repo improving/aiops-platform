@@ -72,6 +72,13 @@ export class VectorDBEndpointsPage extends AppShell {
     return dialog.getByLabel("API key value", { exact: true });
   }
 
+  /** The key is masked by default; click the eye to reveal it on screen. */
+  async revealCredentialValue(dialog: Locator) {
+    await dialog
+      .getByRole("button", { name: "Reveal API key value" })
+      .click();
+  }
+
   async closeCredentialDialog(dialog: Locator) {
     // The footer button; the dialog's corner "X" is also named "Close".
     await dialog.getByRole("button", { name: "Close" }).first().click();

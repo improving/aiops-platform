@@ -14,14 +14,19 @@ test.describe("API tokens page", () => {
 
     const name = `laptop-${shortId()}`;
     await tokens.createToken(name, "Read and write", "90 days");
-    const token = (await tokens.newToken.textContent())!.trim();
-    expect(token).toMatch(/^aiops_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}$/);
+    // Masked by default so it stays out of screen shares; the copy button
+    // works without revealing, and the eye reveals it on screen.
+    await expect(tokens.newToken).toHaveText("•".repeat(16));
     await expect(
       tokens.dialog().getByRole("button", { name: "Copy API token" })
     ).toBeVisible();
+    await tokens.revealNewToken();
+    const token = (await tokens.newToken.textContent())!.trim();
+    expect(token).toMatch(/^aiops_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}$/);
+    // The curl example never carries the real token: it shows a placeholder.
     await expect(
       tokens.dialog().getByRole("group", { name: "curl example" })
-    ).toContainText(token);
+    ).toContainText("Bearer <token>");
 
     // Escape cannot lose the secret once it is on screen; only "Done" can
     // close the reveal.

@@ -15,6 +15,7 @@ import { LockClosedIcon } from "@radix-ui/react-icons";
 import { vectorDBService } from "@/services/vectorDBService";
 import { parseApiError } from "@/lib/utils";
 import { CopyButton } from "@/components/CopyButton";
+import { MaskedSecret } from "@/components/MaskedSecret";
 import {
   VectorDBCredentialSchema,
   VectorDBInstanceSchema,
@@ -83,7 +84,7 @@ export function ShowCredentialButton({ instance }: ShowCredentialButtonProps) {
   };
 
   const usageHint = credential?.value
-    ? `curl -H "${credential.key}: ${credential.value}" ${apiUrl(instance, "collections")}`
+    ? `curl -H "${credential.key}: <api key>" ${apiUrl(instance, "collections")}`
     : "";
 
   return (
@@ -102,17 +103,16 @@ export function ShowCredentialButton({ instance }: ShowCredentialButtonProps) {
             <DialogTitle>API key for {instance.vectorDB.name}</DialogTitle>
             <DialogDescription>
               {credential?.value
-                ? "This key is shown once. Copy it now; it is not stored by the UI."
+                ? "Masked so it stays out of screen shares; copy or reveal it now. Shown once, and not stored by the UI."
                 : "This key was already revealed."}
             </DialogDescription>
           </DialogHeader>
           {credential?.value ? (
             <div className="space-y-4">
-              <Field
-                label="API key"
-                value={credential.value}
-                ariaLabel="API key value"
-              />
+              <div>
+                <p className="text-sm font-medium mb-1">API key</p>
+                <MaskedSecret value={credential.value} label="API key value" />
+              </div>
               <Field
                 label="API endpoint"
                 value={instance.api_endpoint || "N/A"}

@@ -84,7 +84,9 @@ test.describe("vector database credential", { tag: "@cluster" }, () => {
     await expect(card).toContainText(apiEndpoint!);
 
     let dialog = await endpoints.revealCredential(card);
-    await expect(dialog).toContainText("This key is shown once");
+    await expect(dialog).toContainText("not stored by the UI");
+    // Masked by default; reveal it before reading the value off the page.
+    await endpoints.revealCredentialValue(dialog);
     const key = (await endpoints.credentialValue(dialog).textContent())?.trim();
     expect(key, "the dialog shows the key").toMatch(/^\S{16,}$/);
     await expect(dialog.getByLabel("API endpoint", { exact: true })).toHaveText(

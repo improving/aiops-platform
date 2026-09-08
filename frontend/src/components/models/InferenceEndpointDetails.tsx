@@ -38,7 +38,7 @@ import {
 import { GetModelIcon, parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
 import { DetailSkeleton } from "@/components/LoadingState";
-import { CopyButton } from "@/components/CopyButton";
+import { MaskedSecret } from "@/components/MaskedSecret";
 import { InstanceAccess } from "@/components/instances/InstanceAccess";
 
 const timeRangeOptions = [
@@ -460,17 +460,11 @@ export default function InferenceEndpointDetailsPage({
           </DialogHeader>
           {credential?.value ? (
             <div className="grid gap-4">
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={credential.value}
-                  className="font-mono"
-                />
-                <CopyButton label="API key" text={credential.value || ""} />
-              </div>
+              <MaskedSecret value={credential.value} label="API key" />
               <p className="text-sm text-muted-foreground">
-                This key is shown only once. Copy it now — admins can view it
-                again with <code>?reveal=true</code>.
+                Masked so it stays out of screen shares; copy it or use the eye
+                to reveal it. Shown only once — admins can view it again with{" "}
+                <code>?reveal=true</code>.
               </p>
             </div>
           ) : (
