@@ -18,6 +18,8 @@ import {
 import { DetailRow } from "@/components/DetailRow";
 import { StatusBadge } from "@/components/instances/StatusBadge";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { instanceTargetName } from "@/lib/format";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import { InstanceActions } from "@/components/instances/InstanceActions";
 import { InspectionTabs } from "@/components/instances/InspectionTabs";
 import { NotFoundOrError } from "@/components/instances/NotFoundOrError";
@@ -245,6 +247,16 @@ export default function InferenceEndpointDetailsPage({
                   status={inferenceInstance.status}
                 />
               </DetailRow>
+              {inferenceInstance.launch && !inferenceInstance.ready && (
+                // A row of its own, never inside the Status row: the e2e
+                // page object reads that row's exact text.
+                <DetailRow label="Launch">
+                  <LaunchProgress
+                    launch={inferenceInstance.launch}
+                    ready={inferenceInstance.ready}
+                  />
+                </DetailRow>
+              )}
               <DetailRow label="Replicas">
                 {inferenceInstance.replicas ?? 1}
               </DetailRow>
@@ -289,10 +301,7 @@ export default function InferenceEndpointDetailsPage({
                 {inferenceInstance.ready && (
                   <Button asChild variant="outline" size="sm">
                     <Link
-                      href={`/chat?target=${
-                        inferenceInstance.litellm_model_name ??
-                        `inst-${inferenceInstance.id.replace(/-/g, "").slice(-8)}`
-                      }`}
+                      href={`/chat?target=${instanceTargetName(inferenceInstance)}`}
                     >
                       Chat
                     </Link>

@@ -8,6 +8,7 @@ import { OpenInNewWindowIcon, RocketIcon } from "@radix-ui/react-icons";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/instances/StatusBadge";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import Link from "next/link";
 import { vectorDBService } from "@/services/vectorDBService";
 import { useToast } from "@/components/hooks/use-toast";
@@ -129,7 +130,12 @@ export default function VectorDBEndpoints() {
                       status={instance.status}
                     />
                   </div>
-                  <div className="mb-3">
+                  <div className="mb-3 space-y-2">
+                    <LaunchProgress
+                      compact
+                      launch={instance.launch}
+                      ready={instance.ready}
+                    />
                     <ErrorBanner
                       compact
                       error={instance.last_error}

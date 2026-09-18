@@ -1,3 +1,25 @@
+// What an instance that is not ready yet is waiting for
+// (backend/utils/kubernetes_utils.py LaunchProgress): derived from the pods
+// on every read, null once the instance is ready, stopped or failed.
+type LaunchPhase =
+  | "Scheduling"
+  | "Blocked"
+  | "Pulling image"
+  | "Restarting"
+  | "Starting"
+  | "Terminating";
+
+interface LaunchProgress {
+  phase: LaunchPhase;
+  message: string;
+  since?: string | null;
+  // Only a person can move it on (a pod no node can take, a container that
+  // cannot be created, a restart loop): the backend decides, the UI styles.
+  needs_attention: boolean;
+  restart_count: number;
+  replicas_total: number;
+}
+
 interface InferenceInstance {
   id: string;
   model: Model;
@@ -13,6 +35,7 @@ interface InferenceInstance {
   last_error?: string | null;
   last_error_at?: string | null;
   stopped_at?: string | null;
+  launch?: LaunchProgress | null;
   // Launch resources (#16).
   replicas?: number;
   gpu_count?: number;
@@ -203,6 +226,14 @@ interface Host {
   gpu_replicas: number;
   gpu_sharing_strategy: string;
   gpu_usage: number;
+  // What the node offers to pods and what the pods on it already ask
+  // for (backend/api/hosts.py): CPU in cores, memory in MiB. Optional, so
+  // an older backend still types.
+  allocatable_cpu?: number;
+  allocatable_memory?: number;
+  allocatable_gpu?: number;
+  requested_cpu?: number;
+  requested_memory?: number;
 }
 
 // One row of GET /v1alpha1/models/{id}/serving-options
@@ -346,6 +377,7 @@ export type {
   UsageByTarget,
   UsageRow,
   InferenceInstance,
+  LaunchProgress,
   InferenceInstanceDashboard,
   Engine,
   Host,

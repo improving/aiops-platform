@@ -4,18 +4,27 @@ config:
   model: meta-llama/Meta-Llama-3.1-8B-Instruct
   port: 8000
 env:
+- name: HF_TOKEN
+  valueFrom:
+    secretKeyRef:
+      key: HF_API_TOKEN
+      name: hf-api-token
+      optional: true
 - name: HF_API_TOKEN
   valueFrom:
     secretKeyRef:
       key: HF_API_TOKEN
       name: hf-api-token
+      optional: true
 - name: VLLM_API_KEY
   valueFrom:
     secretKeyRef:
       key: api-key
       name: inf-0000005a-credentials
+- name: VLLM_CACHE_ROOT
+  value: /model/.vllm-cache
 - name: HF_HUB_OFFLINE
-  value: '1'
+  value: '0'
 - name: HF_HUB_CACHE
   value: /model
 livenessProbe:
@@ -23,7 +32,7 @@ livenessProbe:
   httpGet:
     path: /health
     port: http
-  initialDelaySeconds: 30
+  initialDelaySeconds: 1800
   periodSeconds: 30
   successThreshold: 1
   timeoutSeconds: 2

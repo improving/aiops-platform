@@ -16,6 +16,7 @@ from logger import setup_logger
 from paths import TEMPLATES_DIR
 from schemas.engine_charts import EngineChartsSchema
 from schemas.inference_instance import InferenceInstanceSchema
+from utils.credentials import _apply_secret, _secret_body
 from utils.gateway import (
     INFERENCE_TIMEOUTS,
     ApiKeyPolicyError,
@@ -30,6 +31,8 @@ from utils.gateway import (
     protect_sdk_route,
 )
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
+
+HF_API_TOKEN_SECRET = "hf-api-token"
 
 # Chart.yaml keys that Helm needs; every other key is informational.
 REQUIRED_CHART_METADATA_KEYS = frozenset({"apiVersion", "name", "version"})
@@ -479,6 +482,26 @@ class Controller(ABC):
             route_name,
             api_instance=self.api_instance,
         )
+
+    async def _ensure_hf_api_token_secret(self) -> bool:
+        """The Secret ``hf-api-token`` the Hugging Face engines' values
+        reference, from the platform's ``HF_API_TOKEN``: created, or
+        replaced so that a rotated token reaches the next pod. Without a
+        token there is nothing to write and the answer is False; the
+        engine decides whether it can start that way (a public model
+        needs none)."""
+        token = os.environ.get("HF_API_TOKEN")
+        if not token:
+            return False
+        await asyncio.to_thread(
+            _apply_secret,
+            self.core_v1_api,
+            self.namespace,
+            _secret_body(
+                HF_API_TOKEN_SECRET, self.namespace, {"HF_API_TOKEN": token}
+            ),
+        )
+        return True
 
     def create_ns_if_needed(self):
         try:

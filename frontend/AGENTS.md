@@ -48,6 +48,17 @@ pnpm e2e:ui                               # Playwright UI mode
   open so an admin can import several results in a row, and close only through their own "Done" button. Publish/
   Deprecate flip `status` through `registryService.update`; Sync calls `POST /{id}/sync`; `EditEntryDialog.tsx`
   edits metadata and replaces serving options.
+- The launch wizard helps before the launch, inline and never as a toast or a gate (`e2e/fast/launch-form-hints.spec.ts`):
+  the host cards and a `ResourceHint` (`components/instances/`) under GPU count, CPU and Memory show what is free on the picked host
+  from the hosts API's `allocatable_*` and `requested_*` fields, and warn (`role="alert"`) when the form asks for more;
+  a GPU-fit line (`lib/launchHints.ts` `estimateGpuFit`: the registry's `size` against the GPU memory, vLLM's 0.9 utilisation and a measured runtime overhead)
+  says what stays for the KV cache or that the weights do not fit, and that slices of a time-sliced GPU add no memory;
+  `ArgHelp` (`components/models/`) puts an info popover next to a CLI argument or environment variable that `lib/engineArgs.ts` knows
+  (summary, the engine's default, range, a platform note, a doc link; lookup ignores a leading `--` and `_` versus `-`).
+  Add an entry there when a new default argument is seeded. State a default only where the engine documents one.
+  Rules the page objects impose: nothing inside a `<Label>` (the inputs are found by their exact label), no second button named `Delete` or `Next`,
+  no new input with the placeholders `Argument Name` or `Variable Name`, and `type="button"` on every button inside the form.
+  Without a picked host (the Skip path, and the whole fast tier of `launch-form.spec.ts`, where `/hosts` answers 500) the hints render nothing.
 - The launch wizard (`LaunchModel.tsx`) fetches `modelService.getModelServingOptions(id)`
   (`GET /v1alpha1/models/{id}/serving-options`) and keeps only the options with a non-null `engine_id` (a hosted
   option such as `openrouter` has none and no chart to launch); the engine `Select` lists those options by their

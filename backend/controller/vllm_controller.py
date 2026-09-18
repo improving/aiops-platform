@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from schemas.engine_charts import EngineChartsSchema
@@ -5,6 +6,9 @@ from schemas.inference_instance import InferenceInstanceSchema
 from utils.credentials import CREDENTIAL_KEY, credential_secret_names
 
 from .base_controller import Controller
+
+LIVENESS_INITIAL_DELAY_SECONDS = 1800
+VLLM_CACHE_ROOT = "/model/.vllm-cache"
 
 
 class VLLMController(Controller):
@@ -28,17 +32,31 @@ class VLLMController(Controller):
             "env": [],
             "configs": [],
             "volumeMounts": {"hf_cache": {"mountPath": "/model"}},
+            # The chart has no startup probe, and a first start downloads
+            # the weights: minutes, which the hub library does not resume
+            # after a kill. The delay applies at container start only, so
+            # a server that hangs later is still restarted, and readiness
+            # keeps traffic away until /health answers.
+            "liveness_probe_initial_delay": LIVENESS_INITIAL_DELAY_SECONDS,
             "credential_secret_name": credential_secret_name,
             "credential_secret_key": CREDENTIAL_KEY,
         }
 
-        if instance.config and instance.config.enable_tracing:
+        tracing_url = os.environ.get("TRACING_URL")
+        if (
+            instance.config
+            and instance.config.enable_tracing
+            and not tracing_url
+        ):
+            self.logger.warning(
+                "Tracing was asked for but TRACING_URL is not set: "
+                "starting %s without it",
+                instance.id,
+            )
+        if instance.config and instance.config.enable_tracing and tracing_url:
             if instance.config.args is None:
                 instance.config.args = {}
-            instance.config.args["--otlp-traces-endpoint"] = os.environ.get(
-                "TRACING_URL",
-                "grpc://infra-jaeger-collector.observability.svc:4317",
-            )
+            instance.config.args["--otlp-traces-endpoint"] = tracing_url
             instance.config.args["--collect-detailed-traces"] = os.environ.get(
                 "VLLM_COLLECT_DETAILED_TRACES", "all"
             )
@@ -74,11 +92,24 @@ class VLLMController(Controller):
 
         return context
 
+    async def install(
+        self,
+        instance: InferenceInstanceSchema,
+        engineChart: EngineChartsSchema,
+    ):
+        # The rendered values reference this Secret, and it needs the
+        # namespace that Helm would otherwise create later.
+        await asyncio.to_thread(self.create_ns_if_needed)
+        await self._ensure_hf_api_token_secret()
+        await super().install(instance, engineChart)
+
     def get_env_vars(self, instance: InferenceInstanceSchema, context):
         env_vars = []
 
-        # Load the default values first
-        default_env = {}
+        # Load the default values first. The compile cache sits next to
+        # the weights on the model volume, so a restart or a second launch
+        # of the model skips torch.compile.
+        default_env = {"VLLM_CACHE_ROOT": VLLM_CACHE_ROOT}
         if instance.engine.default_config:
             model_type = instance.model.category
             for default_config in instance.engine.default_config:

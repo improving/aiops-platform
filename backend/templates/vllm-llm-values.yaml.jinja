@@ -46,11 +46,21 @@ args:
 {% endif %}
 
 env:
+  # huggingface_hub reads HF_TOKEN only; HF_API_TOKEN stays for anything
+  # that reads the platform's own name. Optional: a public model needs no
+  # token, and a missing Secret must not block the pod.
+  - name: HF_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: {{ hf_api_token_secret_name | default('hf-api-token') }}
+        key: {{ hf_api_token_secret_key | default('HF_API_TOKEN') }}
+        optional: true
   - name: HF_API_TOKEN
     valueFrom:
       secretKeyRef:
         name: {{ hf_api_token_secret_name | default('hf-api-token') }}
         key: {{ hf_api_token_secret_key | default('HF_API_TOKEN') }}
+        optional: true
 {% if credential_secret_name is defined %}
   - name: VLLM_API_KEY
     valueFrom:

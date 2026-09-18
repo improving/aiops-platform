@@ -4,22 +4,31 @@ args:
 config:
   model: org/model
 env:
+- name: HF_TOKEN
+  valueFrom:
+    secretKeyRef:
+      key: HF_API_TOKEN
+      name: hf-api-token
+      optional: true
 - name: HF_API_TOKEN
   valueFrom:
     secretKeyRef:
       key: HF_API_TOKEN
       name: hf-api-token
+      optional: true
 - name: VLLM_API_KEY
   valueFrom:
     secretKeyRef:
       key: api-key
-      name: inf-00000099-credentials
+      name: inf-000000b2-credentials
+- name: VLLM_CACHE_ROOT
+  value: /model/.vllm-cache
 livenessProbe:
   failureThreshold: 3
   httpGet:
     path: /health
     port: http
-  initialDelaySeconds: 30
+  initialDelaySeconds: 1800
   periodSeconds: 30
   successThreshold: 1
   timeoutSeconds: 2

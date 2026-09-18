@@ -47,6 +47,44 @@ the half-created (or, on a failed upgrade, previous) Helm release is uninstalled
 Inference instances also carry `replicas`, `gpu_count`, `cpu` and `memory`;
 none of these nine fields can be set through a `PUT`, whatever the request body sends.
 
+While an instance is not ready, the list and detail responses of all three kinds also carry `launch`,
+what the instance is waiting for, derived from its pods on every read and never stored:
+
+```json
+{
+  "phase": "Scheduling",
+  "message": "Unschedulable: 0/1 nodes are available: 1 Insufficient nvidia.com/gpu.",
+  "since": "2026-09-18T11:39:42+00:00",
+  "needs_attention": true,
+  "restart_count": 0,
+  "replicas_total": 1
+}
+```
+
+`phase` is one of `Scheduling` (no node yet; `message` carries the scheduler's reason when there is one),
+`Blocked` (a container cannot be created, for example `CreateContainerConfigError` for a missing Secret; `message` carries the kubelet's reason),
+`Pulling image`, `Starting` (the container runs and is not ready: a model server downloads and loads its model here),
+`Restarting` (the container restarted; `message` names the last exit and `restart_count` the number)
+and `Terminating`.
+`since` is when that step began, so a client can show the elapsed time.
+`needs_attention` is true when only a person can move the launch on (an unschedulable pod, `Blocked`, `Restarting`); style by it, not by the wording of `message`.
+A `Failed` or `Succeeded` pod (an evicted one) does not count.
+`launch` is `null` once the instance is ready, on a stopped instance, and on a failed one, where `last_error` has the reason.
+It never changes `status`, which stays one of the four words above, and a `PUT` cannot set it.
+
+## Hosts
+
+`GET /v1alpha1/hosts` lists the Ready nodes (`includeNotReady=true` adds the others) for the launch form.
+The GPU fields come from the GPU operator's node labels: `gpu_count`, `gpu_memory` (MiB for each GPU), `gpu_model`,
+`gpu_replicas` (time slices of a GPU; 1 without time-slicing) and `gpu_sharing_strategy`.
+What the node offers and what is asked of it come from the node and its pods:
+`allocatable_cpu` (cores), `allocatable_memory` (MiB) and `allocatable_gpu` are the node's `status.allocatable`;
+`requested_cpu`, `requested_memory` and `gpu_usage` sum the container requests of the Pending and Running pods on the node,
+so a finished pod counts for nothing.
+Free is allocatable minus requested. A pod without requests takes what it needs and is not in these numbers,
+so they are what the scheduler works with, not the node's real load.
+`cpu_cores` and `cpu_memory` read two node labels that NFD does not publish and are 0 on a real cluster; use the allocatable fields.
+
 ## Logs and events
 
 ```

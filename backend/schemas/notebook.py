@@ -10,6 +10,7 @@ from pydantic import (
     field_validator,
 )
 
+from schemas.launch import LaunchProgressSchema
 from utils import genid
 from utils.kubernetes_utils import get_default_namespace
 
@@ -50,6 +51,8 @@ class NotebookInstanceSchema(BaseModel):
     last_error: str | None = None
     last_error_at: datetime | None = None
     stopped_at: datetime | None = None
+    # Derived on read, never stored: what a not-ready notebook waits for.
+    launch: LaunchProgressSchema | None = None
 
     @field_validator("type")
     @classmethod

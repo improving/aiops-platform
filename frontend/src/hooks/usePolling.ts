@@ -15,8 +15,12 @@ export function isNonTerminal(item: {
   endpoint?: string | null;
   status?: string | null;
   ready?: boolean;
+  launch?: unknown;
 }): boolean {
   if (item.ready) return false;
+  // A "Running" instance whose pod restarts is not ready and reports what
+  // it waits for: worth polling until it serves again.
+  if (item.launch) return true;
   if (item.status && TERMINAL_STATUSES.has(item.status)) return false;
   return true;
 }

@@ -24,7 +24,7 @@
       {
         "name": "HF_HUB_OFFLINE",
         "chart_type": "llm",
-        "defaultValue": "1",
+        "defaultValue": "0",
         "editable": true
       },
       {
@@ -61,7 +61,7 @@
       {
         "name": "HF_HUB_OFFLINE",
         "chart_type": "llm",
-        "defaultValue": "1",
+        "defaultValue": "0",
         "editable": true
       },
       {

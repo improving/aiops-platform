@@ -1,3 +1,5 @@
+import type { LaunchProgress } from "@/types/models";
+
 interface VectorDBSchema {
   id: string;
   name: string;
@@ -18,6 +20,7 @@ interface VectorDBInstanceSchema {
   status: string | null;
   last_error?: string | null;
   last_error_at?: string | null;
+  launch?: LaunchProgress | null;
   stopped_at?: string | null;
 }
 

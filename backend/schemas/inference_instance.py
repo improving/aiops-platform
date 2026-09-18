@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from utils import genid
 
 from .engine import EngineSchema
+from .launch import LaunchProgressSchema
 from .model import ModelSchema
 
 
@@ -52,6 +53,8 @@ class InferenceInstanceSchema(BaseModel):
     # True when the workload itself checks the API key, so a caller on
     # clusterEndpoint (which skips the gateway) still needs it.
     workloadChecksApiKey: bool = False
+    # Read-only, like the two above: what a not-ready instance waits for.
+    launch: LaunchProgressSchema | None = None
     healthEndpoint: str | None = None
     metricsEndpoint: str | None = None
     ready: bool | None = False

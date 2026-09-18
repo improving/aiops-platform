@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from schemas.launch import LaunchProgressSchema
 from schemas.vectordb import VectorDBSchema
 from utils import genid
 
@@ -20,6 +21,8 @@ class VectorDBInstanceSchema(BaseModel):
     status: str | None = None
     # Operations (#15): set by the platform, read by the UI.
     last_error: str | None = None
+    # Derived on read, never stored: what a not-ready instance waits for.
+    launch: LaunchProgressSchema | None = None
     last_error_at: datetime | None = None
     stopped_at: datetime | None = None
 

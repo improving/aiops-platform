@@ -34,6 +34,7 @@ READ_ONLY_STATUS_FIELDS = frozenset(
         "last_error_at",
         "stopped_at",
         "ready",
+        "launch",
         "gpu_count",
         "replicas",
         "cpu",
@@ -74,9 +75,13 @@ def apply_pod_status(db, row, pods: PodStatus) -> bool:
     resume leaves Stopped. Otherwise ready wins and clears the error, a
     failure reason writes ``Failed`` with ``"<reason>: <message>"`` once
     per distinct text, Failed is kept while the pods say nothing new, and
-    NULL becomes Pending.
+    NULL becomes Pending. ``row.launch`` is what the pods are waiting for,
+    and None on a Stopped or Failed row.
     """
     status, error, error_at = row.status, row.last_error, row.last_error_at
+    # Not a column: what a not-ready instance waits for, for the response
+    # schema. Set on every path, so a row never carries a stale value.
+    row.launch = None
     if row.status == STATUS_STOPPED:
         return False
     if pods.ready:
@@ -97,6 +102,10 @@ def apply_pod_status(db, row, pods: PodStatus) -> bool:
     if changed:
         row.status, row.last_error, row.last_error_at = status, error, error_at
         db.commit()
+    # A failed row has last_error and the error banner; "Restarting" next
+    # to them (a crash loop runs between crashes) would say less.
+    if status != STATUS_FAILED:
+        row.launch = pods.launch
     return changed
 
 

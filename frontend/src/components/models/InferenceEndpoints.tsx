@@ -8,6 +8,7 @@ import { RocketIcon } from "@radix-ui/react-icons";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/instances/StatusBadge";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,11 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/hooks/use-toast";
 import { InferenceInstance } from "@/types/models";
+import {
+  formatParameterCount,
+  formatWeights,
+  instanceTargetName,
+} from "@/lib/format";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
@@ -30,6 +36,16 @@ import {
   applyListControls,
   useListState,
 } from "@/components/ListControls";
+
+/** "7.6B parameters", "5.2 GB weights": what the registry knows, else nothing. */
+function instanceFacts(endpoint: InferenceInstance): string[] {
+  const parameters = formatParameterCount(endpoint.model.parameters);
+  const weights = formatWeights(endpoint.model.size);
+  return [
+    parameters && `${parameters} parameters`,
+    weights && `${weights} weights`,
+  ].filter((fact): fact is string => Boolean(fact));
+}
 
 export default function InferenceEndpoints() {
   const [endpoints, setEndpoints] = useState<InferenceInstance[]>([]);
@@ -195,6 +211,14 @@ export default function InferenceEndpoints() {
                           ready={endpoint.ready}
                           status={endpoint.status}
                         />
+                        <span
+                          data-slot="accelerator"
+                          className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm"
+                        >
+                          {endpoint.engine.cpu
+                            ? "CPU"
+                            : `${endpoint.gpu_count ?? 1} GPU`}
+                        </span>
                         <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
                           {endpoint.replicas ?? 1}{" "}
                           {(endpoint.replicas ?? 1) === 1
@@ -207,19 +231,42 @@ export default function InferenceEndpoints() {
                           </span>
                         )}
                       </div>
-                      <div className="mb-3">
+                      <div className="mb-3 space-y-2">
+                        <LaunchProgress
+                          compact
+                          launch={endpoint.launch}
+                          ready={endpoint.ready}
+                        />
                         <ErrorBanner
                           compact
                           error={endpoint.last_error}
                           at={endpoint.last_error_at}
                         />
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        <strong>Endpoint: </strong>
+                      {/* One quiet line of facts: what runs, how big, and the
+                          name Chat, Langflow and the API know it by. */}
+                      <p
+                        data-slot="instance-facts"
+                        className="mb-2 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground"
+                      >
+                        {instanceFacts(endpoint).map((fact) => (
+                          <span key={fact}>{fact} ·</span>
+                        ))}
+                        <span className="font-mono text-xs">
+                          {instanceTargetName(endpoint)}
+                        </span>
+                        <CopyButton
+                          label={`${endpoint.model.name} model name`}
+                          text={instanceTargetName(endpoint)}
+                        />
+                      </p>
+                      <p className="flex items-center text-sm text-gray-600 mb-2">
+                        <strong className="mr-1 shrink-0">Endpoint: </strong>
                         <span
-                          className={
+                          title={endpoint.endpoint || undefined}
+                          className={`truncate ${
                             endpoint.ready ? "text-green-500" : "text-red-500"
-                          }
+                          }`}
                         >
                           {endpoint.endpoint || "N/A"}
                         </span>
@@ -233,6 +280,28 @@ export default function InferenceEndpoints() {
                         )}
                       </p>
                     </>
+                  }
+                  footer={
+                    // One action, the one the state calls for: talk to a
+                    // model that serves, read the log of one that does not.
+                    // Chat only lists models one can chat with.
+                    endpoint.ready && endpoint.model.category === "llm" ? (
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          href={`/chat?target=${instanceTargetName(endpoint)}`}
+                        >
+                          Chat
+                        </Link>
+                      </Button>
+                    ) : endpoint.status === "Stopped" ? undefined : (
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          href={`/models/endpoints/${endpoint.id}?tab=logs`}
+                        >
+                          Logs
+                        </Link>
+                      </Button>
+                    )
                   }
                 />
               ))}

@@ -1,3 +1,5 @@
+import type { LaunchProgress } from "@/types/models";
+
 export interface Notebook {
   id: string;
   name: string;
@@ -16,6 +18,7 @@ export interface Notebook {
   status: string | null;
   last_error?: string | null;
   last_error_at?: string | null;
+  launch?: LaunchProgress | null;
   stopped_at?: string | null;
   ready: boolean;
   endpoint: string;

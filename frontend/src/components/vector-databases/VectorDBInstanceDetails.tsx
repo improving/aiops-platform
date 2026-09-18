@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogsQuery } from "@/types/models";
 import { StatusBadge } from "@/components/instances/StatusBadge";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import { InstanceActions } from "@/components/instances/InstanceActions";
 import { InspectionTabs } from "@/components/instances/InspectionTabs";
 import { NotFoundOrError } from "@/components/instances/NotFoundOrError";
@@ -107,6 +108,14 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
               <DetailRow label="Status" valueClassName={ROW_VALUE_CLASS}>
                 <StatusBadge ready={instance.ready} status={instance.status} />
               </DetailRow>
+              {instance.launch && !instance.ready && (
+                <DetailRow label="Launch">
+                  <LaunchProgress
+                    launch={instance.launch}
+                    ready={instance.ready}
+                  />
+                </DetailRow>
+              )}
               <DetailRow label="Endpoint" valueClassName={ROW_VALUE_CLASS}>
                 <span
                   className={instance.ready ? "text-green-500" : "text-red-500"}
@@ -127,7 +136,10 @@ export default function VectorDBInstanceDetails({ id }: { id: string }) {
                 )}
               </DetailRow>
               {configEntries.length > 0 && (
-                <DetailRow label="Configuration" valueClassName={ROW_VALUE_CLASS}>
+                <DetailRow
+                  label="Configuration"
+                  valueClassName={ROW_VALUE_CLASS}
+                >
                   <span className="text-sm text-muted-foreground">
                     {configEntries
                       .map(([k, v]) => `${k}=${String(v)}`)

@@ -20,7 +20,10 @@ from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine
 from models.inference_instance import DBInferenceInstance
 from utils.gateway import gateway_settings, instance_url
-from utils.instance_status import apply_pod_status, refresh_stale
+from utils.instance_status import (
+    apply_pod_status,
+    refresh_stale,
+)
 from utils.kubernetes_utils import (
     get_pod_status_and_readiness,
     get_service_endpoint,
@@ -172,6 +175,7 @@ def check_pod_status_and_readiness(
         logger.debug(
             f"instance {instance.id}: status not refreshed: {e.detail}"
         )
+        instance.launch = None
         return False, instance.status
     controller = controller or get_controller(engine.name)
     # Not a column: set on the row so the response schema picks it up,

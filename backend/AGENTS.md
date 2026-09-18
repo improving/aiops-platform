@@ -309,6 +309,14 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
 - One `check_pod_status_and_readiness(instance, db, controller=None)` signature across the three routers;
   `test_auth.py` monkeypatches it by name in `api.vectordb_instance` and `api.inference_instance`.
   `utils/kubernetes_utils.py` `PodStatus` is the only return type, there is no tuple shim.
+  Its fourth field, `launch` (`LaunchProgress`), says what a not-ready instance waits for:
+  a phase from a closed set (`Scheduling`, `Blocked`, `Pulling image`, `Restarting`, `Starting`, `Terminating`; `schemas/launch.py` `LaunchPhase`), a sentence, since when, `needs_attention` (only a person can move it on; the UI styles by it, never by the sentence), and the restart and replica counts,
+  derived from the same pod listing (`_launch_progress`; `Failed` and `Succeeded` pods do not count, and with several pods the least advanced live pod decides), `None` when a pod serves or `failure` is set.
+  `utils/instance_status.py` `apply_pod_status` puts it on the row as a plain attribute, `None` on a Stopped or Failed row, so every instance kind that calls it carries `launch`;
+  the three instance schemas carry it as `launch`, and `READ_ONLY_STATUS_FIELDS` keeps a PUT from writing it.
+  It is never stored and never a `status`: `test_get_does_not_persist_raw_kubelet_reasons` still holds.
+  The UI shows it in `components/instances/LaunchProgress.tsx`, in a row of its own next to the Status row (the e2e page objects read that row's exact text),
+  and `hooks/usePolling.ts` keeps polling while a row carries it, so a Running instance whose pod restarts is followed too.
 - `api/instance_inspection.py` (`InstanceKind`, `add_inspection_routes`) is the shared logs/events/restart
   layer; `utils/pod_inspection.py` does the Kubernetes reads. `api/inference_operations.py` is stop/resume/scale
   on top of it; `api/inference_status.py` is the chart lookup and status-polling leaf both of it and

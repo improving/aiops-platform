@@ -217,6 +217,89 @@ def test_get_does_not_persist_raw_kubelet_reasons(inference_env):
         _delete(client, created["id"])
 
 
+def test_get_carries_the_launch_progress_next_to_a_pending_status(
+    inference_env,
+):
+    # What the instance waits for rides the read the UI already polls; the
+    # status word stays one of the four the badge and the poller know.
+    from utils.kubernetes_utils import LaunchProgress
+
+    client, _, pods = inference_env
+    created = _create(client)
+    try:
+        pods.return_value = PodStatus(
+            False,
+            "ContainerCreating",
+            None,
+            LaunchProgress(
+                phase="Pulling image",
+                message="Pulling the image and creating the container",
+                since="2026-09-18T11:39:42+00:00",
+            ),
+        )
+        row = _get(client, created["id"])
+        assert row["status"] == "Pending"
+        assert row["ready"] is False
+        assert row["launch"] == {
+            "phase": "Pulling image",
+            "message": "Pulling the image and creating the container",
+            "since": "2026-09-18T11:39:42+00:00",
+            "needs_attention": False,
+            "restart_count": 0,
+            "replicas_total": 1,
+        }
+        listed = client.get("/v1alpha1/inferenceInstance").json()
+        mine = next(r for r in listed if r["id"] == created["id"])
+        assert mine["launch"]["phase"] == "Pulling image"
+
+        pods.return_value = PodStatus(True, "Running", None)
+        assert _get(client, created["id"])["launch"] is None
+    finally:
+        _delete(client, created["id"])
+
+
+def test_a_stopped_or_failed_instance_is_not_launching():
+    # Stop scales to zero: a pod that drains, or a listing that lags, must
+    # not read as an instance on its way up. A Failed row keeps its status
+    # while the pods say nothing new (a crash loop runs between crashes);
+    # last_error and the error banner say why, not a "Restarting" line.
+    from types import SimpleNamespace
+
+    from utils.instance_status import (
+        STATUS_FAILED,
+        STATUS_PENDING,
+        STATUS_STOPPED,
+        apply_pod_status,
+    )
+
+    pods = _unschedulable()
+    for status, expected in (
+        (STATUS_STOPPED, None),
+        (STATUS_FAILED, None),
+        (STATUS_PENDING, pods.launch),
+    ):
+        row = SimpleNamespace(
+            status=status, last_error="x", last_error_at=None, launch="stale"
+        )
+        apply_pod_status(mock.Mock(), row, pods)
+        assert row.launch is expected, status
+
+
+def test_put_cannot_write_the_launch_progress(inference_env):
+    client, _, pods = inference_env
+    created = _create(client)
+    try:
+        pods.return_value = PodStatus(True, "Running", None)
+        body = {**_get(client, created["id"]), "launch": {"phase": "x"}}
+        response = client.put(
+            f"/v1alpha1/inferenceInstance/{created['id']}", json=body
+        )
+        assert response.status_code in (200, 422), response.text
+        assert _get(client, created["id"])["launch"] is None
+    finally:
+        _delete(client, created["id"])
+
+
 def test_apply_pod_status_keeps_stopped():
     from utils.instance_status import apply_pod_status
 
@@ -339,6 +422,39 @@ def test_vectordb_poller_commits_a_status_change(vectordb_env):
         row = client.get(f"/v1alpha1/vectordb_instances/{instance_id}").json()
         assert row["status"] == "Running"
         assert row["ready"] is True
+    finally:
+        client.delete(f"/v1alpha1/vectordb_instances/{instance_id}")
+
+
+def _unschedulable():
+    from utils.kubernetes_utils import LaunchProgress
+
+    return PodStatus(
+        False,
+        "Unknown",
+        None,
+        LaunchProgress(
+            phase="Scheduling",
+            message="Unschedulable: 0/1 nodes are available: "
+            "1 Insufficient nvidia.com/gpu.",
+            since="2026-09-18T11:39:42+00:00",
+            needs_attention=True,
+        ),
+    )
+
+
+def test_vectordb_get_carries_the_launch_progress(vectordb_env):
+    client, _, pods = vectordb_env
+    created = _create_vectordb(client)
+    instance_id = created.json()["id"]
+    try:
+        pods.return_value = _unschedulable()
+        row = client.get(f"/v1alpha1/vectordb_instances/{instance_id}").json()
+        assert row["status"] == "Pending"
+        assert row["launch"]["phase"] == "Scheduling"
+        listed = client.get("/v1alpha1/vectordb_instances").json()
+        mine = next(r for r in listed if r["id"] == instance_id)
+        assert mine["launch"]["phase"] == "Scheduling"
     finally:
         client.delete(f"/v1alpha1/vectordb_instances/{instance_id}")
 
@@ -488,6 +604,26 @@ def _inspection_clients(monkeypatch, pods, events=()):
         "utils.pod_inspection.get_apps_v1_client", lambda: apps
     )
     return core, apps
+
+
+def test_notebook_get_carries_the_launch_progress(notebook_env):
+    # A GPU notebook next to a running model instance: the one GPU is
+    # taken, and "Pending" alone never said so.
+    client, _, pods = notebook_env
+    created = client.post(
+        "/v1alpha1/notebooks", json=_notebook_body("ops-launch")
+    )
+    instance_id = created.json()["id"]
+    try:
+        pods.return_value = _unschedulable()
+        row = client.get(f"/v1alpha1/notebooks/{instance_id}").json()
+        assert row["status"] == "Pending"
+        assert "Insufficient nvidia.com/gpu" in row["launch"]["message"]
+        listed = client.get("/v1alpha1/notebooks").json()
+        mine = next(r for r in listed if r["id"] == instance_id)
+        assert mine["launch"]["phase"] == "Scheduling"
+    finally:
+        client.delete(f"/v1alpha1/notebooks/{instance_id}")
 
 
 def test_inference_logs_and_events(inference_env, monkeypatch):

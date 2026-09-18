@@ -16,6 +16,7 @@ import { CardGridSkeleton } from "@/components/LoadingState";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/instances/StatusBadge";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import {
   ListControls,
   ShowMore,
@@ -152,7 +153,12 @@ export default function NotebookList() {
                           </span>
                         )}
                       </div>
-                      <div className="mb-3">
+                      <div className="mb-3 space-y-2">
+                        <LaunchProgress
+                          compact
+                          launch={notebook.launch}
+                          ready={notebook.ready}
+                        />
                         <ErrorBanner
                           compact
                           error={notebook.last_error}

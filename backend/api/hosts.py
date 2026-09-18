@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from kubernetes import client
+from kubernetes.utils import parse_quantity
 
 from auth.current_user import CurrentUser, get_current_user
 from logger import setup_logger
@@ -34,7 +35,7 @@ def get_hosts(
     """
     try:
         nodes = v1.list_node()
-        gpu_usage_per_hostip = get_gpu_usage_per_hostip(v1)
+        usage_per_node = get_node_usage(v1)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -48,8 +49,8 @@ def get_hosts(
 
         if is_ready or includeNotReady:
             labels = node.metadata.labels or {}
-            node_ip = get_node_ip(node)
-            gpu_usage = gpu_usage_per_hostip.get(node_ip, 0)
+            usage = usage_per_node.get(node.metadata.name, {})
+            allocatable = node.status.allocatable or {}
 
             host = Host(
                 hostname=labels.get("kubernetes.io/hostname", "Unknown"),
@@ -71,77 +72,62 @@ def get_hosts(
                 gpu_count=int(labels.get("nvidia.com/gpu.count", 0)),
                 gpu_memory=int(labels.get("nvidia.com/gpu.memory", 0)),
                 gpu_model=labels.get("nvidia.com/gpu.product", "N/A"),
-                gpu_replicas=int(
-                    labels.get(
-                        "nvidia.com/gpu.replicas",
-                        int(labels.get("nvidia.com/gpu.memory", 0)),
-                    )
-                ),
+                # Without time-slicing there is no such label: one GPU is
+                # one replica.
+                gpu_replicas=int(labels.get("nvidia.com/gpu.replicas", 1)),
                 gpu_sharing_strategy=labels.get(
                     "nvidia.com/gpu.sharing-strategy", "N/A"
                 ),
-                gpu_usage=gpu_usage,
+                gpu_usage=usage.get("gpu", 0),
+                allocatable_cpu=round(_quantity(allocatable.get("cpu", 0)), 3),
+                allocatable_memory=int(
+                    _quantity(allocatable.get("memory", 0)) // _MIB
+                ),
+                allocatable_gpu=_quantity(
+                    allocatable.get("nvidia.com/gpu", 0)
+                ),
+                requested_cpu=round(usage.get("cpu", 0), 3),
+                requested_memory=int(usage.get("memory", 0) // _MIB),
             )
             hosts.append(host)
 
     return hosts
 
 
-def get_gpu_usage_per_hostip(v1: client.CoreV1Api):
-    """
-    Retrieve information about GPU pods.
+# Pods in these phases hold their requests on the node; a Succeeded or
+# Failed pod stays in the listing and holds nothing.
+_HOLDING_PHASES = ("Pending", "Running")
+_MIB = 1024 * 1024
 
-    Args:
-        v1 (client.CoreV1Api): The Kubernetes CoreV1Api client.
 
-    Returns:
-        List[Pod]: A list of Pod objects containing information about each GPU pod.
-
-    Raises:
-        HTTPException: If there's an error retrieving pod information from Kubernetes.
-    """
+def _quantity(value) -> float:
+    """A Kubernetes quantity ("500m", "16Gi", "4") as a number; 0 for
+    anything unreadable, so one odd pod does not fail the whole listing."""
     try:
-        pods = v1.list_pod_for_all_namespaces()
-        gpu_usage_per_hostip = {}
+        return float(parse_quantity(value))
+    except (ValueError, TypeError):
+        return 0.0
 
-        for pod in pods.items:
-            for container in pod.spec.containers:
-                if container.resources and container.resources.requests:
-                    update_gpu_usage(gpu_usage_per_hostip, pod, container)
 
-        logger.info(f"Final GPU usage per host IP: {gpu_usage_per_hostip}")
-        return gpu_usage_per_hostip
-    except Exception as e:
-        logger.error(f"Error in get_gpu_usage_per_hostip: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error retrieving GPU usage: {str(e)}"
+def get_node_usage(v1: client.CoreV1Api) -> dict[str, dict[str, float]]:
+    """What the pods on each node ask for, keyed by node name:
+    ``{"cpu": cores, "memory": bytes, "gpu": devices}``, summed over the
+    container requests of the pods that hold them. One listing for the
+    whole cluster."""
+    usage: dict[str, dict[str, float]] = {}
+    for pod in v1.list_pod_for_all_namespaces().items:
+        node_name = pod.spec.node_name
+        if not node_name or pod.status.phase not in _HOLDING_PHASES:
+            continue
+        node = usage.setdefault(
+            node_name, {"cpu": 0.0, "memory": 0.0, "gpu": 0.0}
         )
-
-
-def update_gpu_usage(gpu_usage_per_hostip, pod, container):
-    gpu_request = container.resources.requests.get("nvidia.com/gpu")
-    if gpu_request:
-        host_ip = pod.status.host_ip
-        if host_ip in gpu_usage_per_hostip:
-            gpu_usage_per_hostip[host_ip] += float(gpu_request)
-        else:
-            gpu_usage_per_hostip[host_ip] = float(gpu_request)
-        logger.debug(
-            f"Updated GPU usage for {host_ip}: {gpu_usage_per_hostip[host_ip]}"
-        )
-
-
-def get_node_ip(node: client.V1Node) -> str:
-    """
-    Get the IP address of the node.
-
-    Args:
-        node (client.V1Node): The Kubernetes node object.
-
-    Returns:
-        str: The IP address of the node.
-    """
-    for address in node.status.addresses:
-        if address.type == "InternalIP":
-            return address.address
-    return "Unknown"
+        for container in pod.spec.containers:
+            requests = (
+                container.resources.requests if container.resources else None
+            ) or {}
+            node["cpu"] += _quantity(requests.get("cpu", 0))
+            node["memory"] += _quantity(requests.get("memory", 0))
+            node["gpu"] += _quantity(requests.get("nvidia.com/gpu", 0))
+    logger.debug(f"Requests per node: {usage}")
+    return usage

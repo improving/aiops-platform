@@ -1,7 +1,7 @@
 engine_id,chart_type,name,defaultValue,editable
 551d8d806b004907b8a844f4df5b7da1,llm,MAX_INPUT_TOKENS,6144,True
 551d8d806b004907b8a844f4df5b7da1,llm,MAX_TOTAL_TOKENS,8192,True
-551d8d806b004907b8a844f4df5b7da1,llm,HF_HUB_OFFLINE,1,True
+551d8d806b004907b8a844f4df5b7da1,llm,HF_HUB_OFFLINE,0,True
 551d8d806b004907b8a844f4df5b7da1,llm,HF_HOME,"/root/.cache/huggingface",True
-49faea0e40a84e14832b10d494f6bae0,llm,HF_HUB_OFFLINE,1,True
+49faea0e40a84e14832b10d494f6bae0,llm,HF_HUB_OFFLINE,0,True
 49faea0e40a84e14832b10d494f6bae0,llm,HF_HUB_CACHE,"/model",True

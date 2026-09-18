@@ -223,9 +223,10 @@ def test_get_pod_status_and_readiness_container_creating_is_not_a_failure():
             [_container(False, False, waiting=_waiting("ContainerCreating"))],
         )
     )
-    assert get_pod_status_and_readiness(
-        "ns", LABELS, core_v1=core
-    ) == PodStatus(False, "ContainerCreating", None)
+    pods = get_pod_status_and_readiness("ns", LABELS, core_v1=core)
+    assert pods[:3] == (False, "ContainerCreating", None)
+    # Not a failure; the launch progress names it (see below).
+    assert pods.launch.phase == "Pulling image"
 
 
 def test_get_pod_status_and_readiness_skips_a_terminating_pod():
@@ -358,3 +359,244 @@ def test_pod_logs_replaces_bytes_that_are_not_utf_8():
 
     assert log.startswith("first\n")
     assert log.endswith(" rest\n")
+
+
+# --- launch progress ------------------------------------------------------------
+#
+# What a user sees while an instance is Pending. Measured on the lab's first
+# GPU launch: 5.6 minutes of image pull, then minutes of weight download and
+# load, then a restart loop, all behind the one word "Pending".
+
+CREATED = datetime(2026, 9, 18, 11, 39, 42, tzinfo=UTC)
+STARTED = datetime(2026, 9, 18, 11, 45, 20, tzinfo=UTC)
+
+
+def _launch_pod(
+    statuses=None,
+    *,
+    phase="Pending",
+    conditions=None,
+    deleting=False,
+    init_statuses=None,
+):
+    return SimpleNamespace(
+        metadata=SimpleNamespace(
+            name="p",
+            creation_timestamp=CREATED,
+            deletion_timestamp=CREATED if deleting else None,
+        ),
+        status=SimpleNamespace(
+            phase=phase,
+            conditions=conditions,
+            container_statuses=statuses,
+            init_container_statuses=init_statuses,
+        ),
+    )
+
+
+def _launch_container(
+    *, ready=False, waiting=None, running=None, restarts=0, last=None
+):
+    return SimpleNamespace(
+        ready=ready,
+        started=bool(running),
+        restart_count=restarts,
+        state=SimpleNamespace(
+            waiting=waiting, terminated=None, running=running
+        ),
+        last_state=SimpleNamespace(terminated=last) if last else None,
+    )
+
+
+def _launch(*pods):
+    core = mock.Mock()
+    core.list_namespaced_pod.return_value = fake_listing(*pods)
+    return get_pod_status_and_readiness("ns", LABELS, core_v1=core).launch
+
+
+def test_launch_says_why_a_pod_is_not_scheduled():
+    # The worst case before: a GPU request nothing can satisfy stayed
+    # "Pending" forever with no reason anywhere.
+    unschedulable = SimpleNamespace(
+        type="PodScheduled",
+        status="False",
+        reason="Unschedulable",
+        message="0/1 nodes are available: 1 Insufficient nvidia.com/gpu.",
+    )
+    launch = _launch(_launch_pod(None, conditions=[unschedulable]))
+    assert launch.phase == "Scheduling"
+    assert launch.message == (
+        "Unschedulable: 0/1 nodes are available: "
+        "1 Insufficient nvidia.com/gpu."
+    )
+    assert launch.since == CREATED.isoformat()
+    assert launch.replicas_total == 1
+    # No node can take the pod: only a person can change that.
+    assert launch.needs_attention is True
+
+
+def test_launch_waits_for_a_node_before_any_condition_exists():
+    launch = _launch(_launch_pod(None))
+    assert launch.phase == "Scheduling"
+    assert launch.message == "Waiting for a node"
+    assert launch.needs_attention is False
+
+
+def test_launch_names_the_image_pull():
+    launch = _launch(
+        _launch_pod(
+            [_launch_container(waiting=_waiting("ContainerCreating", None))]
+        )
+    )
+    assert launch.phase == "Pulling image"
+    assert launch.message == "Pulling the image and creating the container"
+    assert launch.since == CREATED.isoformat()
+    assert launch.needs_attention is False
+
+
+def test_launch_counts_an_init_container_as_the_image_phase():
+    launch = _launch(
+        _launch_pod(
+            [_launch_container(waiting=_waiting("PodInitializing", None))],
+            init_statuses=[
+                _launch_container(running=SimpleNamespace(started_at=STARTED))
+            ],
+        )
+    )
+    assert launch.phase == "Pulling image"
+
+
+def test_launch_is_starting_once_the_container_runs():
+    launch = _launch(
+        _launch_pod(
+            [_launch_container(running=SimpleNamespace(started_at=STARTED))],
+            phase="Running",
+        )
+    )
+    assert launch.phase == "Starting"
+    assert launch.message == (
+        "The container runs and is not ready yet: "
+        "a model server downloads and loads its model in this step"
+    )
+    assert launch.since == STARTED.isoformat()
+    assert launch.restart_count == 0
+
+
+def test_launch_reports_restarts_with_the_last_exit():
+    # A liveness kill is exit 137 with reason "Error"; below the
+    # CrashLoopBackOff threshold nothing showed it.
+    launch = _launch(
+        _launch_pod(
+            [
+                _launch_container(
+                    running=SimpleNamespace(started_at=STARTED),
+                    restarts=3,
+                    last=SimpleNamespace(reason="Error", exit_code=137),
+                )
+            ],
+            phase="Running",
+        )
+    )
+    assert launch.phase == "Restarting"
+    assert launch.restart_count == 3
+    assert launch.needs_attention is True
+    assert launch.message == (
+        "Restarted 3 times, last exit: Error (code 137). "
+        'See the Logs tab with "previous" for the reason'
+    )
+
+
+def test_launch_is_terminating_when_every_pod_is_going():
+    launch = _launch(
+        _launch_pod(
+            [
+                _launch_container(
+                    ready=True, running=SimpleNamespace(started_at=STARTED)
+                )
+            ],
+            phase="Running",
+            deleting=True,
+        )
+    )
+    assert launch.phase == "Terminating"
+
+
+def test_launch_is_none_when_ready_failed_or_without_pods():
+    ready = _launch_pod(
+        [
+            _launch_container(
+                ready=True, running=SimpleNamespace(started_at=STARTED)
+            )
+        ],
+        phase="Running",
+    )
+    assert _launch(ready) is None
+    # A failure has its own surface: last_error and the error banner.
+    crashing = _launch_pod(
+        [_launch_container(waiting=_waiting("CrashLoopBackOff"), restarts=6)]
+    )
+    assert _launch(crashing) is None
+    assert _launch() is None
+
+
+def test_launch_takes_the_least_advanced_pod_and_counts_replicas():
+    started = _launch_pod(
+        [
+            _launch_container(
+                ready=True, running=SimpleNamespace(started_at=STARTED)
+            )
+        ],
+        phase="Running",
+    )
+    pulling = _launch_pod(
+        [_launch_container(waiting=_waiting("ContainerCreating", None))]
+    )
+    core = mock.Mock()
+    core.list_namespaced_pod.return_value = fake_listing(started, pulling)
+    pods = get_pod_status_and_readiness("ns", LABELS, core_v1=core)
+    # One replica serves, so the instance is ready and nothing is "launching".
+    assert pods.ready is True
+    assert pods.launch is None
+
+    not_ready = _launch_pod(
+        [_launch_container(running=SimpleNamespace(started_at=STARTED))],
+        phase="Running",
+    )
+    launch = _launch(not_ready, pulling)
+    assert launch.phase == "Pulling image"
+    assert launch.replicas_total == 2
+
+
+def test_launch_ignores_an_evicted_pod_next_to_its_replacement():
+    # A Failed or Succeeded pod stays in the listing. It is not on its way
+    # up, and as the least advanced pod it would hide the one that is.
+    evicted = _launch_pod(None, phase="Failed")
+    pulling = _launch_pod(
+        [_launch_container(waiting=_waiting("ContainerCreating", None))]
+    )
+    launch = _launch(evicted, pulling)
+    assert launch.phase == "Pulling image"
+    assert launch.replicas_total == 1
+    assert _launch(evicted) is None
+
+
+def test_launch_names_a_container_that_cannot_be_created():
+    # Not "the container runs": it does not, and only a person can fix a
+    # missing Secret or a bad image name.
+    launch = _launch(
+        _launch_pod(
+            [
+                _launch_container(
+                    waiting=_waiting(
+                        "CreateContainerConfigError",
+                        'secret "hf-api-token" not found',
+                    )
+                )
+            ]
+        )
+    )
+    assert launch.phase == "Blocked"
+    assert launch.message == (
+        'CreateContainerConfigError: secret "hf-api-token" not found'
+    )
+    assert launch.needs_attention is True

@@ -170,14 +170,196 @@ FAILURE_REASONS = frozenset(
 )
 
 
+# The phases of LaunchProgress, least advanced first: with several pods the
+# least advanced one is what the instance is waiting for.
+LAUNCH_SCHEDULING = "Scheduling"
+LAUNCH_BLOCKED = "Blocked"
+LAUNCH_PULLING = "Pulling image"
+LAUNCH_RESTARTING = "Restarting"
+LAUNCH_STARTING = "Starting"
+LAUNCH_TERMINATING = "Terminating"
+_LAUNCH_ORDER = (
+    LAUNCH_SCHEDULING,
+    LAUNCH_BLOCKED,
+    LAUNCH_PULLING,
+    LAUNCH_RESTARTING,
+    LAUNCH_STARTING,
+)
+# Waiting reasons of a container that is on its way, not in trouble.
+_CREATING_REASONS = frozenset({"ContainerCreating", "PodInitializing"})
+# A pod in one of these phases stays in the listing (an evicted pod, a
+# finished job) and is not on its way up.
+_FINISHED_PHASES = frozenset({"Succeeded", "Failed"})
+
+
+class LaunchProgress(NamedTuple):
+    """What an instance that is not ready yet is doing, for a person: a
+    phase from the closed set above, one sentence, since when (ISO 8601),
+    whether only a person can move it on, and the counts that tell a slow
+    start from a loop. Derived on every read from the pod listing; never
+    stored, and never a ``status``."""
+
+    phase: str
+    message: str
+    since: str | None
+    # An image pull and a model load need time; a pod no node can take, a
+    # container that cannot be created and a restart loop need a person.
+    needs_attention: bool = False
+    restart_count: int = 0
+    replicas_total: int = 1
+
+
 class PodStatus(NamedTuple):
     """What the pods behind an instance report. The first two fields are
     the (ready, status) pair this function always returned; ``failure``
-    is the first container reason from FAILURE_REASONS with its message."""
+    is the first container reason from FAILURE_REASONS with its message;
+    ``launch`` says what a not-ready instance is waiting for, and is None
+    once it is ready or has failed (``failure`` covers that)."""
 
     ready: bool
     status: str
     failure: tuple[str, str] | None = None
+    launch: LaunchProgress | None = None
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None
+
+
+def _pod_is_ready(pod) -> bool:
+    # A pod being deleted (stop, scale, a Recreate restart) may still answer
+    # Ready while it drains; it is not the instance's readiness.
+    statuses = getattr(pod.status, "container_statuses", None)
+    return (
+        pod.status.phase == "Running"
+        and not getattr(pod.metadata, "deletion_timestamp", None)
+        and bool(statuses)
+        and all(c.ready for c in statuses)
+    )
+
+
+def _unscheduled(pod, since) -> LaunchProgress:
+    for condition in getattr(pod.status, "conditions", None) or []:
+        if condition.type == "PodScheduled" and condition.status == "False":
+            reason = condition.reason or "Unschedulable"
+            message = condition.message or ""
+            return LaunchProgress(
+                phase=LAUNCH_SCHEDULING,
+                message=f"{reason}: {message}" if message else reason,
+                since=since,
+                needs_attention=True,
+            )
+    return LaunchProgress(
+        phase=LAUNCH_SCHEDULING, message="Waiting for a node", since=since
+    )
+
+
+def _restarting(statuses, restarts: int, since) -> LaunchProgress:
+    last = next(
+        (
+            c.last_state.terminated
+            for c in statuses
+            if getattr(c, "last_state", None)
+            and getattr(c.last_state, "terminated", None)
+        ),
+        None,
+    )
+    times = "time" if restarts == 1 else "times"
+    message = f"Restarted {restarts} {times}"
+    if last is not None:
+        code = getattr(last, "exit_code", None)
+        message += f", last exit: {last.reason or 'unknown'}" + (
+            f" (code {code})" if code is not None else ""
+        )
+    message += '. See the Logs tab with "previous" for the reason'
+    return LaunchProgress(
+        phase=LAUNCH_RESTARTING,
+        message=message,
+        since=since,
+        needs_attention=True,
+        restart_count=restarts,
+    )
+
+
+def _pod_launch(pod) -> LaunchProgress:
+    """What one pod that is not ready is waiting for. The rules, in order:
+    not scheduled, restarting, a container being created, a container that
+    cannot be created, and else a container that runs and is not ready."""
+    created = _iso(getattr(pod.metadata, "creation_timestamp", None))
+    statuses = list(getattr(pod.status, "container_statuses", None) or [])
+    if not statuses:
+        return _unscheduled(pod, created)
+
+    restarts = sum(getattr(c, "restart_count", 0) or 0 for c in statuses)
+    if restarts:
+        return _restarting(statuses, restarts, created)
+
+    init_statuses = list(
+        getattr(pod.status, "init_container_statuses", None) or []
+    )
+    for cs in init_statuses + statuses:
+        waiting = getattr(cs.state, "waiting", None) if cs.state else None
+        if not waiting or not waiting.reason:
+            continue
+        if waiting.reason in _CREATING_REASONS:
+            return LaunchProgress(
+                phase=LAUNCH_PULLING,
+                message="Pulling the image and creating the container",
+                since=created,
+            )
+        # CreateContainerConfigError (a missing Secret), InvalidImageName
+        # and the like: the container does not run.
+        detail = f": {waiting.message}" if waiting.message else ""
+        return LaunchProgress(
+            phase=LAUNCH_BLOCKED,
+            message=f"{waiting.reason}{detail}",
+            since=created,
+            needs_attention=True,
+        )
+
+    started = next(
+        (
+            cs.state.running.started_at
+            for cs in statuses
+            if cs.state and getattr(cs.state, "running", None)
+        ),
+        None,
+    )
+    return LaunchProgress(
+        phase=LAUNCH_STARTING,
+        message=(
+            "The container runs and is not ready yet: a model server "
+            "downloads and loads its model in this step"
+        ),
+        since=_iso(started) or created,
+    )
+
+
+def _launch_progress(pods, failure) -> LaunchProgress | None:
+    """See LaunchProgress. None without pods, when a pod serves, or when
+    ``failure`` is set: last_error and the error banner own that case."""
+    pods = [p for p in pods if p.status.phase not in _FINISHED_PHASES]
+    if not pods or failure is not None:
+        return None
+    if any(_pod_is_ready(pod) for pod in pods):
+        return None
+    live = [
+        pod
+        for pod in pods
+        if not getattr(pod.metadata, "deletion_timestamp", None)
+    ]
+    if not live:
+        return LaunchProgress(
+            phase=LAUNCH_TERMINATING,
+            message="The pods are shutting down",
+            since=None,
+            replicas_total=len(pods),
+        )
+    least_advanced = min(
+        (_pod_launch(pod) for pod in live),
+        key=lambda launch: _LAUNCH_ORDER.index(launch.phase),
+    )
+    return least_advanced._replace(replicas_total=len(live))
 
 
 def _first_failure(pods) -> tuple[str, str] | None:
@@ -217,15 +399,7 @@ def get_pod_status_and_readiness(
         logger.exception(f"Error checking pod status and readiness: {e}")
         return PodStatus(False, "Unknown")
 
-    # A pod being deleted (stop, scale, a Recreate restart) may still
-    # answer Ready while it drains; it is not the instance's readiness.
-    instance_ready = any(
-        pod.status.phase == "Running"
-        and not getattr(pod.metadata, "deletion_timestamp", None)
-        and bool(pod.status.container_statuses)
-        and all(c.ready for c in pod.status.container_statuses)
-        for pod in pods.items
-    )
+    instance_ready = any(_pod_is_ready(pod) for pod in pods.items)
 
     instance_status = "Unknown"
     if pods.items:
@@ -244,8 +418,12 @@ def get_pod_status_and_readiness(
                 state.running and state.running.started_at
             ):
                 instance_status = "Running"
+    failure = _first_failure(pods.items)
     return PodStatus(
-        instance_ready, instance_status, _first_failure(pods.items)
+        ready=instance_ready,
+        status=instance_status,
+        failure=failure,
+        launch=_launch_progress(pods.items, failure),
     )
 
 

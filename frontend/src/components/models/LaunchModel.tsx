@@ -26,6 +26,15 @@ import { Switch } from "@/components/ui/switch";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
+import { ArgHelp } from "@/components/models/ArgHelp";
+import { ResourceHint } from "@/components/instances/ResourceHint";
+import {
+  estimateGpuFit,
+  freeCpu,
+  freeGpu,
+  freeMemory,
+  oneDecimal,
+} from "@/lib/launchHints";
 
 /** True when every launchable serving option runs without a GPU. */
 function cpuOnly(options: ServingOption[]): boolean {
@@ -138,6 +147,30 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   const selectedOption = servingOptions.find(
     (option) => option.id === formData.servingOptionId
   );
+
+  // The hints of the form (lib/launchHints.ts): what is free on the picked
+  // host and whether the weights fit its GPU. Shown inline, never as a
+  // toast and never as a gate: the scheduler decides, and an instance that
+  // does not fit waits as Pending with the scheduler's reason.
+  const selectedHost = hosts.find((h) => h.hostname === formData.hostId);
+  const selectedEngineName = engines.find(
+    (e) => e.id === selectedOption?.engine_id
+  )?.name;
+  const replicaCount = Math.max(1, Number(resources.replicas) || 1);
+  const usesGpu = Boolean(selectedOption) && !selectedOption?.cpu;
+  const cpuHint = selectedHost
+    ? freeCpu(selectedHost, resources.cpu, replicaCount)
+    : null;
+  const memoryHint = selectedHost
+    ? freeMemory(selectedHost, resources.memory, replicaCount)
+    : null;
+  const gpuHint =
+    selectedHost && usesGpu
+      ? freeGpu(selectedHost, resources.gpuCount, replicaCount)
+      : null;
+  const gpuFit = usesGpu
+    ? estimateGpuFit(model, selectedHost, resources.gpuCount)
+    : null;
 
   // Reset the CLI args and env vars to the selected engine's defaults
   // whenever the picked serving option changes, or the engine list is
@@ -457,6 +490,35 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                                 {host.cpu_cores} CPU Cores
                               </span>
                             )}
+                            {(host.allocatable_cpu ?? 0) > 0 && (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                                {oneDecimal(
+                                  Math.max(
+                                    0,
+                                    (host.allocatable_cpu ?? 0) -
+                                      (host.requested_cpu ?? 0)
+                                  )
+                                )}{" "}
+                                of {oneDecimal(host.allocatable_cpu ?? 0)} CPU
+                                free
+                              </span>
+                            )}
+                            {(host.allocatable_memory ?? 0) > 0 && (
+                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                                {oneDecimal(
+                                  Math.max(
+                                    0,
+                                    (host.allocatable_memory ?? 0) -
+                                      (host.requested_memory ?? 0)
+                                  ) / 1024
+                                )}{" "}
+                                of{" "}
+                                {oneDecimal(
+                                  (host.allocatable_memory ?? 0) / 1024
+                                )}{" "}
+                                GiB memory free
+                              </span>
+                            )}
                             {host.cpu_cores > 0 && (
                               <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
                                 CPU: {host.cpu_vendor} -{" "}
@@ -468,6 +530,19 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                             {host.gpu_count > 0 && (
                               <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
                                 {host.gpu_count} GPU
+                              </span>
+                            )}
+                            {host.gpu_count > 0 && host.gpu_replicas <= 1 && (
+                              <span
+                                className={`px-2 py-1 rounded-full text-sm ${
+                                  host.gpu_usage >= host.gpu_count
+                                    ? "bg-amber-100 text-amber-900"
+                                    : "bg-green-100 text-green-800"
+                                }`}
+                              >
+                                {host.gpu_usage >= host.gpu_count
+                                  ? "GPU in use"
+                                  : `${host.gpu_count - host.gpu_usage} GPU free`}
                               </span>
                             )}
                             {host.gpu_replicas > 1 && (
@@ -566,6 +641,48 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                               ))}
                             </SelectContent>
                           </Select>
+                          <ResourceHint
+                            id="gpu-hint"
+                            resource={gpuHint}
+                            unit={
+                              (selectedHost?.gpu_replicas ?? 1) > 1
+                                ? "GPU slices"
+                                : "GPUs"
+                            }
+                            hostname={selectedHost?.hostname ?? ""}
+                            overMessage="The instance waits as Pending until a GPU is free: stop another GPU instance or notebook first"
+                          />
+                          {gpuFit && (
+                            <p
+                              data-slot="gpu-fit"
+                              role={
+                                gpuFit.fits && !gpuFit.sliced
+                                  ? "status"
+                                  : "alert"
+                              }
+                              className={`text-xs ${
+                                !gpuFit.fits || gpuFit.sliced
+                                  ? "text-destructive"
+                                  : gpuFit.tight
+                                    ? "text-amber-700 dark:text-amber-400"
+                                    : "text-muted-foreground"
+                              }`}
+                            >
+                              {gpuFit.sliced
+                                ? "This GPU is time-sliced: more than one slice adds no memory, and an engine cannot split a model across slices of one GPU. Use GPU count 1. "
+                                : ""}
+                              Weights about {oneDecimal(gpuFit.weightsGiB)} GiB
+                              of {oneDecimal(gpuFit.gpuGiB)} GiB GPU memory.{" "}
+                              {gpuFit.fits
+                                ? `About ${oneDecimal(gpuFit.cacheGiB)} GiB stays for the KV cache (context and parallel requests)${
+                                    gpuFit.tight
+                                      ? ": little, so keep max_model_len small"
+                                      : ""
+                                  }.`
+                                : "The weights do not fit: pick a quantized variant (AWQ, GPTQ), a smaller model, or more GPUs."}{" "}
+                              An estimate: a long context needs more.
+                            </p>
+                          )}
                         </div>
                       )}
                       <div className="grid gap-1">
@@ -590,12 +707,27 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                           type="text"
                           placeholder="e.g. 4"
                           value={resources.cpu}
+                          aria-describedby="cpu-help"
                           onChange={(e) =>
                             setResources((prev) => ({
                               ...prev,
                               cpu: e.target.value,
                             }))
                           }
+                        />
+                        <p
+                          id="cpu-help"
+                          className="text-xs text-muted-foreground"
+                        >
+                          Cores for each replica, for example 4 or 500m. Empty:
+                          no reservation, the pod takes what is free.
+                        </p>
+                        <ResourceHint
+                          id="cpu-hint"
+                          resource={cpuHint}
+                          unit="CPU cores"
+                          hostname={selectedHost?.hostname ?? ""}
+                          overMessage="More than is free: the instance would wait as Pending"
                         />
                       </div>
                       <div className="grid gap-1">
@@ -605,12 +737,28 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                           type="text"
                           placeholder="e.g. 16Gi"
                           value={resources.memory}
+                          aria-describedby="memory-help"
                           onChange={(e) =>
                             setResources((prev) => ({
                               ...prev,
                               memory: e.target.value,
                             }))
                           }
+                        />
+                        <p
+                          id="memory-help"
+                          className="text-xs text-muted-foreground"
+                        >
+                          Memory for each replica, for example 16Gi. Empty: no
+                          reservation. A GPU engine needs little host memory;
+                          the model sits in GPU memory.
+                        </p>
+                        <ResourceHint
+                          id="memory-hint"
+                          resource={memoryHint}
+                          unit="GiB memory"
+                          hostname={selectedHost?.hostname ?? ""}
+                          overMessage="More than is free: the instance would wait as Pending"
                         />
                       </div>
                     </div>
@@ -689,6 +837,11 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                       placeholder="Value"
                       readOnly={!arg.editable}
                     />
+                    <ArgHelp
+                      engineName={selectedEngineName}
+                      kind="arg"
+                      name={arg.name}
+                    />
                     {arg.new && (
                       <Button
                         type="button"
@@ -729,6 +882,11 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
                       }
                       placeholder="Value"
                       readOnly={!env.editable}
+                    />
+                    <ArgHelp
+                      engineName={selectedEngineName}
+                      kind="env"
+                      name={env.name}
                     />
                     {env.new && (
                       <Button

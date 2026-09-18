@@ -89,6 +89,129 @@ test.describe("instance operations", () => {
     ).toBeVisible();
   });
 
+  test("a pending instance says what it waits for, and the line goes once it is ready", async ({
+    page,
+    api,
+  }) => {
+    // The one GPU is taken: "Pending" alone would give no reason.
+    let current = await mockInstance(api, {
+      status: "Pending",
+      last_error: null,
+      last_error_at: null,
+      launch: {
+        phase: "Scheduling",
+        message:
+          "Unschedulable: 0/1 nodes are available: 1 Insufficient nvidia.com/gpu.",
+        since: "2026-09-18T11:39:42+00:00",
+        // The backend's call, not the wording of `message`: amber.
+        needs_attention: true,
+        restart_count: 0,
+        replicas_total: 1,
+      },
+    });
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) =>
+      route.fulfill({ json: [current] })
+    );
+    await stubDetail(page, () => current);
+
+    const shell = new AppShell(page);
+    await shell.goto("/models/endpoints");
+    await shell.waitForLoaded();
+    const card = page
+      .locator('main [data-slot="card"]')
+      .filter({ hasText: `ID: ${ID}` });
+    await expect(card.locator('[data-slot="launch-progress"]')).toContainText(
+      "Scheduling"
+    );
+    await expect(card.locator('[data-slot="launch-progress"]')).toContainText(
+      "Insufficient nvidia.com/gpu"
+    );
+
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    // The badge keeps its word; the detail is in a row of its own.
+    await expect(details.statusField()).toHaveText("Pending");
+    const progress = page.locator('main [data-slot="launch-progress"]');
+    await expect(progress).toContainText("Scheduling for");
+    await expect(progress).toContainText("Insufficient nvidia.com/gpu");
+    await expect(progress).toHaveClass(/amber/);
+
+    // The page polls a pending instance; the next read says it is ready.
+    current = { ...current, ready: true, status: "Running", launch: null };
+    await expect(details.statusField()).toHaveText("Ready", {
+      timeout: 15_000,
+    });
+    await expect(progress).toHaveCount(0);
+  });
+
+  test("a card says what runs, its name for Chat, and offers the action its state calls for", async ({
+    page,
+    api,
+  }) => {
+    const base = await mockInstance(api, {
+      last_error: null,
+      last_error_at: null,
+    });
+    const serving = {
+      ...base,
+      ready: true,
+      status: "Running",
+      model: {
+        ...(base.model as object),
+        parameters: 7615616512,
+        size: 5.2 * 1024 ** 3,
+      },
+    };
+    const starting = {
+      ...base,
+      id: "11111111-2222-4333-8444-5555beefbeef",
+      ready: false,
+      status: "Pending",
+    };
+    // Ready, but nothing the Chat page lists: it has no chat capability.
+    const embedding = {
+      ...serving,
+      id: "22222222-3333-4444-8555-6666feedfeed",
+      model: { ...serving.model, category: "embedding" },
+    };
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) =>
+      route.fulfill({ json: [serving, starting, embedding] })
+    );
+
+    const shell = new AppShell(page);
+    await shell.goto("/models/endpoints");
+    await shell.waitForLoaded();
+    const cards = page.locator('main [data-slot="card"]');
+
+    const ready = cards.filter({ hasText: `ID: ${ID}` });
+    await expect(ready.locator('[data-slot="accelerator"]')).toHaveText(
+      "1 GPU"
+    );
+    const facts = ready.locator('[data-slot="instance-facts"]');
+    await expect(facts).toContainText("7.6B parameters");
+    await expect(facts).toContainText("5.2 GB weights");
+    // The name Chat, Langflow and the API know the instance by.
+    await expect(facts).toContainText("inst-0000cafe");
+    await expect(ready.getByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/chat?target=inst-0000cafe"
+    );
+    await expect(ready.getByRole("link", { name: "Logs" })).toHaveCount(0);
+
+    // Not ready: the log is what helps, and there is nothing to chat with.
+    const pending = cards.filter({ hasText: "5555beefbeef" });
+    await expect(pending.getByRole("link", { name: "Logs" })).toHaveAttribute(
+      "href",
+      `/models/endpoints/${starting.id}?tab=logs`
+    );
+    await expect(pending.getByRole("link", { name: "Chat" })).toHaveCount(0);
+
+    const embedder = cards.filter({ hasText: "6666feedfeed" });
+    await expect(embedder.locator('[data-slot="accelerator"]')).toBeVisible();
+    await expect(embedder.getByRole("link", { name: "Chat" })).toHaveCount(0);
+  });
+
   test("the Logs tab renders the mocked log and the Events tab the events", async ({
     page,
     api,
@@ -153,6 +276,55 @@ test.describe("instance operations", () => {
     await details.tab("Events").click();
     await expect(details.eventsTable).toContainText("BackOff");
     await expect(details.eventsTable).toContainText("Pod/vllm-0000cafe-abc");
+  });
+
+  test("the Events tab limits a long list, scrolls it and filters the warnings", async ({
+    page,
+    api,
+  }) => {
+    // A restart loop writes dozens of events; the list must not grow the page.
+    const running = await mockInstance(api, {
+      ready: true,
+      status: "Running",
+      last_error: null,
+      last_error_at: null,
+    });
+    await stubDetail(page, () => running);
+    const events = Array.from({ length: 60 }, (_, i) => ({
+      at: `2026-09-06T10:${String(59 - i).padStart(2, "0")}:00`,
+      type: i % 10 === 0 ? "Warning" : "Normal",
+      reason: i % 10 === 0 ? "Unhealthy" : "Pulled",
+      message: `event number ${i}`,
+      object: "Pod/vllm-0000cafe-abc",
+    }));
+    await page.route(
+      `**/api/v1alpha1/inferenceInstance/${ID}/events`,
+      (route) => route.fulfill({ json: events })
+    );
+
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    await details.tab("Events").click();
+
+    const rows = details.eventsTable.locator("tbody tr");
+    await expect(rows).toHaveCount(25);
+    const count = page.locator('main [data-slot="events-count"]');
+    await expect(count).toHaveText("25 of 60, newest first");
+    // The list scrolls inside its own area instead of growing the page.
+    const scrolls = await details.eventsTable
+      .locator("xpath=..")
+      .evaluate((el) => el.scrollHeight > el.clientHeight);
+    expect(scrolls).toBe(true);
+
+    await page.getByRole("combobox", { name: "Events shown" }).click();
+    await page.getByRole("option", { name: "100" }).click();
+    await expect(rows).toHaveCount(60);
+
+    await page.getByRole("switch", { name: "Warnings only" }).click();
+    await expect(rows).toHaveCount(6);
+    await expect(count).toHaveText("6 of 6, newest first");
+    await expect(details.eventsTable).toContainText("Unhealthy");
   });
 
   test("Stop then Resume flips the badge", async ({ page, api }) => {

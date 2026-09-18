@@ -13,6 +13,7 @@ from pyhelm3.errors import ReleaseNotFoundError
 from controller import NotebooksController, VectorDBController, get_controller
 from controller.base_controller import (
     ChartMetadataError,
+    Controller,
     HelmInstallError,
     get_chart,
 )
@@ -1023,6 +1024,118 @@ async def test_vllm_rendered_values_reference_the_credential_secret():
     }
     # Never the raw value.
     assert "value" not in env_by_name["VLLM_API_KEY"]
+
+
+# --- launching a vLLM instance on a cluster whose model cache is empty -------
+#
+# Measured on the lab's first GPU launch (2026-09-18): the pod downloads the
+# weights on its first start, which took minutes, and four things were wrong.
+
+
+@pytest.mark.asyncio
+async def test_vllm_rendered_values_give_the_hub_library_its_token():
+    # huggingface_hub reads HF_TOKEN only; with just HF_API_TOKEN set the
+    # download ran anonymous (about 5 MB/s against 30 with the token) and a
+    # gated model could not be fetched at all.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    values = await controller.prepare_helm_values(instance, chart)
+    env_by_name = {e["name"]: e for e in values["env"]}
+    for name in ("HF_TOKEN", "HF_API_TOKEN"):
+        assert env_by_name[name]["valueFrom"]["secretKeyRef"] == {
+            "name": "hf-api-token",
+            "key": "HF_API_TOKEN",
+            # A public model needs no token: a platform without one must
+            # still start the pod.
+            "optional": True,
+        }
+
+
+@pytest.mark.asyncio
+async def test_vllm_liveness_waits_for_a_first_start():
+    # The chart has no startup probe, and the liveness probe killed the
+    # container two minutes into a download the hub library does not
+    # resume, forever. The delay only applies at container start: a server
+    # that hangs later is still restarted, and readiness still gates traffic.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    values = await controller.prepare_helm_values(instance, chart)
+    assert values["livenessProbe"]["initialDelaySeconds"] == 1800
+    assert values["readinessProbe"]["initialDelaySeconds"] == 30
+
+
+@pytest.mark.asyncio
+async def test_vllm_keeps_its_compile_cache_on_the_model_volume():
+    # torch.compile artifacts next to the weights, so a restart or a second
+    # launch of the model skips the compilation.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    values = await controller.prepare_helm_values(instance, chart)
+    env_by_name = {e["name"]: e for e in values["env"]}
+    assert env_by_name["VLLM_CACHE_ROOT"]["value"] == "/model/.vllm-cache"
+
+
+@pytest.mark.asyncio
+async def test_vllm_install_writes_the_hub_token_secret_first(monkeypatch):
+    # The rendered values reference the Secret, so install makes sure the
+    # namespace and the Secret exist before Helm runs, like the TGI install.
+    monkeypatch.setenv("HF_API_TOKEN", "hf_test")
+    core_v1 = mock.Mock()
+    controller = get_controller("vllm", core_v1_api=core_v1)
+    order = []
+    monkeypatch.setattr(
+        controller, "create_ns_if_needed", lambda: order.append("namespace")
+    )
+    core_v1.create_namespaced_secret.side_effect = lambda namespace, body: (
+        order.append(f"secret:{body.metadata.name}")
+    )
+
+    async def helm_install(self, instance, chart):
+        order.append("helm")
+
+    monkeypatch.setattr(Controller, "install", helm_install)
+    instance, chart = _inference_instance_and_chart()
+    await controller.install(instance, chart)
+    assert order == ["namespace", "secret:hf-api-token", "helm"]
+    secret = core_v1.create_namespaced_secret.call_args.kwargs["body"]
+    assert secret.string_data == {"HF_API_TOKEN": "hf_test"}
+
+
+@pytest.mark.asyncio
+async def test_a_rotated_hub_token_replaces_the_secret(monkeypatch):
+    monkeypatch.setenv("HF_API_TOKEN", "hf_new")
+    core_v1 = mock.Mock()
+    core_v1.create_namespaced_secret.side_effect = ApiException(status=409)
+    controller = get_controller("vllm", core_v1_api=core_v1)
+    assert await controller._ensure_hf_api_token_secret() is True
+    replaced = core_v1.replace_namespaced_secret.call_args.kwargs
+    assert replaced["name"] == "hf-api-token"
+    assert replaced["body"].string_data == {"HF_API_TOKEN": "hf_new"}
+
+
+@pytest.mark.asyncio
+async def test_vllm_install_needs_no_hub_token(monkeypatch):
+    monkeypatch.delenv("HF_API_TOKEN", raising=False)
+    core_v1 = mock.Mock()
+    controller = get_controller("vllm", core_v1_api=core_v1)
+    assert await controller._ensure_hf_api_token_secret() is False
+    core_v1.create_namespaced_secret.assert_not_called()
+
+
+def test_vllm_tracing_needs_a_collector(monkeypatch):
+    # The old default pointed every traced instance at a Jaeger of the
+    # retired lab; without TRACING_URL there is nowhere to send traces.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    instance.config.enable_tracing = True
+    monkeypatch.delenv("TRACING_URL", raising=False)
+    context = controller._get_engine_specific_context(instance, chart)
+    assert not any("otlp" in str(a) for a in context["args"])
+
+    monkeypatch.setenv("TRACING_URL", "grpc://jaeger.example:4317")
+    instance.config.args = None
+    context = controller._get_engine_specific_context(instance, chart)
+    assert any("grpc://jaeger.example:4317" in str(a) for a in context["args"])
 
 
 def _seeded(client, kind, predicate):

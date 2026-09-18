@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogsQuery } from "@/types/models";
 import { StatusBadge } from "@/components/instances/StatusBadge";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import { InspectionTabs } from "@/components/instances/InspectionTabs";
 import { NotFoundOrError } from "@/components/instances/NotFoundOrError";
 
@@ -141,6 +142,14 @@ export default function NotebookDetails({ notebookId }: NotebookDetailsProps) {
                   label={notebook.status || "Pending"}
                 />
               </DetailRow>
+              {notebook.launch && !notebook.ready && (
+                <DetailRow label="Launch:">
+                  <LaunchProgress
+                    launch={notebook.launch}
+                    ready={notebook.ready}
+                  />
+                </DetailRow>
+              )}
               <DetailRow label="Created At:">
                 {notebook.created_at || "N/A"}
               </DetailRow>
