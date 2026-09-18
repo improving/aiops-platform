@@ -75,7 +75,7 @@
       {
         "name": "max_model_len",
         "chart_type": "llm",
-        "defaultValue": "4192",
+        "defaultValue": "16384",
         "editable": true
       },
       {

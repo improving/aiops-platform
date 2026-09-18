@@ -85,6 +85,37 @@ test.describe("chat page", () => {
     await expect(chat.sendButton).toBeEnabled();
   });
 
+  test("a long target name stays inside the side panel", async ({ page }) => {
+    const label =
+      "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ-with-a-very-long-suffix · vLLM";
+    await page.route("**/api/v1alpha1/chat/targets", (route) =>
+      route.fulfill({
+        json: [
+          {
+            name: "inst-mock",
+            label,
+            capability: "chat",
+            instance_id: null,
+            provider_id: null,
+            model: "mock",
+            engine: "vLLM",
+            ready: true,
+            via: "litellm",
+          },
+        ],
+      })
+    );
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    await expect(chat.targetSelect).toContainText("Qwen/Qwen2.5-Coder");
+
+    const panel = (await page.locator("aside").first().boundingBox())!;
+    const select = (await chat.targetSelect.boundingBox())!;
+    expect(select.x + select.width).toBeLessThanOrEqual(
+      panel.x + panel.width + 1
+    );
+  });
+
   test("shows an empty state without running instances", async ({ page }) => {
     await page.route("**/api/v1alpha1/chat/targets", (route) =>
       route.fulfill({ json: [] })

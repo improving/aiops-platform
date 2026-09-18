@@ -188,11 +188,15 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
-      <aside className="space-y-4">
+      <aside className="min-w-0 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="chat-target">Target</Label>
           <Select value={target} onValueChange={selectTarget}>
-            <SelectTrigger id="chat-target" aria-label="Target">
+            <SelectTrigger
+              id="chat-target"
+              aria-label="Target"
+              className="w-full min-w-0 *:data-[slot=select-value]:block *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate"
+            >
               <SelectValue placeholder="Pick an instance" />
             </SelectTrigger>
             <SelectContent>

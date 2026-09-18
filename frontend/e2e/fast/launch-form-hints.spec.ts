@@ -154,6 +154,39 @@ test.describe("launch wizard hints", () => {
     await expect(page.locator("#cpu-help")).toContainText("for example 4");
   });
 
+  test("max_model_len starts at 16384, or at a shorter model context", async ({
+    page,
+    api,
+  }) => {
+    const model = await sizedLlm(api);
+    const launch = new LaunchModelPage(page);
+    const maxModelLen = () =>
+      page
+        .locator("div.flex", {
+          has: page.locator('input[placeholder="Argument Name"]'),
+        })
+        .filter({ has: page.locator('input[value="max_model_len"]') })
+        .getByPlaceholder("Value");
+
+    await openWith(page, launch, model.id, [host()]);
+    await launch.skipButton.click();
+    await launch.selectEngine("vLLM");
+    await launch.nextButton.click();
+    await expect(maxModelLen().first()).toHaveValue("16384");
+
+    // vLLM refuses a value above the model's own context length.
+    await page.route(`**/api/v1alpha1/models/${model.id}`, async (route) => {
+      const response = await route.fetch();
+      const json = await response.json();
+      await route.fulfill({ response, json: { ...json, context_length: 8192 } });
+    });
+    await openWith(page, launch, model.id, [host()]);
+    await launch.skipButton.click();
+    await launch.selectEngine("vLLM");
+    await launch.nextButton.click();
+    await expect(maxModelLen().first()).toHaveValue("8192");
+  });
+
   test("known arguments and variables carry an info button", async ({
     page,
     api,
@@ -176,6 +209,8 @@ test.describe("launch wizard hints", () => {
     await expect(help).toContainText("Default:");
     await expect(help).toContainText("Range:");
     await page.keyboard.press("Escape");
+    // The closed popover stays in the page until its exit animation ends.
+    await expect(help).toBeHidden();
 
     await page.getByRole("button", { name: "About HF_HUB_OFFLINE" }).click();
     await expect(help).toContainText("forbids every download");

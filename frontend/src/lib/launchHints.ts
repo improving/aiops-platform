@@ -148,3 +148,17 @@ export function estimateGpuFit(
 }
 
 export { oneDecimal } from "@/lib/format";
+
+/** The engine's default for `max_model_len`, lowered to the model's own
+ * context length when the registry knows it and it is shorter. Every
+ * other argument, and an unknown context, keep the default. */
+export function capToContext(
+  name: string,
+  defaultValue: string,
+  contextLength: number | null | undefined
+): string {
+  if (name !== "max_model_len" || !contextLength) return defaultValue;
+  const value = Number(defaultValue);
+  if (!Number.isFinite(value) || value <= contextLength) return defaultValue;
+  return String(contextLength);
+}

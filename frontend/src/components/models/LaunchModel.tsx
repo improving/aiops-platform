@@ -29,6 +29,7 @@ import { DisplayCard } from "@/components/ui/DisplayCard";
 import { ArgHelp } from "@/components/models/ArgHelp";
 import { ResourceHint } from "@/components/instances/ResourceHint";
 import {
+  capToContext,
   estimateGpuFit,
   freeCpu,
   freeGpu,
@@ -181,7 +182,7 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
   // rather than in an effect, because args/envVars must stay editable
   // afterwards (a plain derived value would not allow the user's edits).
   const defaultsKey = selectedOption
-    ? `${selectedOption.id}:${engines.length}`
+    ? `${selectedOption.id}:${engines.length}:${model?.context_length ?? ""}`
     : null;
   const [appliedDefaultsKey, setAppliedDefaultsKey] = useState<string | null>(
     null
@@ -198,13 +199,23 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     if (selectedEngine) {
       setAppliedDefaultsKey(defaultsKey);
 
-      const defaultArgs: CLIArg[] = selectedEngine.default_args.map((arg) => ({
-        name: arg.name,
-        value: arg.defaultValue,
-        editable: arg.editable,
-        new: false,
-        updated: false,
-      }));
+      const defaultArgs: CLIArg[] = selectedEngine.default_args.map((arg) => {
+        // vLLM refuses a max_model_len above the model's own context, so
+        // a model with a shorter one starts from its own value; `updated`
+        // makes the form send it, since the backend merges the defaults.
+        const value = capToContext(
+          arg.name,
+          arg.defaultValue,
+          model?.context_length
+        );
+        return {
+          name: arg.name,
+          value,
+          editable: arg.editable,
+          new: false,
+          updated: value !== arg.defaultValue,
+        };
+      });
 
       const defaultEnvVars: EnvVar[] = selectedEngine.default_config.map(
         (env) => ({

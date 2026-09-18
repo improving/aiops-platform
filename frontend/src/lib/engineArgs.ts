@@ -40,7 +40,7 @@ export const ENGINE_ARG_DOCS: readonly ArgDoc[] = [
       "The longest request the server accepts, prompt plus answer, in tokens. The KV cache is sized for it, so a larger value needs more GPU memory.",
     defaultValue: "the model's own context length",
     range: "1 to the model's context length",
-    note: "A model with a 32k or 128k context often does not fit a 24 GB GPU at its default; 4192 to 16384 is a safe range there. vLLM stops at start with a KV cache error when the value is too large.",
+    note: "A model with a 32k or 128k context often does not fit a 24 GB GPU at its default; 4096 to 16384 is a safe range there, and the form starts at 16384 or the model's own context when that is shorter. vLLM stops at start with a KV cache error when the value is too large.",
     docUrl: VLLM_ARGS,
   },
   {
