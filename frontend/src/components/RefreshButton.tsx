@@ -22,6 +22,8 @@ export function RefreshButton({ onRefresh }: RefreshButtonProps) {
       loading={isRefreshing}
       loadingIcon={<ReloadIcon className="h-4 w-4" />}
       variant="outline"
+      aria-label="Refresh"
+      title="Refresh"
     ></Button>
   );
 }

@@ -116,9 +116,15 @@ def pod_events(
         if involved is None or (involved.kind, involved.name) not in objects:
             continue
         at = event.last_timestamp or event.event_time or event.first_timestamp
+        # Kubernetes folds a repeated event into one object with a count
+        # and the first and last time; ``at`` is the last one.
+        count = getattr(event, "count", None) or 1
+        first = getattr(event, "first_timestamp", None)
         events.append(
             {
                 "at": at.isoformat() if at else None,
+                "count": count,
+                "first_at": first.isoformat() if first and count > 1 else None,
                 "type": event.type or "",
                 "reason": event.reason or "",
                 "message": event.message or "",

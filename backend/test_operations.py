@@ -665,6 +665,8 @@ def test_inference_logs_and_events(inference_env, monkeypatch):
         assert events.json() == [
             {
                 "at": EVENT_AT.isoformat(),
+                "count": 1,
+                "first_at": None,
                 "type": "Normal",
                 "reason": "Pulled",
                 "message": "m",

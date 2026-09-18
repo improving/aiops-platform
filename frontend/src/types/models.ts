@@ -54,7 +54,10 @@ interface PodLogs {
 
 // GET /v1alpha1/<kind>/{id}/events (pod_events): newest first, at most 100.
 interface InstanceEvent {
+  // The last time; Kubernetes folds a repeated event into one with a count.
   at: string | null;
+  count?: number;
+  first_at?: string | null;
   type: string;
   reason: string;
   message: string;

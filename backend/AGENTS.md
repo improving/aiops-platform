@@ -306,6 +306,11 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   (a pod with a `deletion_timestamp` counts for neither ready nor failed; only `resume` leaves `Stopped`) and
   `refresh_stale` (one controller per scheduler tick). `NULL` status means "not looked at yet".
   `READ_ONLY_STATUS_FIELDS` (inference only) is the columns a PUT may never set.
+- A vLLM first start downloads the weights, and the hub library does not resume after a kill, so the time allowed for it is generous on purpose:
+  `controller/vllm_controller.py` renders a `startupProbe` of two hours (used by `charts/vllm` from 0.4.1 on, ignored before)
+  and, for a chart without one, a liveness `initialDelaySeconds` of `VLLM_LIVENESS_INITIAL_DELAY_SECONDS` (default 7200).
+  Do not shorten either without a startup probe in the published chart: on the lab a 10 GB model took 28 minutes.
+- `utils/pod_inspection.py` `pod_events` carries `count` and `first_at` next to `at` (the last time): Kubernetes folds a repeated event into one object, and writes none when a problem ends.
 - One `check_pod_status_and_readiness(instance, db, controller=None)` signature across the three routers;
   `test_auth.py` monkeypatches it by name in `api.vectordb_instance` and `api.inference_instance`.
   `utils/kubernetes_utils.py` `PodStatus` is the only return type, there is no tuple shim.

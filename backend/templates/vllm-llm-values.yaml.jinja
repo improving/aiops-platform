@@ -109,6 +109,17 @@ volumeMounts:
   - name: hf-cache
     mountPath: {{ volumeMounts.hf_cache.mountPath | default('/model') }}
 
+# Rendered by charts/vllm from 0.4.1 on, ignored before. With it, liveness
+# and readiness only begin once the server answered /health for the first
+# time, however long the first download took.
+startupProbe:
+  httpGet:
+    path: {{ startup_probe_path | default('/health') }}
+    port: http
+  periodSeconds: {{ startup_probe_period | default(30) }}
+  timeoutSeconds: {{ startup_probe_timeout | default(2) }}
+  failureThreshold: {{ startup_probe_failure_threshold | default(240) }}
+
 livenessProbe:
   httpGet:
     path: {{ liveness_probe_path | default('/health') }}

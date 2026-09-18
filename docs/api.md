@@ -96,9 +96,11 @@ GET /v1alpha1/{inferenceInstance|vectordb_instances|notebooks}/{id}/events
 `container` keeps only that container,
 `tail` clamps to 1..5000,
 `previous` reads the last terminated container.
-`events` answers a list of `{at, type, reason, message, object}`,
+`events` answers a list of `{at, count, first_at, type, reason, message, object}`,
 newest first, at most 100,
 covering the pods and their Deployment or StatefulSet.
+Kubernetes folds a repeated event into one: `at` is the last time, `count` how often (1 for a single event) and `first_at` the first time (`null` for a single event).
+It writes no event when a problem ends, so a readiness warning from the start of an instance that is ready now is history, not its state.
 Both need the read policy;
 a notebook is visible to its owner only.
 

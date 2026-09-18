@@ -52,7 +52,16 @@ def fake_core(pods, logs=None):
     return core
 
 
-def fake_event(kind, name, reason, at, message="m", type_="Normal"):
+def fake_event(
+    kind,
+    name,
+    reason,
+    at,
+    message="m",
+    type_="Normal",
+    count=None,
+    first_at=None,
+):
     return SimpleNamespace(
         involved_object=SimpleNamespace(kind=kind, name=name),
         reason=reason,
@@ -60,5 +69,6 @@ def fake_event(kind, name, reason, at, message="m", type_="Normal"):
         type=type_,
         last_timestamp=at,
         event_time=None,
-        first_timestamp=None,
+        first_timestamp=first_at,
+        count=count,
     )

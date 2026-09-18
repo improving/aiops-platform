@@ -104,6 +104,8 @@ def test_pod_events_keeps_pod_and_workload_events_newest_first():
     ]
     assert events[0] == {
         "at": t2.isoformat(),
+        "count": 1,
+        "first_at": None,
         "type": "Normal",
         "reason": "ScalingReplicaSet",
         "message": "m",
@@ -600,3 +602,36 @@ def test_launch_names_a_container_that_cannot_be_created():
         'CreateContainerConfigError: secret "hf-api-token" not found'
     )
     assert launch.needs_attention is True
+
+
+def test_pod_events_carry_how_often_and_since_when():
+    # Kubernetes folds a repeated event into one object: a readiness probe
+    # that failed 111 times while a model downloaded is one event with a
+    # count, a first and a last time. Shown with the last time alone it
+    # reads as one warning that is still true.
+    first = datetime(2026, 9, 18, 14, 42, 30, tzinfo=UTC)
+    last = datetime(2026, 9, 18, 15, 7, 40, tzinfo=UTC)
+    core = fake_core([fake_pod("vllm-0")])
+    core.list_namespaced_event.return_value = fake_listing(
+        fake_event(
+            "Pod",
+            "vllm-0",
+            "Unhealthy",
+            last,
+            "Readiness probe failed",
+            "Warning",
+            count=111,
+            first_at=first,
+        ),
+        fake_event("Pod", "vllm-0", "Started", first),
+    )
+    apps = mock.Mock()
+    apps.list_namespaced_deployment.return_value = fake_listing()
+    apps.list_namespaced_stateful_set.return_value = fake_listing()
+    unhealthy, started = pod_events("ns", LABELS, core_v1=core, apps_v1=apps)
+    assert unhealthy["count"] == 111
+    assert unhealthy["first_at"] == first.isoformat()
+    assert unhealthy["at"] == last.isoformat()
+    # An event that happened once has no count of its own worth showing.
+    assert started["count"] == 1
+    assert started["first_at"] is None

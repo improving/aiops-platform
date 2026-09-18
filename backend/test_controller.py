@@ -1060,8 +1060,40 @@ async def test_vllm_liveness_waits_for_a_first_start():
     controller = get_controller("vllm", core_v1_api=mock.Mock())
     instance, chart = _inference_instance_and_chart()
     values = await controller.prepare_helm_values(instance, chart)
-    assert values["livenessProbe"]["initialDelaySeconds"] == 1800
+    # Two hours by default. Measured on the lab: a 10 GB model took 28
+    # minutes on a slow evening and was ready 78 s before a 30 minute delay
+    # ended. A kill restarts the download from zero, so a delay that is too
+    # short is a loop nobody can leave, while a start that hangs is rare,
+    # visible in the UI and one Restart away.
+    assert values["livenessProbe"]["initialDelaySeconds"] == 7200
     assert values["readinessProbe"]["initialDelaySeconds"] == 30
+
+
+@pytest.mark.asyncio
+async def test_vllm_liveness_delay_is_configurable(monkeypatch):
+    # Short again once the chart has a startup probe (charts/vllm 0.4.1),
+    # or longer on a slower link: an operator's call, not a code change.
+    monkeypatch.setenv("VLLM_LIVENESS_INITIAL_DELAY_SECONDS", "60")
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    values = await controller.prepare_helm_values(instance, chart)
+    assert values["livenessProbe"]["initialDelaySeconds"] == 60
+
+    monkeypatch.setenv("VLLM_LIVENESS_INITIAL_DELAY_SECONDS", "soon")
+    values = await controller.prepare_helm_values(instance, chart)
+    assert values["livenessProbe"]["initialDelaySeconds"] == 7200
+
+
+@pytest.mark.asyncio
+async def test_vllm_values_carry_a_startup_probe():
+    # The chart renders it from 0.4.1 on and ignores it before: the first
+    # start gets two hours, and liveness only begins once it succeeded.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    values = await controller.prepare_helm_values(instance, chart)
+    probe = values["startupProbe"]
+    assert probe["httpGet"] == {"path": "/health", "port": "http"}
+    assert probe["periodSeconds"] * probe["failureThreshold"] == 7200
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,28 @@ from utils.credentials import CREDENTIAL_KEY, credential_secret_names
 
 from .base_controller import Controller
 
-LIVENESS_INITIAL_DELAY_SECONDS = 1800
+# How long a first start may take: the weight download, the load and the
+# compilation. Measured on the lab: a 10 GB model took 28 minutes on a slow
+# link. The hub library does not resume a download, so a kill restarts it
+# from zero and a limit that is too short is a loop nobody can leave; a
+# start that hangs is rare, visible in the UI and one Restart away.
+DEFAULT_FIRST_START_SECONDS = 7200
+STARTUP_PROBE_PERIOD_SECONDS = 30
+
+
+def liveness_initial_delay_seconds() -> int:
+    """``VLLM_LIVENESS_INITIAL_DELAY_SECONDS``, else two hours. The delay
+    stands in for a startup probe on a chart that has none (before
+    charts/vllm 0.4.1); an operator lowers it once the chart in use has
+    one, or raises it on a slower link."""
+    raw = os.environ.get("VLLM_LIVENESS_INITIAL_DELAY_SECONDS", "")
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_FIRST_START_SECONDS
+    return value if value > 0 else DEFAULT_FIRST_START_SECONDS
+
+
 VLLM_CACHE_ROOT = "/model/.vllm-cache"
 
 
@@ -32,12 +53,14 @@ class VLLMController(Controller):
             "env": [],
             "configs": [],
             "volumeMounts": {"hf_cache": {"mountPath": "/model"}},
-            # The chart has no startup probe, and a first start downloads
-            # the weights: minutes, which the hub library does not resume
-            # after a kill. The delay applies at container start only, so
-            # a server that hangs later is still restarted, and readiness
-            # keeps traffic away until /health answers.
-            "liveness_probe_initial_delay": LIVENESS_INITIAL_DELAY_SECONDS,
+            # Both cover the first start: the startup probe on a chart that
+            # renders it, the liveness delay on one that does not. The delay
+            # applies at container start only, and readiness keeps traffic
+            # away until /health answers.
+            "liveness_probe_initial_delay": liveness_initial_delay_seconds(),
+            "startup_probe_period": STARTUP_PROBE_PERIOD_SECONDS,
+            "startup_probe_failure_threshold": DEFAULT_FIRST_START_SECONDS
+            // STARTUP_PROBE_PERIOD_SECONDS,
             "credential_secret_name": credential_secret_name,
             "credential_secret_key": CREDENTIAL_KEY,
         }

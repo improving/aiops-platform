@@ -16,6 +16,14 @@ interface DisplayCardProps {
   description?: React.ReactNode;
   content?: React.ReactNode;
   footer?: React.ReactNode;
+  /**
+   * Where the content sits when cards of one row differ in height. The
+   * default lets the header take the spare height, so the content ends at
+   * the bottom; "top" starts the content right under the header on every
+   * card (lists whose cards gain or lose a banner, a progress line or a
+   * footer action), and the footer still sits at the bottom.
+   */
+  align?: "bottom" | "top";
   className?: string;
   onClick?: () => void;
   onRefresh?: () => Promise<void>;
@@ -27,13 +35,14 @@ export function DisplayCard({
   description,
   content,
   footer,
+  align = "bottom",
   className,
   onClick,
   onRefresh,
 }: DisplayCardProps) {
   return (
     <Card className={`flex flex-col h-full ${className}`} onClick={onClick}>
-      <CardHeader className="grow">
+      <CardHeader className={align === "top" ? undefined : "grow"}>
         <div className="flex justify-between">
           <div className="flex items-start space-x-4">
             {icon &&
@@ -58,7 +67,11 @@ export function DisplayCard({
           {onRefresh && <RefreshButton onRefresh={onRefresh} />}
         </div>
       </CardHeader>
-      {content && <CardContent>{content}</CardContent>}
+      {content && (
+        <CardContent className={align === "top" ? "grow" : undefined}>
+          {content}
+        </CardContent>
+      )}
       {footer && <CardFooter className="mt-auto">{footer}</CardFooter>}
     </Card>
   );

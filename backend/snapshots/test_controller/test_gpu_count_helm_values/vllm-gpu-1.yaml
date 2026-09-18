@@ -18,7 +18,7 @@ env:
   valueFrom:
     secretKeyRef:
       key: api-key
-      name: inf-000000ac-credentials
+      name: inf-000000b6-credentials
 - name: VLLM_CACHE_ROOT
   value: /model/.vllm-cache
 livenessProbe:
@@ -26,7 +26,7 @@ livenessProbe:
   httpGet:
     path: /health
     port: http
-  initialDelaySeconds: 1800
+  initialDelaySeconds: 7200
   periodSeconds: 30
   successThreshold: 1
   timeoutSeconds: 2
@@ -56,6 +56,13 @@ serviceMonitor:
   additionalLabels:
     release: prometheus
   enabled: true
+startupProbe:
+  failureThreshold: 240
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 30
+  timeoutSeconds: 2
 strategy:
   type: Recreate
 volumeMounts:

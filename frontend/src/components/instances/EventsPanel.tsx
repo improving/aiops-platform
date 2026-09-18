@@ -106,6 +106,11 @@ export function EventsPanel({
           <RefreshButton onRefresh={load} />
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Kubernetes folds a repeated event into one row with a count, and writes
+        no event when a problem ends: a readiness warning from the start of an
+        instance that is Ready now is history, not its state.
+      </p>
       {/* A plain table in a scroll area of its own: the shared Table wraps
           itself in an overflow-x container, which a sticky header would
           stick to instead of this one. */}
@@ -114,7 +119,8 @@ export function EventsPanel({
           <TableCaption className="sr-only">Events</TableCaption>
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
-              <TableHead>Time</TableHead>
+              <TableHead>Last seen</TableHead>
+              <TableHead>Count</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Reason</TableHead>
               <TableHead>Object</TableHead>
@@ -124,7 +130,7 @@ export function EventsPanel({
           <TableBody>
             {visible.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   {warningsOnly ? "No warnings." : "No events."}
                 </TableCell>
               </TableRow>
@@ -133,6 +139,16 @@ export function EventsPanel({
                 <TableRow key={`${event.object}-${event.at}-${index}`}>
                   <TableCell className="whitespace-nowrap">
                     {event.at ? new Date(event.at).toLocaleString() : "-"}
+                  </TableCell>
+                  <TableCell
+                    className="whitespace-nowrap"
+                    title={
+                      event.first_at
+                        ? `First seen ${new Date(event.first_at).toLocaleString()}`
+                        : undefined
+                    }
+                  >
+                    {(event.count ?? 1) > 1 ? `×${event.count}` : ""}
                   </TableCell>
                   <TableCell
                     className={

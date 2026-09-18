@@ -207,6 +207,31 @@ test.describe("instance operations", () => {
     );
     await expect(pending.getByRole("link", { name: "Chat" })).toHaveCount(0);
 
+    // Cards of one row start their content at one height, whatever they
+    // carry below it: a footer action, a banner, a progress line or none.
+    const stopped = {
+      ...base,
+      id: "33333333-4444-4555-8666-7777deaddead",
+      ready: false,
+      status: "Stopped",
+    };
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) =>
+      route.fulfill({ json: [serving, stopped] })
+    );
+    await page.getByRole("button", { name: "Refresh" }).click();
+    const stoppedCard = cards.filter({ hasText: "7777deaddead" });
+    await expect(stoppedCard).toContainText("Stopped");
+    await expect(stoppedCard.getByRole("link")).toHaveCount(1); // the title
+    const top = async (card: typeof ready) =>
+      (await card.locator('[data-slot="accelerator"]').boundingBox())!.y;
+    expect(
+      Math.abs((await top(ready)) - (await top(stoppedCard)))
+    ).toBeLessThan(2);
+
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) =>
+      route.fulfill({ json: [serving, starting, embedding] })
+    );
+    await page.getByRole("button", { name: "Refresh" }).click();
     const embedder = cards.filter({ hasText: "6666feedfeed" });
     await expect(embedder.locator('[data-slot="accelerator"]')).toBeVisible();
     await expect(embedder.getByRole("link", { name: "Chat" })).toHaveCount(0);
@@ -296,6 +321,10 @@ test.describe("instance operations", () => {
       reason: i % 10 === 0 ? "Unhealthy" : "Pulled",
       message: `event number ${i}`,
       object: "Pod/vllm-0000cafe-abc",
+      // Kubernetes folds repeats into one event: the newest one here is a
+      // readiness probe that failed 111 times while the model loaded.
+      count: i === 0 ? 111 : 1,
+      first_at: i === 0 ? "2026-09-06T10:30:00" : null,
     }));
     await page.route(
       `**/api/v1alpha1/inferenceInstance/${ID}/events`,
@@ -309,6 +338,8 @@ test.describe("instance operations", () => {
 
     const rows = details.eventsTable.locator("tbody tr");
     await expect(rows).toHaveCount(25);
+    await expect(rows.first()).toContainText("×111");
+    await expect(rows.nth(1)).not.toContainText("×");
     const count = page.locator('main [data-slot="events-count"]');
     await expect(count).toHaveText("25 of 60, newest first");
     // The list scrolls inside its own area instead of growing the page.

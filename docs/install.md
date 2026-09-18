@@ -24,6 +24,9 @@ The raw manifests under `infra/aiops/` remain for the lab until the chart is ver
   (the engine values set no `runtimeClassName` and no tolerations),
   the Prometheus operator CRDs (every engine chart defaults to `serviceMonitor.enabled: true`),
   and the model cache claim `hf-cache` in the release namespace (`backend.hfCache.create=true`).
+  A first start downloads the model, which can take long on a slow link, and a killed download starts again from zero.
+  `charts/vllm` 0.4.1 has a startup probe of two hours for that; on an older published chart the backend stretches the liveness delay instead
+  (`VLLM_LIVENESS_INITIAL_DELAY_SECONDS` through `backend.env`, two hours by default; lower it, for example to `60`, once the chart in use renders the startup probe).
 - Images: `ghcr.io/infracloudio/aiops-backend` and `aiops-frontend` (`global.imageTag`, default `main`).
   The `*-image.yml` workflows publish both on every push to `main` that changes `backend/` or `frontend/`,
   tagged `main` and the first seven characters of the commit SHA;
