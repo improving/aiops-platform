@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lint and render checks for charts/aiops-platform (make chart-lint):
-#   helm lint --strict with the default values and the external fixture,
-#   helm template with the default, external and kind values, and
+#   helm lint --strict with the default values and the external and lab fixtures,
+#   helm template with the default, external, kind and lab values, and
 #   assertions on what each render must and must not contain.
 # Requires: helm (and network for helm dependency build).
 set -euo pipefail
@@ -23,10 +23,12 @@ reject() { if printf '%s' "$3" | grep -E -- "$2" >/dev/null; then fail "$1"; els
 helm dependency build "$CHART" >/dev/null
 helm lint --strict "$CHART"
 helm lint --strict "$CHART" -f "$CHART/test/values-external.yaml"
+helm lint --strict "$CHART" -f "$CHART/test/values-lab.yaml"
 
 default=$(helm template aiops-platform "$CHART" -n aiops-platform)
 external=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-external.yaml")
 kind_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-kind.yaml")
+lab_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-lab.yaml")
 # test/values-kind.yaml is also the make chart-install fixture and keeps
 # Langflow off (a second 2 GB image next to the dev Langflow); this render
 # turns it on the way chart-install would.
@@ -95,6 +97,19 @@ expect "kind Certificate lives in the gateway namespace" 'namespace: envoy-gatew
 expect "kind realm carries the dev users" '"username": "alice"' "$kind_render"
 expect "kind routes attach to the dev Gateway" 'name: aiops$' "$kind_render"
 
+# --- lab fixture (the bare-metal k3s GPU node, infra/lab) -----------------------
+reject "default renders no hf-cache claim" 'name: hf-cache$' "$default"
+expect "lab renders the hf-cache claim" 'name: hf-cache$' "$lab_render"
+expect "lab hf-cache claim uses the node's StorageClass" 'storageClassName: "local-path"' "$lab_render"
+expect "lab hf-cache claim survives uninstall" 'helm.sh/resource-policy: keep' "$lab_render"
+expect "lab renders a Gateway" '^kind: Gateway$' "$lab_render"
+expect "lab Gateway uses the aiops GatewayClass" 'gatewayClassName: "?aiops"?$' "$lab_render"
+expect "lab Gateway terminates with the lab wildcard Secret" 'name: "?aiops-lab-wildcard-tls"?$' "$lab_render"
+expect "lab Certificate is issued by the lab CA" 'name: aiops-lab-ca$' "$lab_render"
+expect "lab routes the ui host" '"ui\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
+expect "lab mounts the CA Secret" 'secretName: "?aiops-lab-ca"?$' "$lab_render"
+reject "lab realm has no dev users" '"username": "alice"' "$lab_render"
+
 # --- Langflow ------------------------------------------------------------------
 reject "the default render has no Langflow" 'aiops-platform-langflow' "$default"
 expect "the Langflow render deploys it" 'name: aiops-platform-langflow$' "$langflow_render"
@@ -131,7 +146,7 @@ expect "hook script is embedded" 'apply_secret aiops-gateway-oidc' "$default"
 expect "hook script patches missing keys into an existing Secret" 'kubectl.*patch secret' "$default"
 
 # --- never a credential in a render -------------------------------------------
-reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render$langflow_render"
+reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render$langflow_render$lab_render"
 
 if (( FAILURES > 0 )); then
   echo "$FAILURES check(s) failed" >&2

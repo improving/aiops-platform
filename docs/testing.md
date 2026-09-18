@@ -110,7 +110,7 @@ the backend and frontend Deployments are Available, `GET /health` and `GET /v1al
 a 401 without a token, the realm's discovery document on `auth.platform.127.0.0.1.nip.io`,
 the login page on `ui.platform.127.0.0.1.nip.io`, the UI pod reaching the issuer host,
 and a client-credentials token from `aiops-automation` listing the catalog.
-`ARGS="--skip-install"` reuses an existing install; `make chart-lint` is the offline part (lint plus three renders with assertions).
+`ARGS="--skip-install"` reuses an existing install; `make chart-lint` is the offline part (lint plus six renders with assertions).
 The fast Playwright tier covers the runtime UI configuration in `runtime-config.spec.ts`.
 
 ## Scripts and make targets

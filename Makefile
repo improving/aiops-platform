@@ -50,6 +50,11 @@ prereqs: ## Check required local tools are installed
 			missing=1; \
 		fi; \
 	done; \
+	if command -v kubeconform >/dev/null 2>&1; then \
+		printf "  [ok]      kubeconform (optional, hack/lab-dry-run.sh)\n"; \
+	else \
+		printf "  [info]    kubeconform not found (optional, only hack/lab-dry-run.sh needs it)\n"; \
+	fi; \
 	if command -v colima >/dev/null 2>&1; then \
 		if colima status >/dev/null 2>&1; then \
 			printf "  [ok]      colima is running\n"; \
@@ -267,7 +272,8 @@ CHART_DIR           := charts/aiops-platform
 CHART_RELEASE       ?= aiops-platform
 CHART_NAMESPACE     ?= aiops-platform
 CHART_PARENT_DOMAIN ?= platform.127.0.0.1.nip.io
-CHART_IMAGE_TAG     ?= $(shell git rev-parse --short HEAD)
+# Exactly seven characters, the tag the *-image.yml workflows publish (--short can give more).
+CHART_IMAGE_TAG     ?= $(shell git rev-parse HEAD | cut -c1-7)
 CHART_CA_SECRET     := aiops-platform-ca
 CHART_TLS_SECRET    := $(CHART_RELEASE)-wildcard-tls
 

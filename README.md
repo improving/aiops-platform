@@ -52,7 +52,8 @@ each behind its own gateway hostname and identity check.
 - Charts: `helm lint --strict charts/<name>` and `helm template x charts/<name>`.
 
 CI runs per directory on pull requests (`.github/workflows/`).
-Container images are pushed to `ghcr.io/infracloudio/aiops-backend` and `ghcr.io/infracloudio/aiops-frontend`.
+Container images are pushed to `ghcr.io/infracloudio/aiops-backend` and `ghcr.io/infracloudio/aiops-frontend`
+on every push to `main` that changes `backend/` or `frontend/`, tagged `main` and the seven-character commit SHA.
 Chart releases are published into the `infracloudio/charts` repository so the chart URL above stays stable.
 
 ## Configuration

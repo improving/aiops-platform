@@ -12,14 +12,22 @@ The raw manifests under `infra/aiops/` remain for the lab until the chart is ver
   and allows routes from every namespace (`allowedRoutes.namespaces.from: All`),
   or `gateway.create=true` and a `GatewayClass` to create one.
   The local stack's `infra/local/gateway/` shows both objects.
-- cert-manager 1.21 when the chart should issue the certificate (`gateway.tls.certificate.create`);
+- cert-manager when the chart should issue the certificate (`gateway.tls.certificate.create`):
+  1.21 on kind; any release that serves `cert-manager.io/v1` is enough, so reuse the one a cluster has (the lab node's is 1.11);
   otherwise a TLS Secret for `*.<parent domain>` in the Gateway's namespace.
 - A parent domain with a wildcard DNS record pointing at the Gateway:
   the chart creates `ui.`, `api.`, `auth.`, `sso.` and, with Langflow, `langflow.<parent domain>`,
   and the backend creates `nb-`, `vdb-` and `inf-` hosts under it for every instance.
 - The Kubeflow notebook controller for notebooks (`make kind-up` installs it locally).
-- Images: `ghcr.io/infracloudio/aiops-backend` and `aiops-frontend` (`global.imageTag`, default `main`);
-  build them with the `*-image.yml` workflows or locally (`make chart-images` for kind).
+- For GPU engines (vLLM, TGI, TEI, OPEA, fine-tune jobs):
+  nodes that advertise `nvidia.com/gpu` with NVIDIA as the default container runtime and no GPU taint
+  (the engine values set no `runtimeClassName` and no tolerations),
+  the Prometheus operator CRDs (every engine chart defaults to `serviceMonitor.enabled: true`),
+  and the model cache claim `hf-cache` in the release namespace (`backend.hfCache.create=true`).
+- Images: `ghcr.io/infracloudio/aiops-backend` and `aiops-frontend` (`global.imageTag`, default `main`).
+  The `*-image.yml` workflows publish both on every push to `main` that changes `backend/` or `frontend/`,
+  tagged `main` and the first seven characters of the commit SHA;
+  `make chart-images` builds the same tag locally for kind.
 
 ## Values you must set
 
@@ -31,6 +39,7 @@ The raw manifests under `infra/aiops/` remain for the lab until the chart is ver
 | `gateway.tls.secretName` | with `gateway.create=true` or `gateway.tls.certificate.create=true` |
 | `gateway.tls.certificate.issuerRef.name` | with `gateway.tls.certificate.create=true` |
 | `global.caSecret` | a Secret with `ca.crt` when the Gateway's certificate comes from a private CA |
+| `backend.hfCache.create`, `.size`, `.storageClass`, `.accessModes` | the `hf-cache` claim GPU engines mount; off by default, `ReadWriteMany` when GPU pods run on more than one node |
 | `ui.grafanaUrl`, `ui.langflowUrl`, `ui.jaegerUrl` | tool URLs the UI embeds; served to the browser by `GET /v1alpha1/config/ui` |
 
 Everything else has a working default; `charts/aiops-platform/values.yaml` documents every key.
@@ -225,6 +234,17 @@ and the TLS Secret cert-manager wrote for the Certificate.
 Delete them by hand, or delete the namespace when nothing else lives in it;
 on kind `make chart-uninstall` deletes the namespace and the certificate Secret.
 
+## A bare-metal cluster
+
+The chart renders no `GatewayClass` and no `EnvoyProxy`, and a cluster without the kind stack needs both:
+the `EnvoyProxy` must order the `oauth2` filter before `ext_authz` (login fails without it)
+and expose the Envoy Service as a `LoadBalancer`.
+`infra/lab/` holds these objects, a CA issuer, monitoring and GPU operator values and the install order for the lab's k3s GPU node,
+with `charts/aiops-platform/test/values-lab.yaml` as the chart fixture.
+Check what the cluster runs already before installing cluster-level components:
+`make gateway-up` installs cert-manager and must not run against a cluster that has one.
+`hack/lab-dry-run.sh` automates that check for the lab node.
+
 ## Known limitations
 
 - The backend attaches every `nb-`/`vdb-` browser route to the `aiops-workloads-oidc` SecurityPolicy the chart renders in the release namespace,
@@ -239,5 +259,9 @@ on kind `make chart-uninstall` deletes the namespace and the certificate Secret.
   which appends the namespace to the dev stack's ReferenceGrants `auth/allow-ai-stack-securitypolicy-to-keycloak` and `ai-stack/allow-securitypolicy-to-aiops-backend`.
   `make chart-uninstall` does not revert that entry; `make auth-up` and `make gateway-up` re-apply the grants and drop it.
 - Keycloak keeps its sessions in the bundled Postgres, so a Keycloak restart does not sign everyone out (unlike the dev stack's in-memory `start-dev`).
-- The `:main` images are built on demand (`workflow_dispatch`); pin `global.imageTag` to a SHA tag for a reproducible install.
-- The chart is verified on kind only; the lab keeps `infra/aiops/` until a run there is recorded.
+- `:main` moves with every application commit; pin `global.imageTag` to a SHA tag for a reproducible install.
+  Both images carry the same tag, and a commit that changes only charts or docs publishes none,
+  so the newest tag is `git log -1 --format=%H -- backend frontend | cut -c1-7`, not `HEAD`.
+- The chart is verified on kind only.
+  `infra/lab/README.md` prepares the install on the lab's k3s GPU node and `hack/lab-dry-run.sh` checks it without changing the node;
+  the legacy `infra/aiops/` manifests stay until a run there is recorded.
