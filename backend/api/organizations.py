@@ -27,7 +27,7 @@ from models.invitation import Invitation
 from models.membership import Membership
 from models.organization import Organization
 from models.user import User
-from utils.litellm import LiteLLMError, rotate_org_key
+from utils.litellm import LiteLLMError, delete_user_key, rotate_org_key
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -247,11 +247,24 @@ async def remove_member(
             status_code=409,
             detail="The organization needs at least one admin",
         )
-    # The leaver keeps a copy of the organization's LiteLLM key in
-    # Langflow; rotating it first is what actually revokes their access,
-    # so a rotation that fails keeps the member (fail closed).
+    # The leaver's Langflow account holds a LiteLLM key: their own
+    # (ensure_user_key), or, provisioned before members had keys of their
+    # own, a copy of the organization's. Revoking the one and rotating the
+    # other first is what actually ends their access, so a failure of
+    # either keeps the member (fail closed).
+    org = db.get(Organization, user.org_id)
     try:
-        rotate_org_key(db, db.get(Organization, user.org_id))
+        delete_user_key(org, user_id)
+    except LiteLLMError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "The member stays: their LiteLLM key could not be "
+                f"revoked ({exc})"
+            ),
+        ) from exc
+    try:
+        rotate_org_key(db, org)
     except LiteLLMError as exc:
         raise HTTPException(
             status_code=502,

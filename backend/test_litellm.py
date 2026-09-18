@@ -457,3 +457,113 @@ def test_ensure_org_key_creates_team_key_and_secret(monkeypatch):
     # Second call: cached, no proxy round trip.
     assert ll.ensure_org_key(db, org, core_v1) == "sk-org"
     assert len(calls) == 2
+
+
+USER_ID = uuid.UUID("0a11ce00-0000-4000-8000-0000000000a1")
+
+
+def _user_key_fixture(monkeypatch, existing: dict | None = None):
+    """A fake proxy and Secret store for the per-member key tests."""
+    from sqlalchemy.orm import Session
+
+    from models.organization import Organization
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append((request.url.path, body))
+        if request.url.path == "/key/generate":
+            return httpx.Response(200, json={"key": "sk-member"})
+        if request.url.path == "/key/delete":
+            return httpx.Response(200, json={})
+        return httpx.Response(404)
+
+    monkeypatch.setattr(ll, "get_client", lambda: _client(handler))
+    secrets = dict(existing or {})
+
+    def read(name, namespace):
+        if name not in secrets:
+            raise ApiException(status=404)
+        data = {
+            k: base64.b64encode(v.encode()).decode()
+            for k, v in secrets[name].items()
+        }
+        return mock.Mock(data=data)
+
+    core_v1 = mock.Mock()
+    core_v1.read_namespaced_secret.side_effect = read
+    core_v1.create_namespaced_secret.side_effect = lambda namespace, body: (
+        secrets.update({body.metadata.name: body.string_data})
+    )
+    core_v1.delete_namespaced_secret.side_effect = lambda name, namespace: (
+        secrets.pop(name, None)
+    )
+    org = Organization(
+        id=uuid.UUID("de5a0170-0000-4000-8000-000000000001"),
+        slug="default",
+        name="Default",
+        litellm_team_id="t-9",
+    )
+    user = mock.Mock(id=USER_ID)
+    ll._user_key_cache.clear()
+    return calls, secrets, core_v1, org, user, mock.Mock(spec=Session)
+
+
+def test_ensure_user_key_is_owned_by_the_member(monkeypatch):
+    calls, secrets, core_v1, org, user, db = _user_key_fixture(monkeypatch)
+    assert ll.ensure_user_key(db, org, user, core_v1) == "sk-member"
+    path, body = calls[0]
+    assert path == "/key/generate"
+    # In the organization's team, so its budget applies, and owned by the
+    # platform user id: the value chat sends as `user`, so LiteLLM records
+    # who spent even when a caller (Langflow) sends no user of its own.
+    assert body["team_id"] == "t-9"
+    assert body["user_id"] == str(USER_ID)
+    assert body["key_alias"] == "org-default-usr-000000a1-langflow"
+    assert body["metadata"] == {
+        "aiops_org_id": str(org.id),
+        "aiops_user_id": str(USER_ID),
+    }
+    assert secrets["org-00000001-usr-000000a1-litellm-key"] == {
+        "key": "sk-member"
+    }
+    # Second call: cached, no proxy round trip.
+    assert ll.ensure_user_key(db, org, user, core_v1) == "sk-member"
+    assert len(calls) == 1
+
+
+def test_ensure_user_key_reads_the_secret_of_another_replica(monkeypatch):
+    calls, _, core_v1, org, user, db = _user_key_fixture(
+        monkeypatch,
+        {"org-00000001-usr-000000a1-litellm-key": {"key": "sk-stored"}},
+    )
+    assert ll.ensure_user_key(db, org, user, core_v1) == "sk-stored"
+    assert calls == []
+
+
+def test_delete_user_key_revokes_the_key_and_its_secret(monkeypatch):
+    calls, secrets, core_v1, org, user, _ = _user_key_fixture(
+        monkeypatch,
+        {"org-00000001-usr-000000a1-litellm-key": {"key": "sk-stored"}},
+    )
+    ll.delete_user_key(org, user.id, core_v1)
+    assert calls == [("/key/delete", {"keys": ["sk-stored"]})]
+    assert secrets == {}
+    # Nothing to revoke for a member who never opened Langflow.
+    calls.clear()
+    ll.delete_user_key(org, user.id, core_v1)
+    assert calls == []
+
+
+def test_the_org_key_stays_without_an_owner(monkeypatch):
+    # Chat attributes through the request's `user` field; an owner on the
+    # shared key would attribute every member's chat to one person.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"key": "sk-org"})
+
+    _client(handler).generate_key("t-9", "org-default-chat", {})
+    assert "user_id" not in calls[0]

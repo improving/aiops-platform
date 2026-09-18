@@ -17,7 +17,7 @@ import httpx
 from kubernetes.client.exceptions import ApiException
 
 from logger import setup_logger
-from utils.credentials import _apply_secret, _secret_body
+from utils.credentials import _apply_secret, _delete_secret, _secret_body
 from utils.gateway import id8
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
 
@@ -31,6 +31,8 @@ STREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=10.0)
 ORG_KEY_SECRET_KEY = "key"
 ORG_KEY_CACHE_SECONDS = 300
 _org_key_cache: dict[uuid.UUID, tuple[float, str]] = {}
+# (organization id, user id) -> (expiry, key); see ensure_user_key.
+_user_key_cache: dict[tuple[uuid.UUID, uuid.UUID], tuple[float, str]] = {}
 
 SPEND_LOGS_PAGE_SIZE = 500
 SPEND_LOGS_MAX_PAGES = 20
@@ -107,6 +109,10 @@ def hosted_litellm_params(
 
 def org_key_secret_name(org_id: uuid.UUID) -> str:
     return f"org-{id8(org_id)}-litellm-key"
+
+
+def user_key_secret_name(org_id: uuid.UUID, user_id: uuid.UUID) -> str:
+    return f"org-{id8(org_id)}-usr-{id8(user_id)}-litellm-key"
 
 
 def instance_litellm_params(
@@ -209,13 +215,24 @@ class LiteLLMClient:
     def delete_team(self, team_id: str) -> None:
         self.request("POST", "/team/delete", json={"team_ids": [team_id]})
 
-    def generate_key(self, team_id: str, alias: str, metadata: dict) -> str:
+    def generate_key(
+        self,
+        team_id: str,
+        alias: str,
+        metadata: dict,
+        user_id: str | None = None,
+    ) -> str:
+        """``user_id`` makes the key a person's: LiteLLM records it on
+        every spend-log row of the key (``user`` and
+        ``metadata.user_api_key_user_id``), whatever the request says."""
         body = {
             "team_id": team_id,
             "key_alias": alias,
             "models": [],
             "metadata": metadata,
         }
+        if user_id:
+            body["user_id"] = user_id
         return self.request("POST", "/key/generate", json=body).json()["key"]
 
     def delete_key(self, key: str) -> None:
@@ -247,12 +264,14 @@ class LiteLLMClient:
         start: datetime,
         end: datetime,
         end_user: str | None = None,
+        user_id: str | None = None,
     ) -> tuple[list[dict], bool]:
         """Every spend-log row for the team between ``start`` and
         ``end`` (UTC), paging ``GET /spend/logs/ui`` at
         SPEND_LOGS_PAGE_SIZE rows per page, up to SPEND_LOGS_MAX_PAGES
-        pages; with ``end_user`` only that user's rows, so the page cap
-        applies to them alone. Returns ``(rows, capped)``; ``capped``
+        pages; with ``end_user`` only the rows whose request named that
+        user, with ``user_id`` only the rows of keys that user owns, so
+        the page cap applies to them alone. Returns ``(rows, capped)``; ``capped``
         is true when the proxy reports more rows than fit in that many
         pages."""
         rows: list[dict] = []
@@ -265,6 +284,8 @@ class LiteLLMClient:
             }
             if end_user:
                 params["end_user"] = end_user
+            if user_id:
+                params["user_id"] = user_id
             payload = self.request(
                 "GET",
                 "/spend/logs/ui",
@@ -346,12 +367,75 @@ def ensure_org_key(db, org, core_v1=None) -> str:
     return key
 
 
+def ensure_user_key(db, org, user, core_v1=None) -> str:
+    """A member's own LiteLLM virtual key, for the one client that calls
+    LiteLLM without the backend in between: the member's Langflow
+    account (utils/langflow.py). It sits in the organization's team, so
+    the organization's budget applies, and is owned by the platform user
+    id, the value chat sends as ``user``: the usage page can then
+    attribute a flow's calls, which carry no ``user`` of their own.
+    Unlike a copy of the organization's key it can be revoked alone
+    (delete_user_key). Created on first use and kept in a Secret; cached
+    for ORG_KEY_CACHE_SECONDS."""
+    cache_key = (org.id, user.id)
+    cached = _user_key_cache.get(cache_key)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    litellm = get_client()
+    if litellm is None:
+        raise LiteLLMError("LiteLLM is not configured")
+    core_v1 = core_v1 or get_core_v1_client()
+    namespace = get_default_namespace()
+    secret_name = user_key_secret_name(org.id, user.id)
+    key = _read_secret_value(core_v1, secret_name, namespace)
+    if key is None:
+        if not org.litellm_team_id:
+            # The team is created with the organization's key.
+            ensure_org_key(db, org, core_v1)
+        key = litellm.generate_key(
+            org.litellm_team_id,
+            f"org-{org.slug}-usr-{id8(user.id)}-langflow",
+            {"aiops_org_id": str(org.id), "aiops_user_id": str(user.id)},
+            user_id=str(user.id),
+        )
+        _apply_secret(
+            core_v1,
+            namespace,
+            _secret_body(secret_name, namespace, {ORG_KEY_SECRET_KEY: key}),
+        )
+    _user_key_cache[cache_key] = (
+        time.monotonic() + ORG_KEY_CACHE_SECONDS,
+        key,
+    )
+    return key
+
+
+def delete_user_key(org, user_id: uuid.UUID, core_v1=None) -> None:
+    """Revoke a member's key (ensure_user_key) and drop its Secret; called
+    when the member is removed. No-op without LiteLLM or for a member who
+    never had one. Another replica's cache can return the dead key for up
+    to ORG_KEY_CACHE_SECONDS; LiteLLM refuses it."""
+    _user_key_cache.pop((org.id, user_id), None)
+    litellm = get_client()
+    if litellm is None:
+        return
+    core_v1 = core_v1 or get_core_v1_client()
+    namespace = get_default_namespace()
+    secret_name = user_key_secret_name(org.id, user_id)
+    key = _read_secret_value(core_v1, secret_name, namespace)
+    if key is None:
+        return
+    litellm.delete_key(key)
+    _delete_secret(core_v1, namespace, secret_name)
+
+
 def rotate_org_key(db, org, core_v1=None) -> None:
     """Replace the organization's LiteLLM virtual key.
 
-    Called when a member is removed: the key sits in each member's
-    Langflow account (utils/langflow.py), and a copy cannot be
-    revoked, so the organization gets a new one. The new key goes into
+    Called when a member is removed: a Langflow account provisioned
+    before members had keys of their own (ensure_user_key) holds a copy
+    of this key, and a copy cannot be revoked, so the organization gets
+    a new one. The new key goes into
     the Secret and the cache before the old one is deleted, so a call
     between the two steps still works. Every copy of the old key stops
     working: members' Langflow accounts until their next Develop page

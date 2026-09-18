@@ -377,7 +377,11 @@ the Usage page maps ids back to emails, the Grafana dashboard's `end_user` filte
 so LiteLLM's spend logs and its Prometheus metrics attribute tokens and spend to the user, the target and the organization's team.
 The Usage page (`/usage`, header link "Usage") reads `GET /v1alpha1/organizations/current/usage?days=30`:
 members see their own rows, admins the whole organization, with totals, a table per target and a table per user and day.
-Requests made before the attribution landed have no user and appear to admins as unattributed.
+Chat, embeddings and rerank name the platform user on each request;
+a Langflow flow calls LiteLLM directly and names nobody, so each member's Langflow account gets a LiteLLM key of their own
+(same team and budget as the organization's, owned by their user id), and the page attributes those rows to the key's owner.
+Rows with neither appear to admins as unattributed: requests made before the attribution landed, with the master key,
+or by a Langflow account that still holds the organization's key (it gets the member's key on their next visit to the Develop page).
 
 `make monitoring-up` installs kube-prometheus-stack in namespace `monitoring`
 (Prometheus with a 2-day retention, the operator, kube-state-metrics and Grafana; no alertmanager, no node exporter, small requests

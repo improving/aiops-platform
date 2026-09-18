@@ -12,7 +12,8 @@ Langflow does.
 What we provision is Langflow's "OpenAI Compatible" provider (the
 lfx_openai_compatible bundle, made for "vLLM, LiteLLM, ..."), pointed at
 LiteLLM: OPENAI_COMPATIBLE_BASE_URL, the in-cluster address plus /v1,
-and OPENAI_COMPATIBLE_API_KEY, the organization's virtual key. Langflow
+and OPENAI_COMPATIBLE_API_KEY, a LiteLLM virtual key of the member's
+own in the organization's team (utils.litellm.ensure_user_key). Langflow
 checks the key by listing <base>/models with it and lists the same
 route live in its Language Model and Embedding Model pickers, so a flow
 picks inst-<id8> from a dropdown. The base URL goes first: the key's
@@ -30,7 +31,7 @@ import httpx
 
 from models.organization import Organization
 from schemas.langflow import LangflowModelSchema, LangflowProvisionSchema
-from utils.litellm import ensure_org_key
+from utils.litellm import ensure_user_key
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,10 @@ def provision_openai_compatible(
     if not settings.litellm_cluster_url:
         raise LangflowError("LITELLM_URL is not set")
     org = db.get(Organization, user.org_id)
-    key = ensure_org_key(db, org, core_v1)
+    # The caller's own key, not the organization's: a flow calls LiteLLM
+    # directly and sends no `user`, so the key is what attributes its
+    # spend, and it can be revoked alone when the member leaves.
+    key = ensure_user_key(db, org, user, core_v1)
     with LangflowClient(
         settings.api_url, bearer, transport=transport
     ) as client:

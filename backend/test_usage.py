@@ -66,8 +66,16 @@ def client():
 
 
 def _mock_litellm(rows=ROWS, capped=False):
+    """Returns ``rows`` for the team and the ``end_user`` query alike (it
+    ignores that filter, which is what the ``_visible_to`` backstop tests
+    rely on) and nothing for a member's second query, the rows of keys
+    they own (``user_id``)."""
+
+    def spend_logs(team_id, start, end, end_user=None, user_id=None):
+        return ([], False) if user_id else (rows, capped)
+
     litellm = mock.Mock()
-    litellm.spend_logs.return_value = (rows, capped)
+    litellm.spend_logs.side_effect = spend_logs
     return litellm
 
 
@@ -194,7 +202,7 @@ def test_usage_member_sees_only_their_own_rows(client, monkeypatch):
     assert body["totals"]["requests"] == 1
     assert body["totals"]["spend"] == pytest.approx(1.0)
     # Members ask LiteLLM for their own rows only.
-    assert litellm.spend_logs.call_args.args[3] == BOB_ID
+    assert litellm.spend_logs.call_args_list[0].args[3] == BOB_ID
 
 
 def test_usage_503_without_a_litellm_team(client, monkeypatch):
@@ -377,4 +385,140 @@ def test_usage_member_does_not_see_their_email_keyed_rows(client, monkeypatch):
     body = response.json()
     assert len(body["rows"]) == 1
     assert body["rows"][0]["requests"] == 1
-    assert litellm.spend_logs.call_args.args[3] == BOB_ID
+    assert litellm.spend_logs.call_args_list[0].args[3] == BOB_ID
+
+
+def _langflow_row(owner: str, request_id: str, end_user: str = "") -> dict:
+    """A row of a call made straight to LiteLLM with a member's own key
+    (utils.litellm.ensure_user_key), the way a Langflow flow calls it:
+    the request names no ``user``, the key's owner is on the row."""
+    return {
+        "request_id": request_id,
+        "model_group": "inst-aaaaaaaa",
+        "end_user": end_user,
+        "user": owner,
+        "metadata": {"user_api_key_user_id": owner},
+        "startTime": "2026-09-01T11:00:00Z",
+        "prompt_tokens": 1000,
+        "completion_tokens": 500,
+        "spend": 2.0,
+    }
+
+
+def test_usage_attributes_a_row_to_the_owner_of_its_key(client, monkeypatch):
+    rows = [*ROWS, _langflow_row(ALICE_ID, "req-flow-1")]
+    litellm = _mock_litellm(rows)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
+    _add_user(ALICE_ID, "alice@example.com")
+
+    body = client.get("/v1alpha1/organizations/current/usage").json()
+
+    # Alice's chat row and her flow's row of that day and target are one
+    # line; the flow's row is not "unattributed".
+    alice_day_one = [
+        r
+        for r in body["rows"]
+        if r["user"] == "alice@example.com" and r["day"] == "2026-09-01"
+    ]
+    assert len(alice_day_one) == 1
+    assert alice_day_one[0]["requests"] == 2
+    assert alice_day_one[0]["spend"] == pytest.approx(2.5)
+    unattributed = [r for r in body["rows"] if r["user"] is None]
+    assert [r["requests"] for r in unattributed] == [1]
+
+
+def test_usage_trusts_the_key_owner_over_the_requests_user(
+    client, monkeypatch
+):
+    # With a key of their own a member writes the request, `user` field
+    # included; only the key's owner is something they cannot choose.
+    rows = [_langflow_row(BOB_ID, "req-spoof", end_user=ALICE_ID)]
+    litellm = _mock_litellm(rows)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
+    _add_user(ALICE_ID, "alice@example.com")
+    _add_user(BOB_ID, "bob@example.com")
+
+    body = client.get("/v1alpha1/organizations/current/usage").json()
+    assert {r["user"] for r in body["rows"]} == {"bob@example.com"}
+
+
+def test_usage_member_sees_the_rows_of_their_own_key(client, monkeypatch):
+    chat_row = {**ROWS[2], "request_id": "req-chat-1"}
+    flow_row = _langflow_row(BOB_ID, "req-flow-2")
+
+    def spend_logs(team_id, start, end, end_user=None, user_id=None):
+        # LiteLLM filters on the server: one query finds the rows that
+        # name Bob as the request's user, the other the rows of his key.
+        if end_user == BOB_ID and user_id is None:
+            return [chat_row], False
+        if user_id == BOB_ID and end_user is None:
+            return [flow_row], False
+        raise AssertionError((end_user, user_id))
+
+    litellm = mock.Mock()
+    litellm.spend_logs.side_effect = spend_logs
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
+    _add_user(BOB_ID, "bob@example.com")
+    bob = _member("bob@example.com", _default_org().id, BOB_ID)
+
+    app = client.app
+    app.dependency_overrides[get_current_user] = lambda: bob
+    try:
+        body = client.get("/v1alpha1/organizations/current/usage").json()
+    finally:
+        del app.dependency_overrides[get_current_user]
+
+    assert body["scope"] == "user"
+    assert {r["user"] for r in body["rows"]} == {"bob@example.com"}
+    assert body["totals"]["requests"] == 2
+    assert body["totals"]["spend"] == pytest.approx(3.0)
+    assert litellm.spend_logs.call_count == 2
+
+
+def test_usage_member_counts_a_row_found_by_both_queries_once(
+    client, monkeypatch
+):
+    both = _langflow_row(BOB_ID, "req-both", end_user=BOB_ID)
+    litellm = mock.Mock()
+    litellm.spend_logs.return_value = ([both], False)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
+    _add_user(BOB_ID, "bob@example.com")
+    bob = _member("bob@example.com", _default_org().id, BOB_ID)
+
+    app = client.app
+    app.dependency_overrides[get_current_user] = lambda: bob
+    try:
+        body = client.get("/v1alpha1/organizations/current/usage").json()
+    finally:
+        del app.dependency_overrides[get_current_user]
+    assert body["totals"]["requests"] == 1
+
+
+def test_usage_leaves_a_master_key_row_unattributed(client, monkeypatch):
+    # Measured on LiteLLM 1.99: the master key is owned by LiteLLM's own
+    # "default_user_id", which lands in both owner fields of its rows.
+    # That is not a person: only a platform user id (a UUID) counts.
+    row = {
+        **_langflow_row("default_user_id", "req-master"),
+        "end_user": "",
+    }
+    litellm = _mock_litellm([row])
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
+
+    body = client.get("/v1alpha1/organizations/current/usage").json()
+    assert [r["user"] for r in body["rows"]] == [None]
+
+
+def test_merge_rows_keeps_rows_that_have_no_request_id():
+    a, b = {"spend": 1}, {"spend": 2}
+    same = {"request_id": "r-1"}
+    assert usage._merge_rows([a, same], [b, {"request_id": "r-1"}]) == [
+        a,
+        same,
+        b,
+    ]

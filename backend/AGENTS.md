@@ -171,9 +171,13 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   `ensure_org_key(db, org, core_v1=None)` creates the organization's LiteLLM team and one virtual key on first
   use, stores the key in Secret `org-<id8>-litellm-key` (`utils/credentials.py` `_secret_body`/`_apply_secret`,
   key `"key"`) and caches it in-process for 300 s (`_org_key_cache`, cleared by tests).
+  `ensure_user_key(db, org, user, core_v1=None)` is a member's own key in that team (`user_id` = the platform user id,
+  alias `org-<slug>-usr-<id8>-langflow`, Secret `org-<id8>-usr-<id8>-litellm-key`, cache `_user_key_cache`):
+  what `utils/langflow.py` writes into the member's Langflow account, so LiteLLM records who spent on calls that name no `user`,
+  and what `delete_user_key(org, user_id)` revokes alone when `remove_member` removes them (502 and the member stays when that fails).
   `rotate_org_key(db, org, core_v1=None)` replaces that key (new key into the Secret and the cache, then the
   old one deleted in LiteLLM); `api/organizations.py` `remove_member` calls it before deleting the membership,
-  because every member's Langflow account holds a copy of the key (`utils/langflow.py`) that cannot be
+  because a Langflow account provisioned before members had keys of their own holds a copy of it that cannot be
   revoked on its own, and answers 502 without removing anyone when the rotation fails. Two consequences:
   members' Langflow copies stop working until their next Develop page load, and another backend replica
   serves the old key from its cache for up to 300 s.
@@ -231,10 +235,14 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   it) reads `LiteLLMClient.spend_logs` for the caller's organization team since `days - 1` days ago at 00:00
   UTC through now, then aggregates by `(display name, model_group, day)`.
   Rows written while `user_key` returned the email (before `4f7a7f2` switched it to the user id) and rows written after both resolve to the same display name and land in one row.
+  A row belongs to the owner of its key when the key has one, else to the request's `user` (`_row_user`):
+  a member's own key (`ensure_user_key`, what their Langflow account calls LiteLLM with) names them whatever the request says,
+  and the request is theirs to write, so the key owner is the value they cannot choose;
+  the organization's key has no owner and its requests come from the backend, which sets `user`.
   Members keep only their own rows
-  (`spend_logs(..., end_user=user_key(user))` asks LiteLLM for just those; `_visible_to` is the backstop)
-  and never see an unattributed row (empty `end_user`,
-  made before this endpoint's `user` field shipped, or with the master key); admins see every row, including
+  (two queries, `spend_logs(..., end_user=id)` and `spend_logs(..., user_id=id)`, merged by `request_id`; `_visible_to` is the backstop)
+  and never see an unattributed row (no key owner and an empty `end_user`:
+  made before this endpoint's `user` field shipped, with the master key, or by a Langflow account provisioned before members had keys of their own); admins see every row, including
   the unattributed ones as `user: null`; each row's `user` is the email (else name, else subject) from the `users`
   table for the ids LiteLLM stored (`_user_names`), or the raw `end_user` value when no user row matches.
   A member's request is filtered server-side by user id, so a member does not see their own email-keyed rows merged in (a known asymmetry, follow-up).

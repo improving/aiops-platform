@@ -562,6 +562,36 @@ def test_remove_member_rotates_the_litellm_key(client, monkeypatch):
     assert memberships_of("dev:viewer") == {"default": "viewer"}
 
 
+def test_remove_member_revokes_their_own_litellm_key(client, monkeypatch):
+    # The member's own key (their Langflow account, ensure_user_key) is
+    # revoked with the removal, and a revocation that fails keeps the
+    # member, like the rotation: a key that still works is access.
+    from utils.litellm import LiteLLMError
+
+    monkeypatch.setattr("api.organizations.rotate_org_key", lambda db, o: None)
+    revoked = []
+    monkeypatch.setattr(
+        "api.organizations.delete_user_key",
+        lambda org, user_id: revoked.append((org.slug, str(user_id))),
+    )
+    viewer_id = str(user_by_sub("dev:viewer").id)
+    removed = client.delete(
+        f"{CURRENT}/members/{viewer_id}", headers=dev("dev")
+    )
+    assert removed.status_code == 204
+    assert revoked == [("default", viewer_id)]
+
+    def failing(org, user_id):
+        raise LiteLLMError("LiteLLM unreachable: refused")
+
+    monkeypatch.setattr("api.organizations.delete_user_key", failing)
+    client.get(STATE_ROUTE, headers=dev("viewer"))
+    kept = client.delete(f"{CURRENT}/members/{viewer_id}", headers=dev("dev"))
+    assert kept.status_code == 502
+    assert "could not be revoked" in kept.json()["detail"]
+    assert memberships_of("dev:viewer") == {"default": "viewer"}
+
+
 def test_invitation_lifecycle(client):
     created = client.post(
         f"{CURRENT}/invitations",

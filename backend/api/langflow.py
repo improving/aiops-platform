@@ -74,5 +74,5 @@ def provision(
     except LangflowError as exc:
         raise HTTPException(status_code=502, detail=exc.detail) from exc
     except LiteLLMError as exc:
-        # ensure_org_key: the organization's key could not be made or read.
+        # ensure_user_key: the member's key could not be made or read.
         raise HTTPException(status_code=502, detail=str(exc)) from exc

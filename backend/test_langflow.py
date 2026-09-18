@@ -113,17 +113,28 @@ def _models():
     return [{"name": t["name"], "label": t["label"]} for t in _targets()]
 
 
+ALICE = mock.Mock(sub="alice", org_id="org-1")
+
+
 def _provision(langflow, models=None):
     db = mock.Mock()
     db.get.return_value.name = "Acme"
-    with mock.patch.object(lf, "ensure_org_key", return_value="sk-org"):
-        return lf.provision_openai_compatible(
+    with mock.patch.object(
+        lf, "ensure_user_key", return_value="sk-alice"
+    ) as ensure_user_key:
+        result = lf.provision_openai_compatible(
             db,
-            mock.Mock(sub="alice", org_id="org-1"),
+            ALICE,
             "platform-token",
             _models() if models is None else models,
             transport=httpx.MockTransport(langflow.handler),
         )
+    # The member's own key, never the organization's shared one: a flow
+    # calls LiteLLM with no `user` field, so only the key says who spent.
+    ensure_user_key.assert_called_once_with(
+        db, db.get.return_value, ALICE, None
+    )
+    return result
 
 
 def test_provisioning_writes_base_url_then_key(env):
@@ -145,9 +156,9 @@ def test_provisioning_writes_base_url_then_key(env):
         "inst-1234abcd",
     ]
     # What was sent, value included: the in-cluster LiteLLM plus /v1
-    # (the bundle's base_url_suffix), and the organization's key.
+    # (the bundle's base_url_suffix), and the member's key.
     assert langflow.posted[0]["value"] == "http://litellm.litellm.svc:4000/v1"
-    assert langflow.posted[1]["value"] == "sk-org"
+    assert langflow.posted[1]["value"] == "sk-alice"
 
 
 def test_a_second_run_updates_in_place(env):
@@ -195,7 +206,7 @@ def test_unreachable_langflow_is_a_langflow_error(env):
         raise httpx.ConnectError("refused")
 
     with (
-        mock.patch.object(lf, "ensure_org_key", return_value="sk-org"),
+        mock.patch.object(lf, "ensure_user_key", return_value="sk-alice"),
         pytest.raises(lf.LangflowError) as raised,
     ):
         lf.provision_openai_compatible(

@@ -154,10 +154,40 @@ async def update_org_budget(
 
 
 def _row_user(row: dict) -> str | None:
-    """A spend-log row's ``end_user``, normalized: LiteLLM leaves it
-    empty for requests made before per-user attribution shipped, or
-    with the master key."""
+    """Who a spend-log row belongs to, as a platform user id.
+
+    The owner of the key comes first: a member's own key
+    (utils.litellm.ensure_user_key, what their Langflow account calls
+    LiteLLM with) names them whatever the request says, and the request
+    is theirs to write, ``user`` field included. The organization's key
+    has no owner; its requests come from the backend, which names the
+    caller as ``user`` (LiteLLM's ``end_user``). Neither: a request made
+    before attribution shipped, or with the master key, whose owner is
+    LiteLLM's own ``default_user_id`` (measured on 1.99), not a person:
+    an owner counts only when it is a platform user id."""
+    metadata = row.get("metadata") or {}
+    for owner in (row.get("user"), metadata.get("user_api_key_user_id")):
+        if owner and _is_user_id(owner):
+            return owner
     return row.get("end_user") or None
+
+
+def _is_user_id(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _merge_rows(first: list[dict], second: list[dict]) -> list[dict]:
+    """Both lists, a row that is in both (same ``request_id``) once."""
+    seen = {r["request_id"] for r in first if r.get("request_id")}
+    return first + [
+        r
+        for r in second
+        if not r.get("request_id") or r["request_id"] not in seen
+    ]
 
 
 def _row_target(row: dict) -> str:
@@ -357,6 +387,19 @@ async def current_org_usage(
             rows, capped = await asyncio.to_thread(
                 litellm.spend_logs, org.litellm_team_id, since, now, end_user
             )
+            if end_user:
+                # The member's own key (their Langflow account): those
+                # requests name no user, the key's owner is the member.
+                own, own_capped = await asyncio.to_thread(
+                    litellm.spend_logs,
+                    org.litellm_team_id,
+                    since,
+                    now,
+                    None,
+                    end_user,
+                )
+                rows = _merge_rows(rows, own)
+                capped = capped or own_capped
         except LiteLLMError as e:
             raise HTTPException(status_code=502, detail=str(e))
         except ApiException as e:
