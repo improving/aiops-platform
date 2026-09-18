@@ -501,7 +501,7 @@ def test_mock_stream_ends_with_usage_when_asked(client, monkeypatch):
     }
 
 
-def test_instance_context_length_is_the_vllm_argument():
+def test_instance_context_length_is_the_instances_own_argument():
     from types import SimpleNamespace as NS
 
     from api.chat import instance_context_length
@@ -514,12 +514,39 @@ def test_instance_context_length_is_the_vllm_argument():
         return NS(engine=engine, model=model, config=NS(args=args))
 
     assert instance_context_length(row({"max_model_len": "4192"})) == 4192
-    assert instance_context_length(row({})) == 16384
-    assert instance_context_length(row(None)) == 16384
-    assert instance_context_length(row({"max_model_len": "x"})) == 16384
+    # Not the engine default: the instance was installed with the default
+    # of its day, which the seed no longer says.
+    assert instance_context_length(row({})) is None
+    assert instance_context_length(row(None)) is None
+    assert instance_context_length(row({"max_model_len": "x"})) is None
     # Ollama's served window is not something the platform sets.
     ollama = NS(name="Ollama", default_args=[default])
     assert instance_context_length(row({}, ollama)) is None
+
+
+def test_create_records_the_vllm_window_on_the_instance():
+    from types import SimpleNamespace as NS
+
+    from api.inference_instance import _record_window
+
+    default = NS(name="max_model_len", chart_type="llm", defaultValue="16384")
+    vllm = NS(name="vLLM", default_args=[default])
+    llm = NS(category="llm")
+
+    config = {"args": None}
+    _record_window(config, vllm, llm)
+    assert config["args"] == {"max_model_len": "16384"}
+
+    own = {"args": {"max_model_len": "8192", "dtype": "half"}}
+    _record_window(own, vllm, llm)
+    assert own["args"] == {"max_model_len": "8192", "dtype": "half"}
+
+    other = {"args": {}}
+    _record_window(other, NS(name="Ollama", default_args=[default]), llm)
+    assert other["args"] == {}
+    # A default of another chart type is not this model's.
+    _record_window(other, vllm, NS(category="embedding"))
+    assert other["args"] == {}
 
 
 def test_chat_forwards_upstream_errors(client):

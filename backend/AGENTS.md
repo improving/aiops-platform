@@ -141,9 +141,12 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   model of every enabled provider in the caller's organization, `via: "litellm"` always, since hosted models
   have no direct route); every target entry carries both `instance_id` and `provider_id`, one of them `null`.
   It also carries `context_length`, the window the target serves in tokens, for the chat page's meter:
-  an instance's `max_model_len` argument, else the engine default for it (`instance_context_length`, vLLM only --
-  no other controller sets the served window, so they answer `null` rather than the registry's figure),
-  and a hosted model's `ProviderModel.context_length`.
+  an instance's own `max_model_len` argument (`instance_context_length`, vLLM only --
+  no other controller sets the served window, so they answer `null` rather than the registry's figure).
+  Never the engine default: the controllers merge the defaults at every render, so an instance without the argument follows the default of the day,
+  and the seed changed once (4192 to 16384) under a running instance. `api/inference_instance.py` `_record_window` therefore writes the default
+  into a new vLLM instance's own arguments at create; an instance from before that answers `null` until its argument is set.
+  The other source is a hosted model's `ProviderModel.context_length`.
   When the target is registered in LiteLLM (`litellm_model_id` set) every route forwards to the proxy with the
   organization's virtual key (`org_key` → `utils.litellm.ensure_org_key`, `_relay_litellm`); otherwise chat
   falls back to the Phase 1 direct passthrough to `<target.endpoint>/v1/chat/completions` with the workload

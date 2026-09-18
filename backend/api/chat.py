@@ -192,24 +192,20 @@ def _int_or_none(value) -> int | None:
 
 
 def instance_context_length(row: DBInferenceInstance) -> int | None:
-    """The window the instance serves, in tokens: its ``max_model_len``
-    argument, else the engine's default for it. Only vLLM takes that
-    argument; for every other engine the served window is not something
-    the platform sets, so the answer is ``None`` rather than a guess
-    from the registry."""
+    """The window the instance serves, in tokens: its own
+    ``max_model_len`` argument, which ``create_inference_instance``
+    records for every vLLM instance.
+
+    Not the engine default: an instance without the argument was
+    installed with the default of its day, and the seed has changed
+    since (4192 to 16384), so that figure would be a guess -- it was
+    wrong on the lab. Only vLLM takes the argument; for every other
+    engine the platform does not set the served window. ``None`` hides
+    the chat page's meter."""
     if row.engine.name != "vLLM":
         return None
     args = (row.config.args if row.config else None) or {}
-    own = _int_or_none(args.get("max_model_len"))
-    if own:
-        return own
-    for arg in row.engine.default_args or []:
-        if (
-            arg.name == "max_model_len"
-            and arg.chart_type == row.model.category
-        ):
-            return _int_or_none(arg.defaultValue)
-    return None
+    return _int_or_none(args.get("max_model_len"))
 
 
 def list_instance_targets(

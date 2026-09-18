@@ -303,6 +303,31 @@ def _find_instance(
     return instance
 
 
+def _record_window(config_data: dict, engine, model) -> None:
+    """Write the vLLM engine default for ``max_model_len`` into the
+    instance's own arguments when the request names none.
+
+    The form sends only what the user changed, and the controller merges
+    the engine defaults at every render, so an instance without the
+    argument follows the default of the day: its window would change on
+    its next restart after the seed changes, and nothing on the row says
+    what it serves. With the value on the row, the instance keeps it and
+    the chat page can show it (``api.chat.instance_context_length``)."""
+    if engine.name != "vLLM":
+        return
+    args = dict(config_data.get("args") or {})
+    if "max_model_len" in args:
+        return
+    for default in engine.default_args or []:
+        if (
+            default.name == "max_model_len"
+            and default.chart_type == model.category
+        ):
+            args["max_model_len"] = default.defaultValue
+            config_data["args"] = args
+            return
+
+
 @router.post(
     "/v1alpha1/inferenceInstance",
     response_model=InferenceInstanceSchema,
@@ -382,6 +407,7 @@ async def create_inference_instance(
             )
 
         config_data = instance.config.model_dump() if instance.config else {}
+        _record_window(config_data, engine, model)
 
         # Handle lora_adapters separately
         lora_adapters = update_config_with_lora_adapters(
