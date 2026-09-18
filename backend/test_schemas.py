@@ -74,3 +74,16 @@ def test_notebook_response_schema_keeps_existing_long_names():
         name="Existing Name " + "x" * 60, type="vscode", nvidia_gpu=False
     )
     assert instance.name.startswith("Existing Name")
+
+
+def test_notebook_namespace_defaults_to_the_platform_namespace(monkeypatch):
+    # The chart runs the backend with AIOPS_NAMESPACE set to the release
+    # namespace, where the shared OIDC policy lives; a notebook created
+    # without a namespace must land there, like every other instance.
+    monkeypatch.setenv("AIOPS_NAMESPACE", "aiops-platform")
+    created = NotebookCreateSchema(name="nb", type="jupyter", nvidia_gpu=False)
+    assert created.namespace == "aiops-platform"
+
+    monkeypatch.delenv("AIOPS_NAMESPACE")
+    created = NotebookCreateSchema(name="nb", type="jupyter", nvidia_gpu=False)
+    assert created.namespace == "ai-stack"

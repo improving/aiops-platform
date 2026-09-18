@@ -11,6 +11,7 @@ from pydantic import (
 )
 
 from utils import genid
+from utils.kubernetes_utils import get_default_namespace
 
 # The chart names the Service and Notebook "<release>-kf-notebooks-<name>"
 # with release = "<name>-<8 id chars>", and both the chart and
@@ -26,7 +27,10 @@ NOTEBOOK_NAME_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 class NotebookInstanceSchema(BaseModel):
     id: uuid.UUID | None = Field(default_factory=genid.uuid4_gen())
     name: str
-    namespace: str | None = "ai-stack"
+    # The platform's instance namespace (AIOPS_NAMESPACE), where the shared
+    # OIDC policy the notebook's route joins lives; read per request, not at
+    # import time.
+    namespace: str | None = Field(default_factory=get_default_namespace)
     type: str
     framework: str | None = None
     nvidia_gpu: bool
