@@ -140,6 +140,10 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   instances with an endpoint, `via: "litellm"` or `"direct"`) followed by `list_hosted_targets` (every enabled
   model of every enabled provider in the caller's organization, `via: "litellm"` always, since hosted models
   have no direct route); every target entry carries both `instance_id` and `provider_id`, one of them `null`.
+  It also carries `context_length`, the window the target serves in tokens, for the chat page's meter:
+  an instance's `max_model_len` argument, else the engine default for it (`instance_context_length`, vLLM only --
+  no other controller sets the served window, so they answer `null` rather than the registry's figure),
+  and a hosted model's `ProviderModel.context_length`.
   When the target is registered in LiteLLM (`litellm_model_id` set) every route forwards to the proxy with the
   organization's virtual key (`org_key` → `utils.litellm.ensure_org_key`, `_relay_litellm`); otherwise chat
   falls back to the Phase 1 direct passthrough to `<target.endpoint>/v1/chat/completions` with the workload
@@ -153,6 +157,8 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   path. `AIOPS_CHAT_MOCK=true` (only with `TEST_MODE=true`) serves one target `inst-mock` plus
   `list_hosted_targets` and answers chat with `You said: <last user message>`, embeddings with a 4-float
   vector per input and rerank with the documents reversed, without any instance, for the Playwright fast tier.
+  A mock stream ends with a usage chunk (`choices: []`, one token per word) when the body asks for it with
+  `stream_options.include_usage`, as the UI's route handler does, so the fast tier sees the same shape vLLM and LiteLLM send.
   The gateway host uses the local CA, so the process needs `SSL_CERT_FILE` (httpx honours it; `make backend`
   sets it). `user_key(user)` (`str(user.id)`, an opaque id rather than the email, so no email reaches LiteLLM's
   database, its metrics labels or an upstream provider) is the identity every route forwarded through LiteLLM

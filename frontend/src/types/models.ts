@@ -87,6 +87,9 @@ interface ChatTarget {
   engine: string;
   ready: boolean;
   via: "litellm" | "direct" | "mock";
+  /** The window the target serves, in tokens; absent or null when the
+      platform does not know it (every engine but vLLM, some hosted models). */
+  context_length?: number | null;
 }
 
 // Hosted providers (Phase 2b, backend/api/providers.py): an organization

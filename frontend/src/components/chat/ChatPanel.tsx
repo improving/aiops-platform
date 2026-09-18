@@ -4,20 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ToastAction } from "@/components/ui/toast";
+import { ChatMessage, messageText } from "@/components/chat/ChatMessage";
+import { ChatSettings } from "@/components/chat/ChatSettings";
+import { Composer } from "@/components/chat/Composer";
+import { EmptyConversation } from "@/components/chat/EmptyConversation";
+import { TargetPicker } from "@/components/chat/TargetPicker";
+import { contextUsed, type ChatUIMessage } from "@/lib/chatMetadata";
+import { platformApiUrl, playgroundExamples } from "@/lib/playgroundExamples";
 import { modelService } from "@/services/modelService";
 import { loadMessages, saveMessages } from "@/lib/chatStorage";
 import type { ChatTarget } from "@/types/models";
@@ -42,21 +39,6 @@ function describeChatError(message: string): string {
   return text;
 }
 
-function messageText(message: UIMessage): string {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-}
-
-/** Reasoning models (qwen3, o-series) stream their thinking first. */
-function messageReasoning(message: UIMessage): string {
-  return message.parts
-    .filter((part) => part.type === "reasoning")
-    .map((part) => part.text)
-    .join("");
-}
-
 export default function ChatPanel({ userKey }: { userKey: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,7 +50,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   // Empty means the model's default: some hosted models reject any
   // other value, so nothing is sent unless the user sets one.
   const [temperature, setTemperature] = useState("");
+  const [maxTokens, setMaxTokens] = useState("");
   const [input, setInput] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     modelService
@@ -78,34 +63,36 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
       .finally(() => setLoaded(true));
   }, [toast]);
 
-  const targets = useMemo(
-    () => allTargets.filter((t) => t.capability === "chat" && t.ready),
+  // Listed: everything one can chat with. Pickable: what is ready. A
+  // hosted model is always ready, so "not ready" is an instance starting.
+  const chatTargets = useMemo(
+    () => allTargets.filter((t) => t.capability === "chat"),
     [allTargets]
   );
-  const deployedTargets = useMemo(
-    () => targets.filter((t) => !t.provider_id),
-    [targets]
-  );
-  const hostedTargets = useMemo(
-    () => targets.filter((t) => !!t.provider_id),
-    [targets]
-  );
-  const selected = targets.find((t) => t.name === target);
+  // The target of the URL, ready or not: a link from an instance that is
+  // still starting must say so, not read as "no target".
+  const requested = chatTargets.find((t) => t.name === target);
+  const selected = requested?.ready ? requested : undefined;
+
+  const temperatureValue = temperature === "" ? undefined : Number(temperature);
+  const maxOutputTokens =
+    Number(maxTokens) >= 1 ? Math.floor(Number(maxTokens)) : undefined;
 
   const transport = useMemo(
     () =>
-      new DefaultChatTransport({
+      new DefaultChatTransport<ChatUIMessage>({
         api: "/api/chat",
         prepareSendMessagesRequest: ({ messages }) => ({
           body: {
             messages,
             model: target,
             system,
-            temperature: temperature === "" ? undefined : Number(temperature),
+            temperature: temperatureValue,
+            maxOutputTokens,
           },
         }),
       }),
-    [target, system, temperature]
+    [target, system, temperatureValue, maxOutputTokens]
   );
 
   const {
@@ -117,9 +104,12 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     stop,
     regenerate,
     clearError,
-  } = useChat({
+  } = useChat<ChatUIMessage>({
     id: `${userKey}:${target || "no-target"}`,
     transport,
+    // The log is not a live region (it would read every token aloud);
+    // a finished answer is announced once instead.
+    onFinish: () => setAnnouncement(`Answer received at ${timeNow()}`),
   });
 
   // History per target, in this browser only (design section 3.4).
@@ -146,7 +136,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   useEffect(() => {
     const log = logRef.current;
     if (log && pinned.current) log.scrollTop = log.scrollHeight;
-  }, [messages, error]);
+  }, [messages, error, status]);
 
   // A new conversation starts at the bottom again.
   useEffect(() => {
@@ -156,25 +146,95 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   const busy = status === "submitted" || status === "streaming";
   const canSend = !!selected && !busy && input.trim().length > 0;
 
+  const last = messages.at(-1);
+  // Sent, and nothing to show yet: the request is on its way, or the
+  // answer has started without a first token.
+  const waiting =
+    status === "submitted" ||
+    (status === "streaming" && last?.role === "assistant" && !hasContent(last));
+  const lastUserId = messages.findLast((m) => m.role === "user")?.id;
+  const lastAssistant = messages.findLast((m) => m.role === "assistant");
+
   const selectTarget = (value: string) => {
     setTarget(value);
     router.replace(`/chat?target=${value}`);
   };
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const submit = () => {
     if (!canSend) return;
     sendMessage({ text: input.trim() });
     setInput("");
   };
 
+  const onRegenerate = useCallback(
+    (messageId: string) => {
+      clearError();
+      regenerate({ messageId });
+    },
+    [clearError, regenerate]
+  );
+
+  // Back into the field, and the turn (with its answer) out of the log:
+  // sending it again continues from what came before it.
+  const onEdit = useCallback(
+    (messageId: string) => {
+      const index = messages.findIndex((m) => m.id === messageId);
+      if (index < 0) return;
+      clearError();
+      setInput(messageText(messages[index]));
+      setMessages(messages.slice(0, index));
+      inputRef.current?.focus();
+    },
+    [messages, clearError, setMessages]
+  );
+
+  // An Undo that arrives after a switch of target restores the stored
+  // history only, not the log on screen.
+  const targetRef = useRef(target);
+  useEffect(() => {
+    targetRef.current = target;
+  }, [target]);
+
+  // At once, with a way back: a confirmation would be in the way every
+  // time, and the history is one click from gone otherwise.
   const clear = () => {
+    const removed = messages;
+    const from = target;
     clearError();
     setMessages([]);
-    if (target) saveMessages(userKey, target, []);
+    if (from) saveMessages(userKey, from, []);
+    toast({
+      title: "Conversation cleared",
+      action: (
+        <ToastAction
+          altText="Undo"
+          onClick={() => {
+            saveMessages(userKey, from, removed);
+            if (from === targetRef.current) setMessages(removed);
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    });
   };
+  const examples = useMemo(
+    () =>
+      selected
+        ? playgroundExamples({
+            apiUrl: platformApiUrl(
+              typeof window === "undefined" ? "" : window.location.origin
+            ),
+            model: selected.name,
+            system,
+            temperature: temperatureValue,
+            maxOutputTokens,
+          })
+        : [],
+    [selected, system, temperatureValue, maxOutputTokens]
+  );
 
-  if (loaded && targets.length === 0) {
+  if (loaded && chatTargets.length === 0) {
     return (
       <p className="text-muted-foreground">
         No running inference instance. Launch one from the{" "}
@@ -190,69 +250,24 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
       <aside className="min-w-0 space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="chat-target">Target</Label>
-          <Select value={target} onValueChange={selectTarget}>
-            <SelectTrigger
-              id="chat-target"
-              aria-label="Target"
-              className="w-full min-w-0 *:data-[slot=select-value]:block *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate"
-            >
-              <SelectValue placeholder="Pick an instance" />
-            </SelectTrigger>
-            <SelectContent>
-              {deployedTargets.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>Deployed</SelectLabel>
-                  {deployedTargets.map((t) => (
-                    <SelectItem key={t.name} value={t.name}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-              {hostedTargets.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>Hosted</SelectLabel>
-                  {hostedTargets.map((t) => (
-                    <SelectItem key={t.name} value={t.name}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="chat-system">System prompt</Label>
-          <Textarea
-            id="chat-system"
-            value={system}
-            onChange={(e) => setSystem(e.target.value)}
-            rows={4}
+          <Label>Target</Label>
+          <TargetPicker
+            targets={chatTargets}
+            selected={requested}
+            onSelect={selectTarget}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="chat-temperature">Temperature</Label>
-          <Input
-            id="chat-temperature"
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={temperature}
-            placeholder="model default"
-            onChange={(e) => setTemperature(e.target.value)}
-          />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={clear}
-          disabled={messages.length === 0}
-        >
-          Clear conversation
-        </Button>
+        <ChatSettings
+          system={system}
+          onSystemChange={setSystem}
+          temperature={temperature}
+          onTemperatureChange={setTemperature}
+          maxTokens={maxTokens}
+          onMaxTokensChange={setMaxTokens}
+          examples={examples}
+          onClear={clear}
+          canClear={messages.length > 0}
+        />
       </aside>
 
       {/* A bounded height, not a minimum: with only min-h the section grew
@@ -260,102 +275,126 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           and the composer was pushed off the bottom of the page. The 18rem
           is the shell around it (header, title, footer), measured at 274px;
           min-h keeps it usable when the viewport is short. */}
-      <section className="flex h-[calc(100vh-18rem)] min-h-[24rem] flex-col">
+      <section className="flex h-[calc(100vh-18rem)] min-h-[24rem] min-w-0 flex-col">
         <div
           ref={logRef}
           onScroll={onLogScroll}
           role="log"
           aria-label="Conversation"
-          aria-live="polite"
+          aria-live="off"
           // min-h-0 lets this flex child shrink below its content height,
           // which is what makes overflow-y-auto scroll instead of grow.
-          className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-md border p-4"
+          className="min-h-0 flex-1 overflow-y-auto rounded-md border p-4"
         >
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              data-testid="chat-message"
-              data-role={message.role}
-              className={
-                message.role === "user"
-                  ? "ml-auto max-w-[80%] rounded-lg bg-primary px-3 py-2 break-words whitespace-pre-wrap text-primary-foreground"
-                  : "mr-auto max-w-[80%] rounded-lg bg-muted px-3 py-2 break-words whitespace-pre-wrap"
-              }
-            >
-              {messageReasoning(message) && (
-                <details className="mb-1 text-xs text-muted-foreground">
-                  <summary className="cursor-pointer">Thinking</summary>
-                  <div className="mt-1 whitespace-pre-wrap">
-                    {messageReasoning(message)}
-                  </div>
-                </details>
-              )}
-              {messageText(message)}
-            </div>
-          ))}
-          {error && (
-            <div
-              role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
-            >
-              <p className="font-medium text-destructive">
-                The answer did not arrive.
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                {describeChatError(error.message)}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    clearError();
-                    regenerate();
-                  }}
-                >
-                  Retry
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => clearError()}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-        <form onSubmit={submit} className="mt-4 flex items-end gap-2">
-          <div className="flex-1 space-y-2">
-            <Label htmlFor="chat-input">Message</Label>
-            <Textarea
-              id="chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit(e);
+          {/* A reading width: a bubble across a wide screen runs past 120
+              characters a line. */}
+          <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-3">
+            {messages.length === 0 && selected && !error && (
+              <EmptyConversation
+                target={selected}
+                onPick={(prompt) => {
+                  setInput(prompt);
+                  inputRef.current?.focus();
+                }}
+              />
+            )}
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                streaming={busy && message.id === last?.id}
+                onRegenerate={
+                  !busy && message.id === lastAssistant?.id && message === last
+                    ? onRegenerate
+                    : undefined
                 }
-              }}
-              rows={2}
-              placeholder={selected ? "Ask something" : "Pick a target first"}
-            />
+                onEdit={!busy && message.id === lastUserId ? onEdit : undefined}
+              />
+            ))}
+            {waiting && (
+              <div
+                role="status"
+                aria-label="Waiting for the model"
+                className="flex w-fit items-center gap-1 rounded-lg bg-muted px-3 py-3"
+              >
+                {[0, 150, 300].map((delay) => (
+                  <span
+                    key={delay}
+                    className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70"
+                    style={{ animationDelay: `${delay}ms` }}
+                  />
+                ))}
+              </div>
+            )}
+            {error && (
+              <div
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+              >
+                <p className="font-medium text-destructive">
+                  The answer did not arrive.
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {describeChatError(error.message)}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      clearError();
+                      regenerate();
+                    }}
+                  >
+                    Retry
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => clearError()}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-          {busy ? (
-            <Button type="button" variant="outline" onClick={() => stop()}>
-              Stop
-            </Button>
-          ) : (
-            <Button type="submit" disabled={!canSend}>
-              Send
-            </Button>
-          )}
-        </form>
+        </div>
+        <p role="status" className="sr-only">
+          {announcement}
+        </p>
+        <Composer
+          inputRef={inputRef}
+          value={input}
+          onChange={setInput}
+          onSubmit={submit}
+          onStop={stop}
+          busy={busy}
+          canSend={canSend}
+          placeholder={
+            selected
+              ? "Ask something"
+              : requested
+                ? "This instance is still starting"
+                : "Pick a target first"
+          }
+          contextUsed={contextUsed(lastAssistant?.metadata)}
+          contextLength={selected?.context_length}
+        />
       </section>
     </div>
   );
+}
+
+function hasContent(message: ChatUIMessage): boolean {
+  return message.parts.some(
+    (part) =>
+      (part.type === "text" || part.type === "reasoning") && part.text !== ""
+  );
+}
+
+function timeNow(): string {
+  return new Date().toLocaleTimeString();
 }

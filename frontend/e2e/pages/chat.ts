@@ -12,6 +12,10 @@ export class ChatPage extends AppShell {
   readonly messages: Locator;
   readonly assistantMessages: Locator;
   readonly emptyState: Locator;
+  readonly waiting: Locator;
+  readonly speed: Locator;
+  readonly contextMeter: Locator;
+  readonly starterPrompts: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -29,6 +33,12 @@ export class ChatPage extends AppShell {
       '[data-testid="chat-message"][data-role="assistant"]'
     );
     this.emptyState = page.getByText("No running inference instance");
+    this.waiting = page.getByRole("status", { name: "Waiting for the model" });
+    this.speed = this.conversation.getByTestId("chat-speed");
+    this.contextMeter = page.getByTestId("chat-context");
+    this.starterPrompts = page
+      .getByRole("group", { name: "Starter prompts" })
+      .getByRole("button");
   }
 
   async open(target?: string) {

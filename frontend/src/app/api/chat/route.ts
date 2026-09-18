@@ -6,11 +6,15 @@ import {
   RetryError,
   streamText,
   toUIMessageStream,
+  type StepResultPerformance,
+  type TextStreamPart,
+  type ToolSet,
   type UIMessage,
 } from "ai";
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { backendUrl } from "@/lib/backend";
+import type { ChatMetadata } from "@/lib/chatMetadata";
 import {
   DEV_USER_COOKIE,
   DEV_USER_HEADER,
@@ -27,6 +31,7 @@ type ChatBody = {
   model?: string;
   system?: string;
   temperature?: number;
+  maxOutputTokens?: number;
 };
 
 function authDisabled(): boolean {
@@ -71,6 +76,9 @@ export async function POST(req: Request) {
     name: "aiops",
     baseURL: `${backendUrl()}/v1alpha1`,
     headers,
+    // `stream_options.include_usage`: the last chunk carries the token
+    // counts the speed line and the context meter show.
+    includeUsage: true,
   });
 
   const result = streamText({
@@ -78,11 +86,36 @@ export async function POST(req: Request) {
     instructions: body.system?.trim() || undefined,
     messages: await convertToModelMessages(body.messages),
     temperature: body.temperature,
+    maxOutputTokens: body.maxOutputTokens,
   });
+
+  // `messageMetadata` sees only the `start` and `finish` parts, and the
+  // timings live on `finish-step`, which comes first: keep them as they
+  // pass. The SDK's own figures, not a timer here, so a reasoning model's
+  // first output counts as the first token too.
+  let performance: StepResultPerformance | undefined;
+  const stream = result.stream.pipeThrough(
+    new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
+      transform(part, controller) {
+        if (part.type === "finish-step") performance = part.performance;
+        controller.enqueue(part);
+      },
+    })
+  );
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
-      stream: result.stream,
+      stream,
+      messageMetadata: ({ part }): ChatMetadata | undefined =>
+        part.type === "finish"
+          ? {
+              ttftMs: performance?.timeToFirstOutputMs,
+              totalMs: performance?.responseTimeMs,
+              tokensPerSecond: performance?.outputTokensPerSecond,
+              inputTokens: part.totalUsage.inputTokens,
+              outputTokens: part.totalUsage.outputTokens,
+            }
+          : undefined,
       // Show the backend's detail (503 no endpoint, 502 unreachable) in
       // the chat instead of the generic "An error occurred".
       onError: (error) => {

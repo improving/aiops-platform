@@ -1,4 +1,4 @@
-import type { UIMessage } from "ai";
+import type { ChatUIMessage as UIMessage } from "@/lib/chatMetadata";
 
 // Conversations stay in this browser only (design section 3.4), one per
 // signed-in user and target, so two people sharing a browser never see

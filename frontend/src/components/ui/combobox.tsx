@@ -25,7 +25,23 @@ export interface ComboboxItem {
   keywords?: string[];
   /** What the option shows; the value when omitted. */
   node?: ReactNode;
+  /** The heading this option sits under; options without one come
+      first, under no heading. Groups keep the order of first mention. */
+  group?: string;
+  /** Listed, but not selectable (a target that is still starting). */
+  disabled?: boolean;
   onSelect: () => void;
+}
+
+function grouped(items: ComboboxItem[]): [string, ComboboxItem[]][] {
+  const groups = new Map<string, ComboboxItem[]>();
+  for (const item of items) {
+    const key = item.group ?? "";
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return [...groups.entries()].sort(
+    ([a], [b]) => Number(a !== "") - Number(b !== "")
+  );
 }
 
 /**
@@ -87,21 +103,24 @@ export function Combobox({
           <CommandInput placeholder={placeholder} className="h-9" />
           <CommandList className="max-h-72">
             <CommandEmpty>{emptyText}</CommandEmpty>
-            <CommandGroup>
-              {items.map((item) => (
-                <CommandItem
-                  key={item.value}
-                  value={item.value}
-                  keywords={item.keywords}
-                  onSelect={() => {
-                    item.onSelect();
-                    setOpen(false);
-                  }}
-                >
-                  {item.node ?? item.value}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {grouped(items).map(([heading, members]) => (
+              <CommandGroup key={heading} heading={heading || undefined}>
+                {members.map((item) => (
+                  <CommandItem
+                    key={item.value}
+                    value={item.value}
+                    keywords={item.keywords}
+                    disabled={item.disabled}
+                    onSelect={() => {
+                      item.onSelect();
+                      setOpen(false);
+                    }}
+                  >
+                    {item.node ?? item.value}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
           </CommandList>
           {footer}
         </Command>

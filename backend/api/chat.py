@@ -180,6 +180,38 @@ def instance_api_key(db: Session, instance) -> str | None:
     return read_credential_value(credential) if credential else None
 
 
+MOCK_CONTEXT_LENGTH = 4096
+
+
+def _int_or_none(value) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def instance_context_length(row: DBInferenceInstance) -> int | None:
+    """The window the instance serves, in tokens: its ``max_model_len``
+    argument, else the engine's default for it. Only vLLM takes that
+    argument; for every other engine the served window is not something
+    the platform sets, so the answer is ``None`` rather than a guess
+    from the registry."""
+    if row.engine.name != "vLLM":
+        return None
+    args = (row.config.args if row.config else None) or {}
+    own = _int_or_none(args.get("max_model_len"))
+    if own:
+        return own
+    for arg in row.engine.default_args or []:
+        if (
+            arg.name == "max_model_len"
+            and arg.chart_type == row.model.category
+        ):
+            return _int_or_none(arg.defaultValue)
+    return None
+
+
 def list_instance_targets(
     db: Session, user: CurrentUser, *, probe: bool = True
 ) -> list[dict]:
@@ -218,6 +250,7 @@ def list_instance_targets(
                 "engine": row.engine.name,
                 "ready": bool(ready),
                 "via": "litellm" if registered else "direct",
+                "context_length": instance_context_length(row),
             }
         )
     return targets
@@ -247,6 +280,7 @@ def list_hosted_targets(db: Session, user: CurrentUser) -> list[dict]:
                     "engine": provider.kind,
                     "ready": True,
                     "via": "litellm",
+                    "context_length": model.context_length,
                 }
             )
     return targets
@@ -320,6 +354,29 @@ def _mock_chunk(delta: dict, finish: str | None = None) -> bytes:
     return f"data: {json.dumps(payload)}\n\n".encode()
 
 
+def _mock_usage_chunk(body: dict, reply: str) -> bytes:
+    """The last chunk an OpenAI-compatible server sends for
+    ``stream_options.include_usage``: no choices, only the counts. One
+    token per word, so the fast tier's numbers are predictable."""
+    prompt = sum(
+        len(str(m.get("content") or "").split())
+        for m in body.get("messages") or []
+    )
+    completion = len(reply.split())
+    payload = {
+        "id": "chatcmpl-mock",
+        "object": "chat.completion.chunk",
+        "model": "mock",
+        "choices": [],
+        "usage": {
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "total_tokens": prompt + completion,
+        },
+    }
+    return f"data: {json.dumps(payload)}\n\n".encode()
+
+
 def _mock_chat(body: dict):
     reply = f"You said: {_last_user_text(body)}"
     if not body.get("stream"):
@@ -343,6 +400,8 @@ def _mock_chat(body: dict):
         for word in reply.split(" "):
             yield _mock_chunk({"content": word + " "})
         yield _mock_chunk({}, "stop")
+        if (body.get("stream_options") or {}).get("include_usage"):
+            yield _mock_usage_chunk(body, reply)
         yield b"data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -563,6 +622,7 @@ async def chat_targets(
             "engine": "Mock",
             "ready": True,
             "via": "mock",
+            "context_length": MOCK_CONTEXT_LENGTH,
         }
         hosted = await asyncio.to_thread(list_hosted_targets, db, user)
         return [mock_target] + hosted

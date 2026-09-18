@@ -202,7 +202,8 @@ curl "$AIOPS_URL/v1alpha1/inferenceInstance" \
 ```
 
 One chat completion through the control plane and LiteLLM
-(`model` is a target name from `GET /v1alpha1/chat/targets`, `inst-<id8>` for a deployed instance):
+(`model` is a target name from `GET /v1alpha1/chat/targets`, `inst-<id8>` for a deployed instance;
+each target also carries `context_length`, the window it serves in tokens, or `null` when the platform does not set it):
 
 ```bash
 curl -X POST "$AIOPS_URL/v1alpha1/chat/completions" \

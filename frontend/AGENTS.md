@@ -68,19 +68,31 @@ pnpm e2e:ui                               # Playwright UI mode
 - `src/lib/backend.ts` `backendUrl()` is the one place that resolves the backend URL on the server
   (`AIOPS_BACKEND_URL`, else the inlined `NEXT_PUBLIC_AIOPS_BACKEND_URL`); `src/proxy.ts` and the chat route use it.
 - Chat: `modelService.getChatTargets()` calls `GET /api/v1alpha1/chat/targets`, which lists what the caller may
-  chat, embed or rerank against (`ChatTarget`: `name` is `inst-<id8>`, `capability`, `ready`, `via`).
+  chat, embed or rerank against (`ChatTarget`: `name` is `inst-<id8>`, `capability`, `ready`, `via`, and an optional `context_length`).
   `src/app/api/chat/route.ts` is a Node route handler on the Vercel AI SDK (`createOpenAICompatible` pointed at
   `<backend>/v1alpha1`, `streamText`, `toUIMessageStream`, `createUIMessageStreamResponse`). The body is
-  `{ messages, model, system, temperature }`, `model` being the target name; the handler reads the session itself
+  `{ messages, model, system, temperature, maxOutputTokens }`, `model` being the target name and the last two left out for "model default"; the handler reads the session itself
   (`auth()`, 401 without one unless `AUTH_MODE=disabled`), forwards the bearer to
   `POST /v1alpha1/chat/completions`, and is excluded from the proxy matcher so it answers JSON instead of a login
-  redirect. `src/components/chat/ChatPanel.tsx` (`/chat`, `?target=<name>` preselects) fetches the targets, keeps
-  those with `capability === "chat"` and `ready`, uses `useChat` with a `DefaultChatTransport` whose
+  redirect. The handler sets `includeUsage` and attaches `ChatMetadata` (`src/lib/chatMetadata.ts`) to a finished answer:
+  the SDK's own `finish-step.performance` timings, kept by a `TransformStream` tap because `messageMetadata` sees only `start` and `finish`,
+  and the token counts of the usage chunk. No timer of our own: a reasoning model's first output is not a `text-delta`.
+  `src/components/chat/ChatPanel.tsx` (`/chat`, `?target=<name>` preselects) fetches the targets, lists
+  those with `capability === "chat"` (one that is not `ready` is listed disabled as "Starting"), uses `useChat` with a `DefaultChatTransport` whose
   `prepareSendMessagesRequest` sends the target name as `model`, and keeps one conversation per target in
   `localStorage` (per user and target, `src/lib/chatStorage.ts`, cleared on sign-out; `aiops.chat.<target name>`). The endpoint details page links to it with a "Chat" button using
   `inferenceInstance.litellm_model_name` (falling back to `inst-<id8>` derived from the instance id).
   Since Phase 2b, `ChatTarget.provider_id` (`null` for instances and the mock target) tells the two apart;
-  `ChatPanel.tsx` splits the target `Select` into two `SelectGroup`s, "Deployed" and "Hosted".
+  `TargetPicker.tsx` groups them as "Deployed" and "Hosted" in the shared `Combobox`
+  (which takes a per-item `group` and `disabled` for this; an organization with a hosted provider has tens of targets, so the list is searchable).
+  `ChatPanel.tsx` keeps the state, the transport, the storage and the scroll; the parts are
+  `ChatMessage.tsx` (memoized; an answer is Markdown without a bubble, a user turn plain text in one; Copy, Regenerate and Edit only on the last turn of each side;
+  an answer with no text yet renders nothing, so "the message is not empty" still means text for the specs, and the `role="status"` waiting row stands in),
+  `Markdown.tsx` (`react-markdown` + `remark-gfm`, no `rehype-raw`, so HTML in an answer stays text; a fenced block is a `CodeSnippet`, an unknown language is not highlighted),
+  `Composer.tsx` (one box, a field that grows, the `Message` label kept `sr-only` for the page object, and the window meter from the last answer's counts against `context_length`),
+  `ChatSettings.tsx` (temperature slider behind a "Model default" switch, `Max tokens`, "View code" from `src/lib/playgroundExamples.ts`, which shows the platform API with a personal token, not the instance host)
+  and `EmptyConversation.tsx` (starter prompts that fill the field and do not send).
+  "Clear conversation" clears at once and offers Undo in the toast. The log is `aria-live="off"`; a hidden status announces a finished answer once.
   The conversation section has a bounded height (`h-[calc(100vh-18rem)]`, the 18rem being the shell around it)
   and the log inside it carries `min-h-0` next to `flex-1`: without both, the section grew with the history,
   the log never scrolled and the composer was pushed off the page.

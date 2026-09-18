@@ -476,6 +476,52 @@ def test_mock_mode_serves_targets_chat_embeddings_rerank(client, monkeypatch):
     assert [r["index"] for r in rr["results"]] == [1, 0]
 
 
+def test_mock_stream_ends_with_usage_when_asked(client, monkeypatch):
+    monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
+    targets = client.get("/v1alpha1/chat/targets").json()
+    assert targets[0]["context_length"] == 4096
+
+    def chunks(body):
+        text = client.post("/v1alpha1/chat/completions", json=body).text
+        return [
+            json.loads(line[len("data: ") :])
+            for line in text.splitlines()
+            if line.startswith("data: {")
+        ]
+
+    body = {**BODY, "model": "inst-mock", "stream": True}
+    assert all("usage" not in c for c in chunks(body))
+    last = chunks({**body, "stream_options": {"include_usage": True}})[-1]
+    assert last["choices"] == []
+    # "You said: hello" is three words; BODY's prompt is one.
+    assert last["usage"] == {
+        "prompt_tokens": 1,
+        "completion_tokens": 3,
+        "total_tokens": 4,
+    }
+
+
+def test_instance_context_length_is_the_vllm_argument():
+    from types import SimpleNamespace as NS
+
+    from api.chat import instance_context_length
+
+    default = NS(name="max_model_len", chart_type="llm", defaultValue="16384")
+    engine = NS(name="vLLM", default_args=[default])
+    model = NS(category="llm")
+
+    def row(args, engine=engine):
+        return NS(engine=engine, model=model, config=NS(args=args))
+
+    assert instance_context_length(row({"max_model_len": "4192"})) == 4192
+    assert instance_context_length(row({})) == 16384
+    assert instance_context_length(row(None)) == 16384
+    assert instance_context_length(row({"max_model_len": "x"})) == 16384
+    # Ollama's served window is not something the platform sets.
+    ollama = NS(name="Ollama", default_args=[default])
+    assert instance_context_length(row({}, ollama)) is None
+
+
 def test_chat_forwards_upstream_errors(client):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={"error": "model not found"})

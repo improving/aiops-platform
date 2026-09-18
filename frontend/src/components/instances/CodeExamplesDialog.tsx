@@ -40,10 +40,12 @@ export function CodeExamplesDialog({
   examples,
   title,
   description,
+  triggerLabel = "Code examples",
 }: {
   examples: CodeExample[];
   title: string;
   description: string;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -51,7 +53,7 @@ export function CodeExamplesDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          Code examples
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       {/* sm:max-w-3xl, not max-w-3xl: DialogContent ships sm:max-w-lg, which
