@@ -104,6 +104,14 @@ and put platform admins in the group `platform-admins`.
 
 ## Upgrade
 
+With Helm 4, add `--server-side=false` to every `helm upgrade` of this chart.
+The backend appends each notebook and vector database route to `targetRefs` of the shared policy `aiops-workloads-oidc`,
+and the chart relies on Helm's client-side three-way merge to keep them.
+Helm 4 applies server-side by default, owns the whole list, and fails the upgrade with a conflict on `.spec.targetRefs` once an instance exists.
+That failure is safe. `--force-conflicts` is not: it resets the list to the chart's one entry,
+and a route that is no longer in the policy is open to anyone who can reach the gateway.
+`make chart-install` adds the flag on Helm 4.
+
 Migrations run at backend startup, so an upgrade is:
 
 ```bash
@@ -261,7 +269,12 @@ Check what the cluster runs already before installing cluster-level components:
 - Keycloak keeps its sessions in the bundled Postgres, so a Keycloak restart does not sign everyone out (unlike the dev stack's in-memory `start-dev`).
 - `:main` moves with every application commit; pin `global.imageTag` to a SHA tag for a reproducible install.
   Both images carry the same tag, and a commit that changes only charts or docs publishes none,
-  so the newest tag is `git log -1 --format=%H -- backend frontend | cut -c1-7`, not `HEAD`.
-- The chart is verified on kind only.
-  `infra/lab/README.md` prepares the install on the lab's k3s GPU node and `hack/lab-dry-run.sh` checks it without changing the node;
-  the legacy `infra/aiops/` manifests stay until a run there is recorded.
+  so the newest tag is what `make image-tag` prints on an up-to-date `main`
+  (the last commit that touched `backend/`, `frontend/` or the two image workflows), not `HEAD`.
+- The chart is verified on kind and, since 2026-09-18, on the lab's k3s GPU node (chart 0.3.0, image tag `1f87e31`):
+  `infra/lab/README.md` has the install order and what that first run showed, and `hack/chart-smoke.sh --skip-install` passed there.
+  GPU engines launched from the UI are not verified there yet.
+  The legacy `infra/aiops/` manifests describe the retired kubespray lab and can now be retired (`infra/aiops/README.md`).
+- The post-install policy check waits `gateway.policyCheck.timeoutSeconds` (10 minutes) for the gateway controller to accept the policies,
+  which it does only once the backend and Keycloak pods are ready. If a first install on a slow registry still fails there,
+  run the same `helm upgrade --install` again when the pods are ready.

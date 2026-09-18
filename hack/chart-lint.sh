@@ -60,6 +60,7 @@ expect "default realm reads the gateway secret from the environment" '\$\{KEYCLO
 expect "default KC_HOSTNAME is the auth host" 'KC_HOSTNAME: "https://auth\.aiops\.example\.com"' "$default"
 expect "default ui route has a stream timeout" 'streamIdleTimeout: 10m' "$default"
 expect "default fails the release when a policy is not accepted" 'until accepted "\$policy"' "$default"
+expect "the policy check waits ten minutes by default" '"\$tries" -ge 300 ' "$default"
 expect "the policy check may read policies" 'resources: \["securitypolicies"\]' "$default"
 reject "default renders no Gateway" '^kind: Gateway$' "$default"
 # The backend attaches nb-/vdb- routes to the OIDC policy of its own
@@ -108,10 +109,15 @@ expect "lab Gateway terminates with the lab wildcard Secret" 'name: "?aiops-lab-
 expect "lab Certificate is issued by the lab CA" 'name: aiops-lab-ca$' "$lab_render"
 expect "lab routes the ui host" '"ui\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
 expect "lab mounts the CA Secret" 'secretName: "?aiops-lab-ca"?$' "$lab_render"
+expect "lab backend pins GitHub's download hosts" '^ +- release-assets\.githubusercontent\.com$' "$lab_render"
+expect "lab serves the Grafana URL to the UI" 'GRAFANA_URL: "https://grafana\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
+expect "lab deploys Langflow" 'name: aiops-platform-langflow$' "$lab_render"
+expect "lab UI embeds the bundled Langflow" 'LANGFLOW_URL: "https://langflow\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
 reject "lab realm has no dev users" '"username": "alice"' "$lab_render"
 
 # --- Langflow ------------------------------------------------------------------
 reject "the default render has no Langflow" 'aiops-platform-langflow' "$default"
+expect "Langflow's volume is writable for its user" 'fsGroup: 1000$' "$langflow_render"
 expect "the Langflow render deploys it" 'name: aiops-platform-langflow$' "$langflow_render"
 expect "Langflow's policy forwards the token and passes a bearer through" 'passThroughAuthHeader: true' "$langflow_render"
 expect "pass-through comes with Envoy's own JWT check" 'name: keycloak$' "$langflow_render"

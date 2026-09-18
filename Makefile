@@ -277,7 +277,21 @@ CHART_IMAGE_TAG     ?= $(shell git rev-parse HEAD | cut -c1-7)
 CHART_CA_SECRET     := aiops-platform-ca
 CHART_TLS_SECRET    := $(CHART_RELEASE)-wildcard-tls
 
-.PHONY: chart-deps chart-lint chart-images chart-install chart-uninstall chart-smoke
+.PHONY: chart-deps chart-lint chart-images chart-install chart-uninstall chart-smoke image-tag
+
+# Helm 4 applies server-side by default and then owns the whole targetRefs
+# list of the shared OIDC policy, so the first upgrade after the backend
+# appended an instance route fails with a field conflict. The chart relies
+# on the client-side three-way merge, which keeps the appended routes.
+# Never answer that conflict with --force-conflicts: it resets the list and
+# leaves every instance route without its login policy.
+HELM_MERGE_FLAG := $(shell helm version --short 2>/dev/null | grep -q '^v4' && echo --server-side=false)
+
+# The paths that trigger the *-image.yml workflows; keep the two lists the same.
+IMAGE_PATHS := backend frontend .github/workflows/backend-image.yml .github/workflows/frontend-image.yml
+
+image-tag: ## Print the newest image tag the workflows published from this branch (for global.imageTag)
+	@git log -1 --format=%H -- $(IMAGE_PATHS) | cut -c1-7
 
 chart-deps: ## Fetch the platform chart's dependencies (Bitnami postgresql and keycloak, LiteLLM)
 	helm dependency build $(CHART_DIR)
@@ -304,7 +318,7 @@ chart-install: chart-deps ## Install the platform chart on kind (namespace aiops
 		-o jsonpath='{.items[0].spec.clusterIP}'); \
 	test -n "$$envoy_ip" || { echo "no Envoy Service for Gateway aiops: run 'make gateway-up'"; exit 1; }; \
 	echo "Envoy Service IP: $$envoy_ip"; \
-	helm upgrade --install $(CHART_RELEASE) $(CHART_DIR) -n $(CHART_NAMESPACE) \
+	helm upgrade --install $(HELM_MERGE_FLAG) $(CHART_RELEASE) $(CHART_DIR) -n $(CHART_NAMESPACE) \
 		-f $(CHART_DIR)/test/values-kind.yaml \
 		--set global.parentDomain=$(CHART_PARENT_DOMAIN) \
 		--set global.imageTag=$(CHART_IMAGE_TAG) \

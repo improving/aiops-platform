@@ -178,6 +178,13 @@ gateway:
     # The shared OIDC callback host (infra/local/gateway/sso.yaml): a tiny
     # nginx no user ever reaches; Envoy answers the callback path itself.
     image: nginx:1.27-alpine
+  policyCheck:
+    # How long the post-install/post-upgrade Job waits for the gateway
+    # controller to accept the SecurityPolicies. Envoy Gateway rejects a
+    # policy while the backend or Keycloak Service has no ready endpoint,
+    # so a first install on a node without the images needs minutes, not
+    # seconds. Keep it below the helm --timeout.
+    timeoutSeconds: 600
   # Streamed chat answers go browser -> ui host -> the UI's /api/chat
   # handler; Envoy's default 15 s route timeout would cut them.
   streamIdleTimeout: 10m
@@ -350,6 +357,17 @@ langflow:
   persistence:
     size: 2Gi
     storageClass: ""
+  # The image runs as uid 1000 and writes its secret key and database to
+  # the volume. fsGroup makes the volume writable for it on provisioners
+  # that create the directory for root (a CSI hostpath driver); without it
+  # Langflow crash-loops on "Permission denied: /app/langflow/secret_key".
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
   resources:
     requests:
       memory: 1Gi

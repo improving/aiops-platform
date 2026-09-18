@@ -27,6 +27,10 @@ spec:
       labels:
         {{- include "aiops-platform.componentLabels" (dict "root" . "component" "langflow") | nindent 8 }}
     spec:
+      {{- with .Values.langflow.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

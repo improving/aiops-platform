@@ -86,10 +86,13 @@ spec:
                   | grep -q True
               }
               for policy in aiops-workloads-oidc{{ if .Values.langflow.enabled }} {{ include "aiops-platform.langflowFullname" . }}-oidc{{ end }}; do
+                # The controller accepts the policy only once the backend and
+                # Keycloak Services have ready endpoints, so on a first install
+                # this wait covers their image pulls too.
                 tries=0
                 until accepted "$policy"; do
                   tries=$((tries + 1))
-                  if [ "$tries" -ge 60 ]; then
+                  if [ "$tries" -ge {{ div (int .Values.gateway.policyCheck.timeoutSeconds) 2 }} ]; then
                     echo "securitypolicy/$policy was not accepted by the gateway controller:" >&2
                     kubectl -n {{ .Release.Namespace | quote }} get "securitypolicy/$policy" -o jsonpath='{.status}' >&2 || true
                     exit 1

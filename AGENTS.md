@@ -113,7 +113,7 @@ and why deployed instances no longer need a `LoadBalancer` IP.
 
 ## Packaging
 
-`charts/aiops-platform` (version 0.3.0) is the umbrella chart that installs the platform (`docs/install.md`):
+`charts/aiops-platform` (version 0.3.2) is the umbrella chart that installs the platform (`docs/install.md`):
 the backend and frontend templates live in the chart,
 Postgres, Keycloak and LiteLLM are conditional dependencies (`<name>.enabled`, `<name>.external.*`) with fixed names
 (`aiops-postgresql`, `aiops-keycloak`, `aiops-litellm`) so the subchart values can reference each other literally,
@@ -164,7 +164,7 @@ on every push to `main` that changes `backend/` or `frontend/`, tagged `main` an
 and build without pushing on pull requests.
 Both workflows share one path list on purpose: the chart pins both images through the single `global.imageTag`,
 so every application commit must publish the same tag for both
-(`git log -1 --format=%H -- backend frontend | cut -c1-7` is the newest one; `make chart-images` builds the same tag for kind).
+(`make image-tag` prints the newest one: the last commit that touched the workflows' path list, which is not always `HEAD`; `make chart-images` builds the same tag for kind).
 
 Chart publishing: the chart sources live here, but releases are published by the `infracloudio/charts` repository's
 own chart-releaser workflow. To publish, sync `charts/<name>/` into that repository's `charts/<name>/` on a branch and
