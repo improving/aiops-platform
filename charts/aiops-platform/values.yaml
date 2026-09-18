@@ -88,6 +88,13 @@ backend:
   # ReadWriteOnce is enough when every GPU pod runs on one node.
   hfCache:
     create: false
+    # Mount the claim read-only into the API pod, so a starting model
+    # instance can say how far its download is ("8.0 of 10.0 GB"). Needs
+    # the claim to exist (create above, or one of your own named
+    # "hf-cache"). With a ReadWriteOnce claim the API pod and the engine
+    # pods must then run on one node: fine on a single-node cluster, use a
+    # ReadWriteMany claim elsewhere. Off: the launch line says "Starting".
+    mount: false
     size: 50Gi
     storageClass: ""
     accessModes:

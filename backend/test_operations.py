@@ -247,6 +247,9 @@ def test_get_carries_the_launch_progress_next_to_a_pending_status(
             "needs_attention": False,
             "restart_count": 0,
             "replicas_total": 1,
+            # Not known without the model cache mounted (the default).
+            "downloaded_bytes": None,
+            "total_bytes": None,
         }
         listed = client.get("/v1alpha1/inferenceInstance").json()
         mine = next(r for r in listed if r["id"] == created["id"])
@@ -254,6 +257,45 @@ def test_get_carries_the_launch_progress_next_to_a_pending_status(
 
         pods.return_value = PodStatus(True, "Running", None)
         assert _get(client, created["id"])["launch"] is None
+    finally:
+        _delete(client, created["id"])
+
+
+def test_get_says_how_far_the_model_download_is(inference_env, monkeypatch):
+    # With the model cache mounted into the backend, a Starting instance
+    # says how much of its model is there, from the registry's size and the
+    # files on the volume.
+    from utils.kubernetes_utils import LaunchProgress
+
+    client, _, pods = inference_env
+    created = _create(client)
+    try:
+        pods.return_value = PodStatus(
+            False,
+            "Running",
+            None,
+            LaunchProgress(phase="Starting", message="m", since=None),
+        )
+        seen = []
+
+        def fake_downloaded(reference):
+            seen.append(reference)
+            return 10**8
+
+        monkeypatch.setattr(
+            "utils.model_cache.downloaded_bytes", fake_downloaded
+        )
+        row = _get(client, created["id"])
+        assert row["status"] == "Pending"
+        total = row["model"]["size"]
+        assert total and total > 10**8
+        assert row["launch"]["downloaded_bytes"] == 10**8
+        assert row["launch"]["total_bytes"] == total
+        assert row["launch"]["message"].startswith(
+            "Downloading the model: 0.1 of"
+        )
+        # The reference the engine pulls, not the catalog's display name.
+        assert seen == [row["reference"] or row["model"]["modelId"]]
     finally:
         _delete(client, created["id"])
 

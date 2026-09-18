@@ -28,3 +28,8 @@ class LaunchProgressSchema(BaseModel):
     needs_attention: bool = False
     restart_count: int = 0
     replicas_total: int = 1
+    # While the phase is Starting and the backend can see the model cache:
+    # how much of the model is downloaded. Both None when that is not known;
+    # equal once the download is complete and the model loads.
+    downloaded_bytes: int | None = None
+    total_bytes: int | None = None

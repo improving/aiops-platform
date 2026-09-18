@@ -42,6 +42,7 @@ The raw manifests under `infra/aiops/` remain for the lab until the chart is ver
 | `gateway.tls.secretName` | with `gateway.create=true` or `gateway.tls.certificate.create=true` |
 | `gateway.tls.certificate.issuerRef.name` | with `gateway.tls.certificate.create=true` |
 | `global.caSecret` | a Secret with `ca.crt` when the Gateway's certificate comes from a private CA |
+| `backend.hfCache.mount` | mount the `hf-cache` claim read-only into the API pod, so a starting model instance says how far its download is; with a `ReadWriteOnce` claim the API pod and the engine pods must share a node |
 | `backend.hfCache.create`, `.size`, `.storageClass`, `.accessModes` | the `hf-cache` claim GPU engines mount; off by default, `ReadWriteMany` when GPU pods run on more than one node |
 | `ui.grafanaUrl`, `ui.langflowUrl`, `ui.jaegerUrl` | tool URLs the UI embeds; served to the browser by `GET /v1alpha1/config/ui` |
 

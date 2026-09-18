@@ -18,6 +18,10 @@ interface LaunchProgress {
   needs_attention: boolean;
   restart_count: number;
   replicas_total: number;
+  // Of the model download, while the phase is Starting and the backend can
+  // see the model cache; equal once the download is complete.
+  downloaded_bytes?: number | null;
+  total_bytes?: number | null;
 }
 
 interface InferenceInstance {

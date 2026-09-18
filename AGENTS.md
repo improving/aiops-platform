@@ -113,7 +113,7 @@ and why deployed instances no longer need a `LoadBalancer` IP.
 
 ## Packaging
 
-`charts/aiops-platform` (version 0.3.2) is the umbrella chart that installs the platform (`docs/install.md`):
+`charts/aiops-platform` (version 0.3.3) is the umbrella chart that installs the platform (`docs/install.md`):
 the backend and frontend templates live in the chart,
 Postgres, Keycloak and LiteLLM are conditional dependencies (`<name>.enabled`, `<name>.external.*`) with fixed names
 (`aiops-postgresql`, `aiops-keycloak`, `aiops-litellm`) so the subchart values can reference each other literally,

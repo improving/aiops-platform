@@ -207,6 +207,9 @@ class LaunchProgress(NamedTuple):
     needs_attention: bool = False
     restart_count: int = 0
     replicas_total: int = 1
+    # Of a model download (utils/model_cache.py); None when not known.
+    downloaded_bytes: int | None = None
+    total_bytes: int | None = None
 
 
 class PodStatus(NamedTuple):

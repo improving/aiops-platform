@@ -19,6 +19,7 @@ from logger import setup_logger
 from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine
 from models.inference_instance import DBInferenceInstance
+from utils import model_cache
 from utils.gateway import gateway_settings, instance_url
 from utils.instance_status import (
     apply_pod_status,
@@ -184,6 +185,14 @@ def check_pod_status_and_readiness(
     instance.clusterEndpoint = controller.service_url(instance, engine_chart)
     instance.workloadChecksApiKey = controller.workload_checks_api_key
     pods = _refresh_status(db, instance, controller, engine_chart)
+    # "Starting" is the model download, then the load: say how far it is,
+    # when this pod can see the model cache (utils/model_cache.py).
+    model = instance.model
+    instance.launch = model_cache.with_download(
+        instance.launch,
+        instance.reference or (model.modelId if model else None),
+        model.size if model else None,
+    )
     return pods.ready, instance.status
 
 

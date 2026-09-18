@@ -6,6 +6,9 @@ metadata:
     {{- include "aiops-platform.labelsForComponent" (dict "root" . "component" "backend") | nindent 4 }}
 data:
   AIOPS_NAMESPACE: {{ .Release.Namespace | quote }}
+  {{- if .Values.backend.hfCache.mount }}
+  MODEL_CACHE_DIR: "/model-cache"
+  {{- end }}
   AUTH_MODE: oidc
   OIDC_ISSUER: {{ include "aiops-platform.issuer" . | quote }}
   {{- if .Values.keycloak.enabled }}

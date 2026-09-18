@@ -57,7 +57,9 @@ what the instance is waiting for, derived from its pods on every read and never 
   "since": "2026-09-18T11:39:42+00:00",
   "needs_attention": true,
   "restart_count": 0,
-  "replicas_total": 1
+  "replicas_total": 1,
+  "downloaded_bytes": null,
+  "total_bytes": null
 }
 ```
 
@@ -69,6 +71,10 @@ and `Terminating`.
 `since` is when that step began, so a client can show the elapsed time.
 `needs_attention` is true when only a person can move the launch on (an unschedulable pod, `Blocked`, `Restarting`); style by it, not by the wording of `message`.
 A `Failed` or `Succeeded` pod (an evicted one) does not count.
+For an inference instance in phase `Starting`, `downloaded_bytes` and `total_bytes` say how far the model download is,
+when the API pod can see the model cache (`backend.hfCache.mount`); `message` then reads "Downloading the model: 8.0 of 10.0 GB".
+Both are equal once the download is complete and the model loads, and both are `null` when that is not known
+(no mount, a model that is not a Hugging Face id, a registry entry without a size gives `total_bytes: null`).
 `launch` is `null` once the instance is ready, on a stopped instance, and on a failed one, where `last_error` has the reason.
 It never changes `status`, which stays one of the four words above, and a `PUT` cannot set it.
 

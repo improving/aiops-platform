@@ -237,6 +237,72 @@ test.describe("instance operations", () => {
     await expect(embedder.getByRole("link", { name: "Chat" })).toHaveCount(0);
   });
 
+  test("a starting instance shows how far its model download is", async ({
+    page,
+    api,
+  }) => {
+    const GB = 1e9;
+    const starting = (done: number, message: string) => ({
+      phase: "Starting",
+      message,
+      since: "2026-09-18T14:41:59+00:00",
+      needs_attention: false,
+      restart_count: 0,
+      replicas_total: 1,
+      downloaded_bytes: done,
+      total_bytes: 10 * GB,
+    });
+    let current = await mockInstance(api, {
+      status: "Pending",
+      last_error: null,
+      last_error_at: null,
+      launch: starting(8 * GB, "Downloading the model: 8.0 of 10.0 GB"),
+    });
+    await page.route("**/api/v1alpha1/inferenceInstance", (route) =>
+      route.fulfill({ json: [current] })
+    );
+    await stubDetail(page, () => current);
+
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    await expect(details.statusField()).toHaveText("Pending");
+    const progress = page.locator('main [data-slot="launch-progress"]');
+    await expect(progress).toContainText("Downloading the model");
+    const bar = progress.getByRole("progressbar", { name: "Model download" });
+    await expect(bar).toHaveAttribute("aria-valuenow", "80");
+    await expect(progress).toContainText("8.0 of 10.0 GB (80 %)");
+    // One amount says nothing about a speed.
+    await expect(progress).not.toContainText("MB/s");
+
+    // The page polls a pending instance: a later amount gives a speed and
+    // the time left.
+    await page.waitForTimeout(11_000);
+    current = {
+      ...current,
+      launch: starting(9 * GB, "Downloading the model: 9.0 of 10.0 GB"),
+    };
+    await expect(bar).toHaveAttribute("aria-valuenow", "90", {
+      timeout: 15_000,
+    });
+    await expect(progress).toContainText(/MB\/s, about .* left/, {
+      timeout: 15_000,
+    });
+
+    // Complete: the model loads, and there is no bar any more.
+    current = {
+      ...current,
+      launch: starting(
+        10 * GB,
+        "The model is downloaded: loading it into GPU memory and compiling"
+      ),
+    };
+    await expect(progress).toContainText("loading it into GPU memory", {
+      timeout: 15_000,
+    });
+    await expect(bar).toHaveCount(0);
+  });
+
   test("the Logs tab renders the mocked log and the Events tab the events", async ({
     page,
     api,

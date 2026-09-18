@@ -310,6 +310,10 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   `controller/vllm_controller.py` renders a `startupProbe` of two hours (used by `charts/vllm` from 0.4.1 on, ignored before)
   and, for a chart without one, a liveness `initialDelaySeconds` of `VLLM_LIVENESS_INITIAL_DELAY_SECONDS` (default 7200).
   Do not shorten either without a startup probe in the published chart: on the lab a 10 GB model took 28 minutes.
+- `utils/model_cache.py` reads how much of a Hugging Face model is on the shared cache volume, from the sizes of the hub library's blob files
+  (`models--<org>--<name>/blobs/*`, partial `.incomplete` ones included), when the chart mounts the claim read-only into this pod (`MODEL_CACHE_DIR`, `backend.hfCache.mount`).
+  `api/inference_status.py` adds it to `launch` for a `Starting` instance (`with_download`: `downloaded_bytes`, `total_bytes` from the registry's `size`, and the message).
+  No exec into the engine's pod on purpose: the backend's ClusterRole has no `pods/exec`, and a progress bar is no reason to add it. Without the mount everything reads "unknown".
 - `utils/pod_inspection.py` `pod_events` carries `count` and `first_at` next to `at` (the last time): Kubernetes folds a repeated event into one object, and writes none when a problem ends.
 - One `check_pod_status_and_readiness(instance, db, controller=None)` signature across the three routers;
   `test_auth.py` monkeypatches it by name in `api.vectordb_instance` and `api.inference_instance`.

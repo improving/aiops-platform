@@ -104,19 +104,36 @@ spec:
             periodSeconds: 30
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
-          {{- if .Values.global.caSecret }}
+          {{- if or .Values.global.caSecret .Values.backend.hfCache.mount }}
           volumeMounts:
+            {{- if .Values.global.caSecret }}
             - name: ca-bundle
               mountPath: /etc/aiops/bundle
               readOnly: true
+            {{- end }}
+            {{- if .Values.backend.hfCache.mount }}
+            # Read-only: the API reads file sizes on the model cache to say
+            # how far a model download is (backend/utils/model_cache.py).
+            - name: model-cache
+              mountPath: /model-cache
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- if .Values.global.caSecret }}
+      {{- if or .Values.global.caSecret .Values.backend.hfCache.mount }}
       volumes:
+        {{- if .Values.global.caSecret }}
         - name: ca
           secret:
             secretName: {{ .Values.global.caSecret }}
         - name: ca-bundle
           emptyDir: {}
+        {{- end }}
+        {{- if .Values.backend.hfCache.mount }}
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: hf-cache
+            readOnly: true
+        {{- end }}
       {{- end }}
       {{- with .Values.backend.nodeSelector }}
       nodeSelector:
