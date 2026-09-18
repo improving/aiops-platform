@@ -113,6 +113,7 @@ expect "lab backend pins GitHub's download hosts" '^ +- release-assets\.githubus
 expect "lab serves the Grafana URL to the UI" 'GRAFANA_URL: "https://grafana\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
 expect "lab deploys Langflow" 'name: aiops-platform-langflow$' "$lab_render"
 expect "lab UI embeds the bundled Langflow" 'LANGFLOW_URL: "https://langflow\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
+expect "lab sets the short vLLM liveness delay" 'VLLM_LIVENESS_INITIAL_DELAY_SECONDS: "60"' "$lab_render"
 reject "lab realm has no dev users" '"username": "alice"' "$lab_render"
 
 # --- Langflow ------------------------------------------------------------------
