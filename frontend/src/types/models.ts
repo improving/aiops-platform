@@ -46,6 +46,9 @@ interface InferenceInstance {
   cpu?: string | null;
   memory?: string | null;
   config: InferenceInstanceConfig;
+  /** Which of its own settings the engine's controller renders: what the
+      Edit settings dialog shows. Set by the backend, never guessed here. */
+  settingsRead?: ("args" | "env_vars")[];
   litellm_model_name?: string | null;
   reference?: string | null;
 }

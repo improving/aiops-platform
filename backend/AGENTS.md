@@ -337,7 +337,18 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   and `hooks/usePolling.ts` keeps polling while a row carries it, so a Running instance whose pod restarts is followed too.
 - `api/instance_inspection.py` (`InstanceKind`, `add_inspection_routes`) is the shared logs/events/restart
   layer; `utils/pod_inspection.py` does the Kubernetes reads. `api/inference_operations.py` is stop/resume/scale
-  on top of it; `api/inference_status.py` is the chart lookup and status-polling leaf both of it and
+  and `PUT .../settings` on top of it
+  (the instance's own `args` and `env_vars`, replaced, then one `_upgrade` shared with the replica routes: `replicaCount: 0` for a Stopped row, because a plain upgrade renders the stored `replicas` and would start it;
+  each controller says what it renders (`Controller.settings_read(category)`: vLLM both, Ollama and the Hugging Face LLM chart the variables, NIM and OPEA nothing), so an edit never restarts pods for nothing,
+  and the status leaf publishes it as the payload's `settingsRead`, next to `workloadChecksApiKey` and for the same reason: the UI must not guess it from the engine name;
+  `utils/instance_settings.py` holds the rules both this route and create apply (422): names that are names, the names the platform owns (`VLLM_API_KEY`, `HF_TOKEN`, `HF_API_TOKEN`, `--api-key`: the charts append the user's variables after the platform's and Kubernetes takes the last),
+  and one spelling for the two arguments the chart takes as `config` (`max_model_len`, `port`: whole numbers, never `--max-model-len`);
+  a gateway failure commits the values, since Helm has applied them by then and a rollback would make the next stop or scale render the old ones back;
+  a line break in a value once set `image` and `securityContext` on the release, so there are two defences (`test_a_value_cannot_add_keys_to_the_rendered_values`):
+  `utils/render_guard.py` `refuse_line_breaks(context)` runs in front of every values template (inference, vector database, notebook) and refuses any string with a line break, whatever route stored it,
+  and the engine templates write arguments, variables, `max_model_len`, `port` and the model with `| string | tojson`, never between hand-written quotes, so a quote stays inside the value;
+  the generic `PUT /v1alpha1/inferenceInstance/{id}` applies `validate_settings` to its `config` too;
+  `_record_window` runs on the body, so a vLLM instance keeps `max_model_len` on the row); `api/inference_status.py` is the chart lookup and status-polling leaf both of it and
   `api/inference_instance.py` import from.
 - `InferenceInstanceSchema.clusterEndpoint` is the in-cluster Service URL, set on every list and detail read by
   `check_pod_status_and_readiness` (not a column, recomputed from the engine's naming rules). It is what a caller

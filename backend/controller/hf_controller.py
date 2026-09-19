@@ -8,6 +8,11 @@ from .base_controller import Controller
 
 
 class HuggingFaceController(Controller):
+    def settings_read(self, category: str) -> frozenset[str]:
+        # The embedding and reranker templates read one fixed variable
+        # only; the instance's own reach the LLM chart alone.
+        return frozenset({"env_vars"}) if category == "llm" else frozenset()
+
     def _get_engine_specific_context(
         self,
         instance: InferenceInstanceSchema,

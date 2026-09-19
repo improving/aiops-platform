@@ -31,6 +31,7 @@ from utils.gateway import (
     protect_sdk_route,
 )
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
+from utils.render_guard import refuse_line_breaks
 
 HF_API_TOKEN_SECRET = "hf-api-token"
 
@@ -180,6 +181,15 @@ class Controller(ABC):
     # the key, so the UI must not guess it from the engine name.
     workload_checks_api_key = False
 
+    def settings_read(self, category: str) -> frozenset[str]:
+        """Which of an instance's own settings this controller renders
+        into the chart values: ``"args"``, ``"env_vars"``, both or none.
+        The settings route refuses what is not read (an edit would
+        restart the pods and change nothing), and the UI shows only what
+        is, from the payload's ``settingsRead`` -- like the flag above, it
+        must not guess it from the engine name."""
+        return frozenset()
+
     def __init__(
         self,
         namespace: str | None = None,
@@ -310,6 +320,7 @@ class Controller(ABC):
             self._get_engine_specific_context(instance, engineChart)
         )
 
+        refuse_line_breaks(context)
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
         self.logger.info(f"{instance.engine.name} values: {values}")

@@ -22,8 +22,8 @@ resources:
 
 env:
 {% for env_var in env %}
-  - name: {{ env_var.name }}
-    value: "{{ env_var.value }}"
+  - name: {{ env_var.name | string | tojson }}
+    value: {{ env_var.value | string | tojson }}
 {% endfor %}
 
 {% if nodeSelector.hostname is defined %}

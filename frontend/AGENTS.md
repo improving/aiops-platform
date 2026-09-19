@@ -165,7 +165,13 @@ pnpm e2e:ui                               # Playwright UI mode
   `StatusBadge` (`Ready` when `ready`, else the persisted `status`, else `Pending`), `ErrorBanner` (`role="alert"`, `last_error`
   with a `Copy error` button), `LogsPanel` (Container and Lines comboboxes, Previous switch, `role="group"` "Log output"),
   `EventsPanel` (table captioned "Events") and `InstanceActions` (an "Actions" menu whose items open confirmation dialogs;
-  a kind passes only the callbacks it supports, vector databases `onRestart` only, notebooks none).
+  a kind passes only the callbacks it supports, vector databases `onRestart` only, notebooks none;
+  `onEditSettings` is the one item that opens a form, `EditSettingsDialog`, not a confirmation, so the page object has `openEditSettings()` next to `runAction`).
+  `EditSettingsDialog` edits a deployed inference instance's CLI arguments and environment variables: the engine defaults of the instance payload (filtered by `chart_type`) overlaid with its own values
+  (`lib/instanceSettings.ts` `rowsFromDefaults`; every own name stays own, so `max_model_len` is always sent back), only the kinds the engine reads (the payload's `settingsRead`, set by the backend from the controller; an empty list means no menu item, as on NIM and OPEA; never decide it from the engine name),
+  saved through `PUT .../settings`. The rows are `components/models/SettingRows.tsx`, shared with the launch wizard: keep its `div.flex` per row, its placeholders and its button names, the launch page object finds rows by them, and never wrap the rows in another `div.flex`.
+  `ToolCallingSwitch.tsx` (vLLM only, in both places) adds and removes `--enable-auto-tool-choice` and `--tool-call-parser <parser>` as ordinary rows, the parser guessed from the model reference (`guessToolParser`);
+  a Langflow agent gets a 400 from vLLM without them.
   The three detail pages mount Logs and Events as tabs (the inference page keeps `?tab=`), the cards show the badge, the
   banner and, for inference, the replica count. `usePolling` treats `Stopped` as terminal. The launch wizard's Deploy Config
   tab has GPU count (hidden for a `cpu` serving option), Replicas, CPU and Memory (`type="text"` inputs, so they keep the

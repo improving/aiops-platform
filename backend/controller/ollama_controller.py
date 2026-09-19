@@ -7,6 +7,9 @@ from .base_controller import Controller
 
 
 class OllamaController(Controller):
+    def settings_read(self, category: str) -> frozenset[str]:
+        return frozenset({"env_vars"})
+
     def get_service_name(
         self,
         instance: InferenceInstanceSchema,

@@ -1199,6 +1199,9 @@ async def test_create_inference_instance_stores_and_delete_removes_credential(
         "http://vllm-00000000.ai-stack.svc:80"
     )
     get_ctrl.return_value.workload_checks_api_key = True
+    get_ctrl.return_value.settings_read.return_value = frozenset(
+        {"args", "env_vars"}
+    )
     with (
         mock.patch("api.inference_instance.get_controller", get_ctrl),
         mock.patch("api.inference_status.get_controller", get_ctrl),
@@ -1270,6 +1273,9 @@ async def test_create_inference_instance_keeps_the_row_on_install_failure(
         "http://vllm-00000000.ai-stack.svc:80"
     )
     get_ctrl.return_value.workload_checks_api_key = True
+    get_ctrl.return_value.settings_read.return_value = frozenset(
+        {"args", "env_vars"}
+    )
     with (
         mock.patch("api.inference_instance.get_controller", get_ctrl),
         mock.patch("api.inference_status.get_controller", get_ctrl),
@@ -1838,3 +1844,59 @@ async def test_inference_controller_install_fails_when_the_route_fails(
         await controller.install(instance, chart)
 
     assert not isinstance(excinfo.value, HelmInstallError)
+
+
+@pytest.mark.asyncio
+async def test_vllm_renders_the_tool_calling_arguments():
+    # Last in the file on purpose: building an instance takes a
+    # deterministic id, and the snapshot tests above count on theirs.
+    # What the UI's Tool calling switch stores: a flag (an empty value
+    # renders as the name alone) and the parser with its value.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    instance.config.args = {
+        "--enable-auto-tool-choice": "",
+        "--tool-call-parser": "hermes",
+    }
+    values = await controller.prepare_helm_values(instance, chart)
+    assert values["args"] == [
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",
+        "hermes",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_value_cannot_add_keys_to_the_rendered_values():
+    # Last in the file for the same reason as the test above. A value
+    # with a line break once ended the YAML scalar and set `image` and
+    # `securityContext` on the release. Two defences: no string with a
+    # line break reaches a template (utils/render_guard.py, every
+    # template and route), and the engine templates write user values as
+    # JSON strings, so a quote stays inside the value.
+    controller = get_controller("vllm", core_v1_api=mock.Mock())
+    instance, chart = _inference_instance_and_chart()
+    for args, env_vars in (
+        ({"max_model_len": "4096\nimage:\n  repository: evil/img"}, {}),
+        ({"--dtype": 'x"\nsecurityContext:\n  privileged: true\nz: "'}, {}),
+        ({}, {"SOME_VAR": "x\u2028image: evil"}),
+    ):
+        instance.config.args = args
+        instance.config.env_vars = env_vars
+        with pytest.raises(ValueError, match="line break"):
+            await controller.prepare_helm_values(instance, chart)
+
+    quotes = 'x" , image: {repository: evil/img}, z: "'
+    instance.config.args = {"--dtype": quotes}
+    instance.config.env_vars = {"SOME_VAR": quotes}
+    values = await controller.prepare_helm_values(instance, chart)
+    assert "image" not in values
+    assert values["args"] == ["--dtype", quotes]
+    env = {e["name"]: e.get("value") for e in values["env"]}
+    assert env["SOME_VAR"] == quotes
+    # A legitimate value with quotes renders too, where it was a 500.
+    overrides = '{"rope_scaling": {"factor": 2}}'
+    instance.config.args = {"--hf-overrides": overrides}
+    instance.config.env_vars = {}
+    values = await controller.prepare_helm_values(instance, chart)
+    assert values["args"] == ["--hf-overrides", overrides]

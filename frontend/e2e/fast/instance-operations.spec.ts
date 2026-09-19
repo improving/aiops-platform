@@ -43,6 +43,7 @@ async function mockInstance(
     },
     litellm_model_name: null,
     reference: null,
+    settingsRead: ["args", "env_vars"],
     ...overrides,
   };
 }
@@ -482,6 +483,130 @@ test.describe("instance operations", () => {
     await details.runAction("Resume", "Resume");
     await expect(details.toast("Instance resumed")).toBeVisible();
     await expect(details.statusField()).toHaveText("Pending");
+  });
+
+  test("Edit settings shows the instance's values, adds tool calling, and sends only its own", async ({
+    page,
+    api,
+  }) => {
+    let state = await mockInstance(api, {
+      status: "Running",
+      ready: true,
+      last_error: null,
+      last_error_at: null,
+      reference: "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ",
+      config: {
+        id: "c",
+        lora_adapters: [],
+        env_vars: {},
+        args: { max_model_len: "4192", "--dtype": "half" },
+        enable_tracing: false,
+      },
+    });
+    await stubDetail(page, () => state);
+    const bodies: Record<string, Record<string, string>>[] = [];
+    await page.route(
+      `**/api/v1alpha1/inferenceInstance/${ID}/settings`,
+      (route) => {
+        const body = route.request().postDataJSON();
+        bodies.push(body);
+        state = {
+          ...state,
+          status: "Pending",
+          ready: false,
+          config: { ...(state.config as object), ...body },
+        };
+        return route.fulfill({ json: state });
+      }
+    );
+
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    const dialog = await details.openEditSettings();
+    await expect(dialog).toContainText("Saving restarts the instance");
+
+    // The engine default carries the instance's own value; its own extra
+    // argument is a row too.
+    const argNames = dialog.getByPlaceholder("Argument Name");
+    const names = () =>
+      argNames.evaluateAll((els) =>
+        els.map((el) => (el as HTMLInputElement).value)
+      );
+    expect(await names()).toEqual(["max_model_len", "port", "--dtype"]);
+    const args = dialog.getByRole("region", { name: "CLI arguments" });
+    await expect(args.getByPlaceholder("Value").first()).toHaveValue("4192");
+
+    await args.getByPlaceholder("Value").first().fill("16384");
+    await dialog.getByRole("switch", { name: "Tool calling" }).click();
+    expect(await names()).toEqual([
+      "max_model_len",
+      "port",
+      "--dtype",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+    ]);
+    // Qwen's parser, from the instance's model reference.
+    await expect(args.getByPlaceholder("Value").last()).toHaveValue("hermes");
+
+    await dialog.getByRole("button", { name: "Save and restart" }).click();
+    await expect(details.toast("Settings saved")).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await expect(details.statusField()).toHaveText("Pending");
+
+    // Own values only: the untouched `port` default is not sent.
+    expect(bodies).toEqual([
+      {
+        args: {
+          max_model_len: "16384",
+          "--dtype": "half",
+          "--enable-auto-tool-choice": "",
+          "--tool-call-parser": "hermes",
+        },
+        env_vars: {},
+      },
+    ]);
+
+    // A name used twice would lose a row in the request: say so first.
+    const dup = await details.openEditSettings();
+    await dup.getByRole("button", { name: "Add Argument" }).click();
+    await dup.getByPlaceholder("Argument Name").last().fill("port");
+    await expect(dup.getByRole("alert")).toContainText("port is there twice");
+    await expect(
+      dup.getByRole("button", { name: "Save and restart" })
+    ).toBeDisabled();
+    await dup.getByRole("button", { name: "Cancel" }).click();
+    await expect(dup).toBeHidden();
+
+    // Off again removes both rows.
+    const again = await details.openEditSettings();
+    const toggle = again.getByRole("switch", { name: "Tool calling" });
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(again.getByPlaceholder("Argument Name")).toHaveCount(3);
+  });
+
+  test("Edit settings is not offered where the engine reads no settings", async ({
+    page,
+    api,
+  }) => {
+    const nim = (await api.engines()).find((e) => e.name === "NIM")!;
+    const state = await mockInstance(api, {
+      status: "Running",
+      ready: true,
+      last_error: null,
+      engine: nim,
+      settingsRead: [],
+    });
+    await stubDetail(page, () => state);
+    const details = new InferenceEndpointPage(page);
+    await details.open(ID);
+    await details.waitForLoaded();
+    await details.actionsButton.click();
+    await expect(page.getByRole("menuitem", { name: "Restart" })).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Edit settings…" })
+    ).toHaveCount(0);
   });
 
   test("Access splits API and Langflow, each with its own values", async ({

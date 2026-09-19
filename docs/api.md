@@ -117,15 +117,24 @@ POST /v1alpha1/{inferenceInstance|vectordb_instances}/{id}/restart
 POST /v1alpha1/inferenceInstance/{id}/stop
 POST /v1alpha1/inferenceInstance/{id}/resume
 POST /v1alpha1/inferenceInstance/{id}/scale   {"replicas": <0-16>}
+PUT  /v1alpha1/inferenceInstance/{id}/settings  {"args": {...}, "env_vars": {...}}
 ```
 
-All four need the write policy.
+All five need the write policy.
 `restart` rolls the pods and sets `Pending`;
 409 when the row is `Stopped` (resume it first) or has no workload yet.
 Notebooks have no actions.
 `stop` scales the release to zero replicas and sets `Stopped`, keeping the LiteLLM registration;
 `resume` scales back to the stored `replicas` (or 1);
 `scale` with `0` is the same as `stop` and keeps the stored count.
+`settings` replaces the instance's own CLI arguments and environment variables (what differs from the engine defaults;
+a flag is an argument with an empty value, for example `{"--enable-auto-tool-choice": "", "--tool-call-parser": "hermes"}`)
+and upgrades the release, so the pods restart and the row is `Pending`; a `Stopped` instance stays stopped and starts from them on resume.
+The instance payload's `settingsRead` (`"args"`, `"env_vars"`, both or none) says what the engine takes; anything else is 422, as on NIM and OPEA, which read neither.
+Also 422, here and on create: a name that is not one, another value of a default the platform fixes,
+a name the platform owns (`VLLM_API_KEY`, `HF_TOKEN`, `HF_API_TOKEN`, `--api-key`),
+and `max_model_len` or `port` under another spelling or with a value that is not a whole number.
+When only the gateway step fails (500), the values are kept, because the pods already run with them.
 
 ## Organizations, members and invitations
 

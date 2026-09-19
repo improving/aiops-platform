@@ -34,6 +34,7 @@ from utils.gateway import (
     remove_oidc_target,
 )
 from utils.kubernetes_utils import get_core_v1_client, get_default_namespace
+from utils.render_guard import refuse_line_breaks
 
 # Gateway port per chart: the port each vector DB serves its REST/gRPC API
 # (and, where it has one, its browser dashboard) on.
@@ -92,6 +93,7 @@ class VectorDBController:
 
         context = self._get_base_context(instance, credential)
 
+        refuse_line_breaks(context)
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
         return values

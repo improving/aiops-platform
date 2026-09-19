@@ -44,6 +44,7 @@ from utils.credentials import (
     store_credential,
 )
 from utils.gateway import GatewayPolicyError
+from utils.instance_settings import validate_settings
 from utils.instance_status import (
     READ_ONLY_STATUS_FIELDS,
     STATUS_FAILED,
@@ -407,6 +408,13 @@ async def create_inference_instance(
             )
 
         config_data = instance.config.model_dump() if instance.config else {}
+        try:
+            validate_settings(
+                config_data.get("args") or {},
+                config_data.get("env_vars") or {},
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
         _record_window(config_data, engine, model)
 
         # Handle lora_adapters separately
@@ -588,6 +596,14 @@ async def update_inference_instance(
             if key in READ_ONLY_STATUS_FIELDS or key in ("model", "engine"):
                 continue
             if key == "config":
+                # The same rules as create and the settings route: this
+                # route writes the same two dicts.
+                try:
+                    validate_settings(
+                        value.get("args") or {}, value.get("env_vars") or {}
+                    )
+                except ValueError as e:
+                    raise HTTPException(status_code=422, detail=str(e))
                 update_config_params(db, db_instance, value)
             else:
                 setattr(db_instance, key, value)

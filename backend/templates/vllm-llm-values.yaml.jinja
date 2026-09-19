@@ -1,8 +1,8 @@
 config:
-  model: {{ model | default('meta-llama/Meta-Llama-3.1-8B-Instruct') }}
+  model: {{ model | default('meta-llama/Meta-Llama-3.1-8B-Instruct') | string | tojson }}
 {% if configs is defined %}
 {% for config in configs %}
-  {{ config.name }}: {{ config.value }}
+  {{ config.name | string | tojson }}: {{ config.value | string | tojson }}
 {% endfor %}
 {% endif %}
 
@@ -30,9 +30,9 @@ resources:
 args:
 {% if args is defined %}
 {% for arg in args %}
-  - {{ arg.name }}
+  - {{ arg.name | string | tojson }}
 {% if arg.value is defined and arg.value is not none %}
-  - "{{ arg.value }}"
+  - {{ arg.value | string | tojson }}
 {% endif %}
 {% endfor %}
 {% endif %}
@@ -40,7 +40,7 @@ args:
   - "--enable-lora"
   - "--lora-modules"
 {% for adapter in lora_adapters %}
-  - "{{ adapter }}"
+  - {{ adapter | string | tojson }}
 {% endfor %}
 {% endif %}
 {% endif %}
@@ -74,8 +74,8 @@ env:
 ##    value: "{{ hf_hub_cache | default('/model') }}"
   {% if env is defined %}
   {% for env_var in env %}
-  - name: {{ env_var.name }}
-    value: "{{ env_var.value }}"
+  - name: {{ env_var.name | string | tojson }}
+    value: {{ env_var.value | string | tojson }}
   {% endfor %}
   {% endif %}
 

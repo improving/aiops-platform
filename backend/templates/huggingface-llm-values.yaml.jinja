@@ -14,8 +14,8 @@ env:
         key: HF_API_TOKEN
   {% if env is defined %}
   {% for env_var in env %}
-  - name: {{ env_var.name }}
-    value: "{{ env_var.value }}"
+  - name: {{ env_var.name | string | tojson }}
+    value: {{ env_var.value | string | tojson }}
   {% endfor %}
   {% endif %}
 {% if env.lora_adapters is defined %}

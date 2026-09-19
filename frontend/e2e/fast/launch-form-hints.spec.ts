@@ -178,13 +178,52 @@ test.describe("launch wizard hints", () => {
     await page.route(`**/api/v1alpha1/models/${model.id}`, async (route) => {
       const response = await route.fetch();
       const json = await response.json();
-      await route.fulfill({ response, json: { ...json, context_length: 8192 } });
+      await route.fulfill({
+        response,
+        json: { ...json, context_length: 8192 },
+      });
     });
     await openWith(page, launch, model.id, [host()]);
     await launch.skipButton.click();
     await launch.selectEngine("vLLM");
     await launch.nextButton.click();
     await expect(maxModelLen().first()).toHaveValue("8192");
+  });
+
+  test("the Tool calling switch adds the two vLLM arguments, with the model family's parser", async ({
+    page,
+    api,
+  }) => {
+    const model = await sizedLlm(api);
+    const launch = new LaunchModelPage(page);
+    await openWith(page, launch, model.id, [host()]);
+    await launch.skipButton.click();
+    await launch.selectEngine("vLLM");
+    await launch.nextButton.click();
+
+    const before = await launch.argNames.count();
+    const toggle = page.getByRole("switch", { name: "Tool calling" });
+    await expect(toggle).not.toBeChecked();
+    await toggle.click();
+    await expect(launch.argNames).toHaveCount(before + 2);
+    await expect(launch.argNames.nth(before)).toHaveValue(
+      "--enable-auto-tool-choice"
+    );
+    await expect(launch.argNames.nth(before + 1)).toHaveValue(
+      "--tool-call-parser"
+    );
+    // Qwen2 7B Instruct: the hermes format.
+    await expect(
+      page.locator('input[value="hermes"][placeholder="Value"]')
+    ).toHaveCount(1);
+    await page.getByRole("button", { name: "About tool-call-parser" }).click();
+    await expect(page.locator('[data-slot="popover-content"]')).toContainText(
+      "llama3_json"
+    );
+    await page.keyboard.press("Escape");
+
+    await toggle.click();
+    await expect(launch.argNames).toHaveCount(before);
   });
 
   test("known arguments and variables carry an info button", async ({

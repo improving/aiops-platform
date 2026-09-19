@@ -115,6 +115,22 @@ export const modelService = {
     return response.data;
   },
 
+  /** Replaces the instance's own arguments and variables; its pods
+      restart with them (a Stopped instance stays stopped). */
+  updateInferenceInstanceSettings: async (
+    id: string,
+    settings: {
+      args: Record<string, string>;
+      env_vars: Record<string, string>;
+    }
+  ) => {
+    const response = await api.put<InferenceInstance>(
+      `/api/v1alpha1/inferenceInstance/${id}/settings`,
+      settings
+    );
+    return response.data;
+  },
+
   stopInferenceInstance: async (id: string) => {
     const response = await api.post<InferenceInstance>(
       `/api/v1alpha1/inferenceInstance/${id}/stop`

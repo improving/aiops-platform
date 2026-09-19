@@ -21,6 +21,7 @@ import { ErrorBanner } from "@/components/instances/ErrorBanner";
 import { instanceTargetName } from "@/lib/format";
 import { LaunchProgress } from "@/components/instances/LaunchProgress";
 import { InstanceActions } from "@/components/instances/InstanceActions";
+import { EditSettingsDialog } from "@/components/instances/EditSettingsDialog";
 import { InspectionTabs } from "@/components/instances/InspectionTabs";
 import { NotFoundOrError } from "@/components/instances/NotFoundOrError";
 import { isNonTerminal, usePolling } from "@/hooks/usePolling";
@@ -65,6 +66,7 @@ export default function InferenceEndpointDetailsPage({
   const [inferenceInstance, setInferenceInstance] =
     useState<InferenceInstance | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingSettings, setEditingSettings] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [dashboards, setDashboards] = useState<InferenceInstanceDashboard[]>(
     []
@@ -197,6 +199,10 @@ export default function InferenceEndpointDetailsPage({
   if (!inferenceInstance) {
     return <NotFoundOrError error={loadError} noun="model instance" />;
   }
+  // Offered only where the engine's controller reads the settings (the
+  // backend says which): elsewhere an edit would restart the pods and
+  // change nothing.
+  const canEditSettings = (inferenceInstance.settingsRead ?? []).length > 0;
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
@@ -351,7 +357,16 @@ export default function InferenceEndpointDetailsPage({
                 onScale={(replicas) =>
                   modelService.scaleInferenceInstance(params.id, replicas)
                 }
+                onEditSettings={
+                  canEditSettings ? () => setEditingSettings(true) : undefined
+                }
                 onDone={fetchInferenceInstance}
+              />
+              <EditSettingsDialog
+                instance={inferenceInstance}
+                open={editingSettings}
+                onOpenChange={setEditingSettings}
+                onSaved={fetchInferenceInstance}
               />
               <DeleteButton
                 onDelete={handleDelete}

@@ -57,6 +57,8 @@ def inference_env(monkeypatch):
     # bare Mock fails response validation. Ollama is the fixture's engine
     # and does not check the key itself; only vLLM does.
     controller.workload_checks_api_key = False
+    # Ollama's answer; a test of the argument path overrides it.
+    controller.settings_read.return_value = frozenset({"env_vars"})
     controller.install = mock.AsyncMock()
     controller.uninstall = mock.AsyncMock()
     controller.upgrade = mock.AsyncMock()
@@ -901,6 +903,279 @@ def test_put_leaves_gpu_count_unchanged(inference_env):
 
 def _overrides(controller):
     return controller.upgrade.await_args.kwargs["overrides"]
+
+
+def _upgraded_instance(controller):
+    return controller.upgrade.await_args.args[0]
+
+
+def test_settings_replace_the_own_values_and_upgrade(inference_env):
+    client, controller, _ = inference_env
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}"
+    try:
+        body = {"env_vars": {"OLLAMA_KEEP_ALIVE": "10m", "OLLAMA_DEBUG": "1"}}
+        response = client.put(f"{url}/settings", json=body)
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "Pending"
+        assert response.json()["config"]["env_vars"] == body["env_vars"]
+        # The upgrade renders from the new values, and starts nothing it
+        # should not: no replica override on a running instance.
+        upgraded = _upgraded_instance(controller)
+        assert upgraded.config.env_vars == body["env_vars"]
+        assert _overrides(controller) is None
+
+        # The body replaces, it does not merge: a removed name is gone.
+        response = client.put(f"{url}/settings", json={"env_vars": {}})
+        assert response.status_code == 200, response.text
+        assert _get(client, created["id"])["config"]["env_vars"] == {}
+
+        # Ollama takes no CLI arguments: nothing restarts for nothing.
+        controller.upgrade.reset_mock()
+        refused = client.put(f"{url}/settings", json={"args": {"--x": "1"}})
+        assert refused.status_code == 422, refused.text
+        assert "no CLI arguments" in refused.json()["detail"]
+        controller.upgrade.assert_not_awaited()
+    finally:
+        _delete(client, created["id"])
+
+
+def test_settings_on_a_stopped_instance_do_not_start_it(inference_env):
+    client, controller, _ = inference_env
+    created = _create(client, replicas=2)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}"
+    try:
+        assert client.post(f"{url}/stop").status_code == 200
+        response = client.put(
+            f"{url}/settings", json={"env_vars": {"OLLAMA_DEBUG": "1"}}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "Stopped"
+        assert _overrides(controller) == {"replicaCount": 0}
+        assert _upgraded_instance(controller).config.env_vars == {
+            "OLLAMA_DEBUG": "1"
+        }
+    finally:
+        _delete(client, created["id"])
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"args": {"": "x"}},
+        {"args": {"two words": "x"}},
+        {"env_vars": {"1BAD": "x"}},
+        {"env_vars": {"WITH-DASH": "x"}},
+    ],
+)
+def test_settings_refuse_names_that_are_not_names(inference_env, body):
+    client, controller, _ = inference_env
+    created = _create(client)
+    try:
+        response = client.put(
+            f"/v1alpha1/inferenceInstance/{created['id']}/settings", json=body
+        )
+        assert response.status_code == 422, response.text
+        controller.upgrade.assert_not_awaited()
+    finally:
+        _delete(client, created["id"])
+
+
+def test_settings_keep_the_stored_values_when_the_upgrade_fails(inference_env):
+    client, controller, _ = inference_env
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}"
+    try:
+        first = {"env_vars": {"OLLAMA_DEBUG": "1"}}
+        assert client.put(f"{url}/settings", json=first).status_code == 200
+        controller.upgrade.side_effect = RuntimeError("helm exploded")
+        response = client.put(
+            f"{url}/settings", json={"env_vars": {"OLLAMA_DEBUG": "0"}}
+        )
+        assert response.status_code == 500
+        assert "helm exploded" in response.json()["detail"]
+        controller.upgrade.side_effect = None
+        stored = _get(client, created["id"])["config"]["env_vars"]
+        assert stored == first["env_vars"]
+    finally:
+        _delete(client, created["id"])
+
+
+def _vllm_row(args=None):
+    fixed = SimpleNamespace(
+        name="port", chart_type="llm", editable=False, defaultValue="8000"
+    )
+    window = SimpleNamespace(
+        name="max_model_len",
+        chart_type="llm",
+        editable=True,
+        defaultValue="16384",
+    )
+    return SimpleNamespace(
+        model=SimpleNamespace(category="llm"),
+        engine=SimpleNamespace(
+            name="vLLM", default_args=[fixed, window], default_config=[]
+        ),
+        config=SimpleNamespace(args=args, env_vars=None),
+    )
+
+
+def test_settings_refuse_another_value_for_a_default_the_platform_fixes():
+    from fastapi import HTTPException
+
+    from api.inference_operations import SettingsRequest, _refuse_fixed
+
+    row = _vllm_row()
+    _refuse_fixed(row, SettingsRequest(args={"dtype": "half"}))
+    # The form sends a read-only value back as it is.
+    _refuse_fixed(row, SettingsRequest(args={"port": "8000"}))
+    # The same name as a variable is not the fixed argument.
+    _refuse_fixed(row, SettingsRequest(env_vars={"port": "1"}))
+    with pytest.raises(HTTPException) as refused:
+        _refuse_fixed(row, SettingsRequest(args={"port": "9000"}))
+    assert refused.value.status_code == 422
+    assert "port" in refused.value.detail
+
+
+def test_each_controller_says_which_settings_it_renders():
+    from controller import get_controller
+
+    def read(engine, category="llm"):
+        controller = get_controller(engine, core_v1_api=mock.Mock())
+        return controller.settings_read(category)
+
+    assert read("vllm") == {"args", "env_vars"}
+    assert read("ollama") == {"env_vars"}
+    assert read("huggingface") == {"env_vars"}
+    assert read("huggingface", "embedding") == frozenset()
+    assert read("nim") == frozenset()
+    assert read("opea") == frozenset()
+
+
+def test_settings_are_refused_where_the_controller_reads_none(inference_env):
+    client, controller, _ = inference_env
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}/settings"
+    try:
+        controller.settings_read.return_value = frozenset()
+        refused = client.put(url, json={"env_vars": {"A": "1"}})
+        assert refused.status_code == 422, refused.text
+        assert "takes no settings" in refused.json()["detail"]
+        controller.upgrade.assert_not_awaited()
+        # The payload says the same, which is what the UI goes by.
+        assert _get(client, created["id"])["settingsRead"] == []
+    finally:
+        _delete(client, created["id"])
+
+
+def test_settings_arguments_go_through_where_the_controller_reads_them(
+    inference_env,
+):
+    client, controller, _ = inference_env
+    controller.settings_read.return_value = frozenset({"args", "env_vars"})
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}/settings"
+    try:
+        assert _get(client, created["id"])["settingsRead"] == [
+            "args",
+            "env_vars",
+        ]
+        body = {
+            "args": {
+                "--enable-auto-tool-choice": "",
+                "--tool-call-parser": "hermes",
+            }
+        }
+        response = client.put(url, json=body)
+        assert response.status_code == 200, response.text
+        assert _upgraded_instance(controller).config.args == body["args"]
+    finally:
+        _delete(client, created["id"])
+
+
+@pytest.mark.parametrize(
+    "body, said",
+    [
+        ({"env_vars": {"VLLM_API_KEY": "known"}}, "set by the platform"),
+        ({"env_vars": {"HF_TOKEN": "x"}}, "set by the platform"),
+        ({"args": {"--api-key": "known"}}, "set by the platform"),
+        ({"args": {"--api_key": "known"}}, "set by the platform"),
+        ({"args": {"--port": "9000"}}, "in its own row"),
+        ({"args": {"--max-model-len": "8192"}}, "in its own row"),
+        ({"args": {"max_model_len": "4096\nimage: evil"}}, "line break"),
+        ({"env_vars": {"A": "x\nimage: evil"}}, "line break"),
+        ({"args": {"max_model_len": "lots"}}, "whole number"),
+    ],
+)
+def test_settings_refuse_names_the_platform_owns(inference_env, body, said):
+    client, controller, _ = inference_env
+    controller.settings_read.return_value = frozenset({"args", "env_vars"})
+    created = _create(client)
+    try:
+        response = client.put(
+            f"/v1alpha1/inferenceInstance/{created['id']}/settings", json=body
+        )
+        assert response.status_code == 422, response.text
+        assert said in response.text
+        controller.upgrade.assert_not_awaited()
+    finally:
+        _delete(client, created["id"])
+
+
+def test_create_holds_the_same_rules_for_settings(inference_env):
+    client, controller, _ = inference_env
+    body = _ollama_body(client)
+    body["config"] = {"env_vars": {"VLLM_API_KEY": "known"}}
+    response = client.post("/v1alpha1/inferenceInstance", json=body)
+    assert response.status_code == 422, response.text
+    assert "set by the platform" in response.json()["detail"]
+    controller.install.assert_not_awaited()
+
+
+def test_settings_stay_on_the_row_when_only_the_gateway_step_fails(
+    inference_env,
+):
+    # Helm has applied the values by then: a rollback would leave the row
+    # describing pods that are gone, and the next stop or scale would
+    # render the old values back without a word.
+    client, controller, _ = inference_env
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}"
+    try:
+        controller.upgrade.side_effect = ApiKeyPolicyError("no policy")
+        body = {"env_vars": {"OLLAMA_DEBUG": "1"}}
+        response = client.put(f"{url}/settings", json=body)
+        assert response.status_code == 500
+        assert "gateway route" in response.json()["detail"]
+        controller.upgrade.side_effect = None
+        stored = _get(client, created["id"])["config"]["env_vars"]
+        assert stored == body["env_vars"]
+    finally:
+        _delete(client, created["id"])
+
+
+def test_settings_keep_the_recorded_window_of_a_vllm_instance(inference_env):
+    """Through the route: a body without max_model_len must not hand a
+    vLLM instance back to the default of the day (see _record_window)."""
+    client, controller, _ = inference_env
+    controller.settings_read.return_value = frozenset({"args", "env_vars"})
+    created = _create(client)
+    url = f"/v1alpha1/inferenceInstance/{created['id']}/settings"
+    window = {"max_model_len": "16384"}
+    try:
+        with mock.patch(
+            "api.inference_operations._record_window",
+            side_effect=lambda own, engine, model: own["args"].update(window),
+        ) as record:
+            response = client.put(url, json={"args": {"--dtype": "half"}})
+        assert response.status_code == 200, response.text
+        record.assert_called_once()
+        assert response.json()["config"]["args"] == {
+            "--dtype": "half",
+            **window,
+        }
+    finally:
+        _delete(client, created["id"])
 
 
 def test_stop_resume_and_scale_change_the_helm_values(inference_env):

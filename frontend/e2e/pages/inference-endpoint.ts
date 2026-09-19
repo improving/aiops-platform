@@ -59,6 +59,18 @@ export class InferenceEndpointPage extends AppShell {
     await expect(dialog).toBeHidden({ timeout: 60_000 });
   }
 
+  /** Open Actions > Edit settings…; a form, so `runAction` (a
+      confirmation) does not fit. Returns the dialog. */
+  async openEditSettings(): Promise<Locator> {
+    await this.actionsButton.click();
+    await this.page
+      .getByRole("menuitem", { name: "Edit settings…", exact: true })
+      .click();
+    const dialog = this.dialog();
+    await expect(dialog).toBeVisible();
+    return dialog;
+  }
+
   /** Delete through the shared dialog and wait for the list redirect. */
   async deleteInstance(timeout: number) {
     await this.deleteButton.click();

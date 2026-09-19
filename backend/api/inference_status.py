@@ -184,6 +184,9 @@ def check_pod_status_and_readiness(
     # runs on every list and detail read, which is where the UI needs it.
     instance.clusterEndpoint = controller.service_url(instance, engine_chart)
     instance.workloadChecksApiKey = controller.workload_checks_api_key
+    instance.settingsRead = sorted(
+        controller.settings_read(instance.model.category)
+    )
     pods = _refresh_status(db, instance, controller, engine_chart)
     # "Starting" is the model download, then the load: say how far it is,
     # when this pod can see the model cache (utils/model_cache.py).

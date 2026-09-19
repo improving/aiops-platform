@@ -53,6 +53,10 @@ class InferenceInstanceSchema(BaseModel):
     # True when the workload itself checks the API key, so a caller on
     # clusterEndpoint (which skips the gateway) still needs it.
     workloadChecksApiKey: bool = False
+    # Read-only: which of the instance's own settings its engine's
+    # controller renders ("args", "env_vars"); what the settings route
+    # accepts and the Edit settings dialog shows.
+    settingsRead: list[str] = []
     # Read-only, like the two above: what a not-ready instance waits for.
     launch: LaunchProgressSchema | None = None
     healthEndpoint: str | None = None

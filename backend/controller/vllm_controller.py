@@ -37,6 +37,9 @@ class VLLMController(Controller):
     # needed even on the in-cluster route that skips the gateway.
     workload_checks_api_key = True
 
+    def settings_read(self, category: str) -> frozenset[str]:
+        return frozenset({"args", "env_vars"})
+
     def _get_engine_specific_context(
         self,
         instance: InferenceInstanceSchema,

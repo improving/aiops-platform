@@ -1,8 +1,8 @@
 args: null
 config:
-  max_model_len: 16384
+  max_model_len: '16384'
   model: meta-llama/Meta-Llama-3.1-8B-Instruct
-  port: 8000
+  port: '8000'
 env:
 - name: HF_TOKEN
   valueFrom:

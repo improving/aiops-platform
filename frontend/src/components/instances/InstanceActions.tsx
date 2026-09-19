@@ -68,6 +68,7 @@ export function InstanceActions({
   onStop,
   onResume,
   onScale,
+  onEditSettings,
   onDone,
 }: {
   status?: string | null;
@@ -76,6 +77,8 @@ export function InstanceActions({
   onStop?: () => Promise<unknown>;
   onResume?: () => Promise<unknown>;
   onScale?: (replicas: number) => Promise<unknown>;
+  /** Opens the page's own dialog: it is a form, not a confirmation. */
+  onEditSettings?: () => void;
   onDone: () => Promise<void> | void;
 }) {
   const [pending, setPending] = useState<Action | null>(null);
@@ -166,6 +169,11 @@ export function InstanceActions({
           {onScale && (
             <DropdownMenuItem onSelect={() => openDialog("scale")}>
               Scale…
+            </DropdownMenuItem>
+          )}
+          {onEditSettings && (
+            <DropdownMenuItem onSelect={onEditSettings}>
+              Edit settings…
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

@@ -21,6 +21,7 @@ from utils.gateway import (
     remove_oidc_target,
 )
 from utils.kubernetes_utils import get_core_v1_client
+from utils.render_guard import refuse_line_breaks
 
 from .base_controller import (
     HelmInstallError,
@@ -69,6 +70,7 @@ class NotebooksController:
             "kf-notebooks-values.yaml.jinja"
         )
         context = self._get_base_context(instance)
+        refuse_line_breaks(context)
         rendered_yaml = template.render(context)
         values = yaml.safe_load(rendered_yaml)
         return values

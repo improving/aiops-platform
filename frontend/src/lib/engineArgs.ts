@@ -23,6 +23,7 @@ export interface ArgDoc {
 
 const VLLM_ARGS =
   "https://docs.vllm.ai/en/latest/configuration/engine_args.html";
+const VLLM_TOOLS = "https://docs.vllm.ai/en/latest/features/tool_calling.html";
 const VLLM_ENV = "https://docs.vllm.ai/en/latest/configuration/env_vars.html";
 const HF_ENV =
   "https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables";
@@ -42,6 +43,27 @@ export const ENGINE_ARG_DOCS: readonly ArgDoc[] = [
     range: "1 to the model's context length",
     note: "A model with a 32k or 128k context often does not fit a 24 GB GPU at its default; 4096 to 16384 is a safe range there, and the form starts at 16384 or the model's own context when that is shorter. vLLM stops at start with a KV cache error when the value is too large.",
     docUrl: VLLM_ARGS,
+  },
+  {
+    name: "enable-auto-tool-choice",
+    kind: "arg",
+    engines: ["vLLM"],
+    summary:
+      "Lets the model decide when to call a tool. A flag: leave the value empty. Needs tool-call-parser next to it.",
+    defaultValue: "off",
+    note: 'Without it vLLM answers 400 to a request with tools and tool_choice "auto", which is what a Langflow agent and most agent frameworks send. The Tool calling switch adds both arguments.',
+    docUrl: VLLM_TOOLS,
+  },
+  {
+    name: "tool-call-parser",
+    kind: "arg",
+    engines: ["vLLM"],
+    summary:
+      "How vLLM reads a tool call out of the model's text. It must match the model family's own format.",
+    range:
+      "hermes (Qwen2.5, Qwen3, Hermes), llama3_json (Llama 3.1 and 3.2), mistral, granite, deepseek_v3, internlm, jamba, pythonic",
+    note: "A wrong parser does not fail at start: the tool calls come back as plain text and the agent stops calling tools.",
+    docUrl: VLLM_TOOLS,
   },
   {
     name: "port",
@@ -245,7 +267,7 @@ export const ENGINE_ARG_DOCS: readonly ArgDoc[] = [
   },
 ];
 
-function normalize(name: string): string {
+export function normalize(name: string): string {
   return name.trim().replace(/^--/, "").replace(/_/g, "-").toLowerCase();
 }
 

@@ -26,7 +26,13 @@ import { Switch } from "@/components/ui/switch";
 import { modelService } from "@/services/modelService";
 import { parseApiError } from "@/lib/utils";
 import { DisplayCard } from "@/components/ui/DisplayCard";
-import { ArgHelp } from "@/components/models/ArgHelp";
+import { SettingRows } from "@/components/models/SettingRows";
+import { ToolCallingSwitch } from "@/components/models/ToolCallingSwitch";
+import {
+  ownValues,
+  rowsFromDefaults,
+  type SettingRow,
+} from "@/lib/instanceSettings";
 import { ResourceHint } from "@/components/instances/ResourceHint";
 import {
   capToContext,
@@ -51,21 +57,6 @@ export const REPLICAS_MAX = 16;
 export const QUANTITY_PATTERN = /^[0-9]+(\.[0-9]+)?(m|[EPTGMK]i?)?$/;
 export const QUANTITY_MAX_LENGTH = 32;
 
-type EnvVar = {
-  name: string;
-  value: string;
-  editable: boolean;
-  new: boolean;
-  updated: boolean;
-};
-type CLIArg = {
-  name: string;
-  value: string;
-  editable: boolean;
-  new: boolean;
-  updated: boolean;
-};
-
 export default function LaunchModel({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("accelerators");
@@ -73,8 +64,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     hostId: "",
     servingOptionId: "",
   });
-  const [args, setArgs] = useState<CLIArg[]>([]);
-  const [envVars, setEnvVars] = useState<EnvVar[]>([]);
+  const [args, setArgs] = useState<SettingRow[]>([]);
+  const [envVars, setEnvVars] = useState<SettingRow[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [model, setModel] = useState<Model | null>(null);
@@ -199,86 +190,24 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
     if (selectedEngine) {
       setAppliedDefaultsKey(defaultsKey);
 
-      const defaultArgs: CLIArg[] = selectedEngine.default_args.map((arg) => {
-        // vLLM refuses a max_model_len above the model's own context, so
-        // a model with a shorter one starts from its own value; `updated`
-        // makes the form send it, since the backend merges the defaults.
+      // vLLM refuses a max_model_len above the model's own context, so a
+      // model with a shorter one starts from its own value; own here
+      // makes rowsFromDefaults send it, since the backend merges the
+      // defaults.
+      const ownArgs: Record<string, string> = {};
+      for (const arg of selectedEngine.default_args) {
         const value = capToContext(
           arg.name,
           arg.defaultValue,
           model?.context_length
         );
-        return {
-          name: arg.name,
-          value,
-          editable: arg.editable,
-          new: false,
-          updated: value !== arg.defaultValue,
-        };
-      });
+        if (value !== arg.defaultValue) ownArgs[arg.name] = value;
+      }
 
-      const defaultEnvVars: EnvVar[] = selectedEngine.default_config.map(
-        (env) => ({
-          name: env.name,
-          value: env.defaultValue,
-          editable: env.editable,
-          new: false,
-          updated: false,
-        })
-      );
-
-      setArgs(defaultArgs);
-      setEnvVars(defaultEnvVars);
+      setArgs(rowsFromDefaults(selectedEngine.default_args, ownArgs));
+      setEnvVars(rowsFromDefaults(selectedEngine.default_config));
     }
   }
-
-  const handleArgChange = (
-    index: number,
-    field: "name" | "value",
-    value: string
-  ) => {
-    setArgs((prev) =>
-      prev.map((arg, i) =>
-        i === index ? { ...arg, [field]: value, updated: true } : arg
-      )
-    );
-  };
-
-  const handleEnvVarChange = (
-    index: number,
-    field: "name" | "value",
-    value: string
-  ) => {
-    setEnvVars((prev) =>
-      prev.map((env, i) =>
-        i === index ? { ...env, [field]: value, updated: true } : env
-      )
-    );
-  };
-
-  const addNewArgField = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setArgs((prev) => [
-      ...prev,
-      { name: "", value: "", editable: true, new: true, updated: true },
-    ]);
-  };
-
-  const addNewEnvVarField = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setEnvVars((prev) => [
-      ...prev,
-      { name: "", value: "", editable: true, new: true, updated: true },
-    ]);
-  };
-
-  const deleteArg = (index: number) => {
-    setArgs((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const deleteEnvVar = (index: number) => {
-    setEnvVars((prev) => prev.filter((_, i) => i !== index));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -352,12 +281,8 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
           quantization: "",
           image: "",
           lora_adapters: selectedAdapters,
-          args: args
-            .filter((arg) => arg.new || arg.updated)
-            .reduce((acc, arg) => ({ ...acc, [arg.name]: arg.value }), {}),
-          env_vars: envVars
-            .filter((env) => env.new || env.updated)
-            .reduce((acc, env) => ({ ...acc, [env.name]: env.value }), {}),
+          args: ownValues(args),
+          env_vars: ownValues(envVars),
           enable_tracing: enableTracing,
         },
       });
@@ -829,94 +754,31 @@ export default function LaunchModel({ params }: { params: { id: string } }) {
             content={
               <>
                 <h2 className="text-xl font-bold mb-4">CLI Arguments</h2>
-                {args.map((arg, index) => (
-                  <div key={index} className="mb-4 flex space-x-2">
-                    <Input
-                      value={arg.name}
-                      readOnly={!arg.editable || !arg.new}
-                      onChange={(e) =>
-                        handleArgChange(index, "name", e.target.value)
-                      }
-                      placeholder="Argument Name"
-                      required
-                    />
-                    <Input
-                      value={arg.value}
-                      onChange={(e) =>
-                        handleArgChange(index, "value", e.target.value)
-                      }
-                      placeholder="Value"
-                      readOnly={!arg.editable}
-                    />
-                    <ArgHelp
-                      engineName={selectedEngineName}
-                      kind="arg"
-                      name={arg.name}
-                    />
-                    {arg.new && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => deleteArg(index)}
-                      >
-                        Delete
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addNewArgField}
-                >
-                  Add Argument
-                </Button>
+                {selectedEngineName === "vLLM" && (
+                  <ToolCallingSwitch
+                    rows={args}
+                    onChange={setArgs}
+                    modelReference={
+                      selectedOption?.reference ?? model?.modelId ?? ""
+                    }
+                  />
+                )}
+                <SettingRows
+                  kind="arg"
+                  rows={args}
+                  onChange={setArgs}
+                  engineName={selectedEngineName}
+                />
 
                 <h2 className="text-xl font-bold mb-4 mt-6">
                   Environment Variables
                 </h2>
-                {envVars.map((env, index) => (
-                  <div key={index} className="mb-4 flex space-x-2">
-                    <Input
-                      value={env.name}
-                      readOnly={!env.editable || !env.new}
-                      onChange={(e) =>
-                        handleEnvVarChange(index, "name", e.target.value)
-                      }
-                      placeholder="Variable Name"
-                      required
-                    />
-                    <Input
-                      value={env.value}
-                      onChange={(e) =>
-                        handleEnvVarChange(index, "value", e.target.value)
-                      }
-                      placeholder="Value"
-                      readOnly={!env.editable}
-                    />
-                    <ArgHelp
-                      engineName={selectedEngineName}
-                      kind="env"
-                      name={env.name}
-                    />
-                    {env.new && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => deleteEnvVar(index)}
-                      >
-                        Delete
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addNewEnvVarField}
-                >
-                  Add Environment Variable
-                </Button>
+                <SettingRows
+                  kind="env"
+                  rows={envVars}
+                  onChange={setEnvVars}
+                  engineName={selectedEngineName}
+                />
               </>
             }
             footer={
