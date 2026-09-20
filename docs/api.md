@@ -179,6 +179,9 @@ GET /v1alpha1/organizations/current/usage?days=30
 a member sees only their own rows, an admin every row including ones with no attributed user.
 Every route answers 503 without LiteLLM configured, 502 on a LiteLLM error.
 
+The usage answer also has `tools`: the MCP tool calls of the period as `{server, tool, calls}`, most used first, for the organization scope (an admin).
+LiteLLM logs them like model requests with no tokens; they are not in `totals`, `by_target` or `rows`, and the listing of tools is left out.
+
 ## MCP servers and the MCP endpoint
 
 An organization admin registers remote MCP servers; every member with a writer role uses their tools

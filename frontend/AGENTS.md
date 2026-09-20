@@ -85,6 +85,8 @@ pnpm e2e:ui                               # Playwright UI mode
   (a tool typed in the playground or a built-in one is a new member of the union, not a change to the route).
   The MCP resolver opens one `@ai-sdk/mcp` client (streamable HTTP) on the backend's `/v1alpha1/mcp` with the caller's bearer and `X-Mcp-Servers`; this process holds no credential.
   With tools, `streamText` gets them and `stopWhen: stepCountIs(MAX_TOOL_STEPS)` (8), and the client closes on finish, error and abort.
+  With tools on and an empty system prompt the route sends `DEFAULT_TOOL_INSTRUCTIONS` (`toolSources.ts`): measured on Qwen2.5 14B, a model with tool definitions and no system message sometimes wrote text in another language or JSON "plans" before the real call;
+  a user's own system prompt is sent as it is. The chat mock answers `system?` with the system message it got, which is how `chat-tools.spec.ts` checks this.
   A resolver failure answers 502 `Could not reach the tools: ...` before anything goes to the model, never a silent answer without tools;
   the page maps it and offers "Send without tools", which is `regenerate({ body: { toolSources: [] } })` (`prepareSendMessagesRequest` spreads the request's own `body` last).
   An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.

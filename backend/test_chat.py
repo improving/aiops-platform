@@ -579,6 +579,21 @@ def test_mock_calls_a_tool_then_answers_from_its_result(client, monkeypatch):
     assert "tool_calls" not in json.dumps(chunks(body))
 
 
+def test_mock_reads_the_system_message_back(client, monkeypatch):
+    monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
+
+    def ask(messages):
+        body = {"model": "inst-mock", "messages": messages}
+        reply = client.post("/v1alpha1/chat/completions", json=body).json()
+        return reply["choices"][0]["message"]["content"]
+
+    question = {"role": "user", "content": "system?"}
+    assert ask([question]) == "System: (none)"
+    assert ask([{"role": "system", "content": "Be brief."}, question]) == (
+        "System: Be brief."
+    )
+
+
 def test_mock_tool_call_without_a_stream(client, monkeypatch):
     monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
     body = {

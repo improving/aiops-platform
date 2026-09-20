@@ -65,6 +65,34 @@ test.describe("chat with tools", () => {
     await expect(chat.toolsOn).toBeHidden();
   });
 
+  test("with tools on and no system prompt the model gets a default instruction", async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    // Tools off: nothing is added.
+    await chat.open("inst-mock");
+    await chat.send("system?");
+    await expect(chat.assistantMessages.last()).toContainText("System: (none)");
+
+    const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    await use.click();
+    await chat.send("system?");
+    await expect(chat.assistantMessages.last()).toContainText(
+      "write nothing before the call"
+    );
+
+    // The user's own system prompt is sent as it is.
+    await chat.systemPrompt.fill("Answer in French.");
+    await chat.send("system?");
+    await expect(chat.assistantMessages.last()).toContainText(
+      "System: Answer in French."
+    );
+    await expect(chat.assistantMessages.last()).not.toContainText(
+      "write nothing before"
+    );
+    await use.click();
+  });
+
   test("a Try in chat link turns the server on", async ({ page }) => {
     const chat = new ChatPage(page);
     await page.goto(`/chat?target=inst-mock&tools=${serverName}`);

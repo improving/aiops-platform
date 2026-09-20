@@ -270,6 +270,9 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   longer) one of the organization's. `AIOPS_CHAT_MOCK=true` serves three canned rows for `inst-mock` (two for
   the caller, one for `someone@example.com`) through the same visibility and aggregation code, so the fast
   tier's dev admin sees three rows and two users. 503 without a LiteLLM client, 502 on `LiteLLMError`.
+  LiteLLM also logs every MCP call as a spend row named like a model (`MCP: list_tools`, `MCP: <alias>-<tool>`, no user, no tokens). They are not model requests:
+  `_is_mcp_row` keeps them out of `totals`, `by_target` and `rows`, and `tools` lists them by server and tool (`_aggregate_tools`; the alias becomes the server's name, a deleted server keeps its alias, `list_tools` is left out).
+  They carry no end user, so only the organization scope (an admin) gets them. The mock has three such rows.
 - `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check.
   The `langflow` host is a member rule (`_authorize_langflow`): any browser session is allowed, service
   accounts and personal tokens answer 403 with `NOT_A_PERSON`, because that policy passes a bearer straight
@@ -325,6 +328,7 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   `delete_server` fails closed (502, everything stays) when the proxy refuses, and `remove_member` deletes the leaver's MCP credentials after the LiteLLM steps.
   `McpUpstream` is the seam for a direct connection later. The path is excluded from the audit log by exact match (`audit/events.py` `EXCLUDED_PATHS`); each `tools/call` is an info log line.
   Token scope `mcp` (`auth/tokens.py`) is valid on that path only, with the member's role (`get_current_user` answers 403 elsewhere).
+  `checked_at` and `credential_set_at` go out with the server's offset (`_aware`): the rows hold naive `datetime.now()` values, and a browser read a naive one in its own zone ("6 h" in IST for a minute-old check).
   `AIOPS_CHAT_MOCK=true` mocks discovery, registration (`litellm_server_id="mock"`) and the endpoint (a stateless JSON-RPC handler with one tool, `echo`).
   `test_mcp.py` patches `api.mcp.litellm_client`, `org_key` and `_team_id`, and `utils.mcp._resolve` so no test needs DNS.
 

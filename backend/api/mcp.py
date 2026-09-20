@@ -131,6 +131,14 @@ def _find(db: Session, id: uuid.UUID, user: CurrentUser) -> McpServer:
     return server
 
 
+def _aware(value: datetime | None) -> datetime | None:
+    """The rows hold naive server-local times (``datetime.now()``). Sent
+    like that, a browser reads them in ITS zone: a server checked a
+    minute ago read "6 h" in IST. With the server's offset they say
+    what they mean."""
+    return value.astimezone() if value is not None else None
+
+
 def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
     shared = creds.shared_credential(server)
     return McpServerSchema(
@@ -142,7 +150,7 @@ def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
         transport=server.transport,
         credential_mode=server.credential_mode,
         my_credential=creds.state(server, user),
-        credential_set_at=shared.updated_at
+        credential_set_at=_aware(shared.updated_at)
         if shared is not None and user.role == ROLE_ADMIN
         else None,
         credential_header=_user_header(server),
@@ -150,7 +158,7 @@ def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
         allowed_tools=server.allowed_tools,
         enabled=server.enabled,
         status=server.status,
-        checked_at=server.checked_at,
+        checked_at=_aware(server.checked_at),
         tools=[McpToolSchema(**t) for t in server.tools_cache or []],
         tool_prefix=litellm_alias(server.id, server.name) + TOOL_SEPARATOR,
     )

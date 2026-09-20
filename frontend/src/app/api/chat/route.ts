@@ -23,6 +23,7 @@ import {
 } from "@/lib/orgCookie";
 import { stepMetrics } from "@/lib/stepMetrics";
 import {
+  DEFAULT_TOOL_INSTRUCTIONS,
   MAX_TOOL_STEPS,
   parseToolSources,
   resolveToolSources,
@@ -109,7 +110,8 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model: provider.chatModel(body.model),
-    instructions: body.system?.trim() || undefined,
+    instructions:
+      body.system?.trim() || (hasTools ? DEFAULT_TOOL_INSTRUCTIONS : undefined),
     // A stopped answer can leave a tool call without its result in the
     // browser's copy of the conversation; the model must not see half
     // of a call.

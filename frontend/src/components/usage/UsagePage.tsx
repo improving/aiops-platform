@@ -227,6 +227,30 @@ export default function UsagePage() {
             </TableBody>
           </Table>
 
+          {/* Tool calls are not model requests (no tokens, no spend), so
+              they have a table of their own and are not in the totals. */}
+          {usage.tools && usage.tools.length > 0 && (
+            <Table>
+              <TableCaption>Tool calls</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>MCP server</TableHead>
+                  <TableHead>Tool</TableHead>
+                  <TableHead>Calls</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {usage.tools.map((entry) => (
+                  <TableRow key={`${entry.server}:${entry.tool}`}>
+                    <TableCell>{entry.server}</TableCell>
+                    <TableCell>{entry.tool}</TableCell>
+                    <TableCell>{entry.calls.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
           <Table>
             <TableCaption>By user and day</TableCaption>
             <TableHeader>

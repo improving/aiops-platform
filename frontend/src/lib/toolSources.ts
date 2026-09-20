@@ -18,6 +18,18 @@ const SERVERS_HEADER = "X-Mcp-Servers";
     model minutes. */
 export const MAX_TOOL_STEPS = 8;
 
+/**
+ * What the model is told when tools are on and the user wrote no system
+ * prompt. Measured on Qwen2.5 14B AWQ (vLLM, default temperature): with
+ * tool definitions and no system message the first step sometimes began
+ * with text in another language plus a JSON copy of the call, or with
+ * "plans" in JSON, before the real call (5 of 24 runs under load). With
+ * an instruction like this one: 0 of 16. A user's own system prompt is
+ * sent as it is, never with this added.
+ */
+export const DEFAULT_TOOL_INSTRUCTIONS =
+  "You can call tools. When a tool helps, call it, and write nothing before the call: no plan, no JSON, no description of the call. After the results, answer the user directly, in the language the user wrote in.";
+
 export type ResolvedTools = {
   tools: ToolSet;
   /** Release what the resolvers opened; safe to call more than once. */

@@ -333,7 +333,9 @@ export function AddMcpServerDialog({
             <p className="text-xs text-muted-foreground">
               {ownCredentials
                 ? "Each member's models call these tools with that member's own credential."
-                : "Members' models call these tools with the shared credential above."}
+                : authType === "none"
+                  ? "Members' models call these tools; the server asks for no credential."
+                  : "Members' models call these tools with the shared credential above."}
             </p>
             {error && (
               <p role="alert" className="text-sm text-destructive">

@@ -174,6 +174,9 @@ interface OrgUsage {
   capped: boolean;
   totals: UsageTotals;
   by_target: UsageByTarget[];
+  /** MCP tool calls, most used first. Not model requests: they are not
+      in `totals`. Absent on a backend before tools. */
+  tools?: { server: string; tool: string; calls: number }[];
   rows: UsageRow[];
 }
 

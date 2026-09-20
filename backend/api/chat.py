@@ -396,6 +396,7 @@ def _mock_usage_chunk(body: dict, reply: str) -> bytes:
 
 
 MOCK_TOOL_PREFIX = "call "
+MOCK_SYSTEM_QUESTION = "system?"
 
 
 def _message_text(message: dict) -> str:
@@ -452,6 +453,11 @@ def _mock_reply(body: dict) -> str:
     messages = body.get("messages") or []
     if messages and messages[-1].get("role") == "tool":
         return f"Tool said: {_tool_text(messages[-1])}"
+    # "system?" reads the system message back, so the fast tier can see
+    # what instructions the UI's route handler sent.
+    if _last_user_text(body).strip() == MOCK_SYSTEM_QUESTION:
+        system = next((m for m in messages if m.get("role") == "system"), None)
+        return f"System: {_message_text(system) if system else '(none)'}"
     return f"You said: {_last_user_text(body)}"
 
 

@@ -186,6 +186,11 @@ def test_create_stores_the_secret_registers_and_scopes_the_team(env):
     assert body["my_credential"] == "not_needed"
     assert body["credential_set_at"] is not None
     assert body["status"] == "connected"
+    # Times carry their offset: a naive one is read in the browser's zone.
+    from datetime import datetime
+
+    for field in ("checked_at", "credential_set_at"):
+        assert datetime.fromisoformat(body[field]).tzinfo is not None
     assert [t["name"] for t in body["tools"]] == [
         "search_issues",
         "create_issue",

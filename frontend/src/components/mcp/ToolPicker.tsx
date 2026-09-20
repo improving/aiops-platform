@@ -105,9 +105,17 @@ export function ToolPicker({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {tool.description}
-                </p>
+                {/* Two lines: a server's description is written for the
+                    model and can run to twenty (Context7), which left
+                    room for one tool in the list. The rest is a click
+                    away, and the filter still searches all of it. */}
+                <details className="group text-xs text-muted-foreground">
+                  <summary className="cursor-pointer list-none">
+                    <span className="line-clamp-2 group-open:line-clamp-none">
+                      {tool.description}
+                    </span>
+                  </summary>
+                </details>
               </div>
             </div>
           ))

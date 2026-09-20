@@ -28,6 +28,16 @@ test.describe("usage page", () => {
     await expect(userRows).toHaveCount(3);
     await expect(usage.byUserTable).toContainText("dev@example.test");
     await expect(usage.byUserTable).toContainText("someone@example.com");
+
+    // MCP tool calls have a table of their own, by server and tool; they
+    // are not model requests (the total above is still 3) and the
+    // listing of tools is left out.
+    const tools = page.getByRole("table", { name: "Tool calls" });
+    const toolRows = tools.locator("tbody tr");
+    await expect(toolRows).toHaveCount(1);
+    await expect(toolRows.first()).toContainText("echo");
+    await expect(toolRows.first()).toContainText("2");
+    await expect(usage.byTargetTable).not.toContainText("MCP:");
   });
 
   test("switching the period reloads the tables", async ({ page }) => {

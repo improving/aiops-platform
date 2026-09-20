@@ -245,12 +245,41 @@ def test_usage_capped_passes_through(client, monkeypatch):
     assert response.json()["capped"] is True
 
 
+def test_mcp_calls_are_tools_not_model_requests():
+    """LiteLLM logs an MCP call as a spend row named like a model. It is
+    no model request: own list, server and tool by name, the listing of
+    tools left out."""
+    from api.usage import _aggregate_tools, _is_mcp_row
+
+    rows = [
+        {"model": "MCP: list_tools"},
+        {"model": "MCP: deepwiki87aa1a35-read_wiki_structure"},
+        {"model": "MCP: deepwiki87aa1a35-read_wiki_structure"},
+        {"model": "MCP: gone0000abcd-query-docs"},
+        {"model_group": "inst-aaaaaaaa", "model": "openai/qwen"},
+    ]
+    assert [_is_mcp_row(r) for r in rows] == [True, True, True, True, False]
+    tools = _aggregate_tools(
+        [r for r in rows if _is_mcp_row(r)], {"deepwiki87aa1a35": "deepwiki"}
+    )
+    assert tools == [
+        {"server": "deepwiki", "tool": "read_wiki_structure", "calls": 2},
+        # A deleted server keeps its alias; a tool name may hold a "-".
+        {"server": "gone0000abcd", "tool": "query-docs", "calls": 1},
+    ]
+
+
 def test_usage_mock_mode_serves_canned_rows(client, monkeypatch):
     monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
     response = client.get("/v1alpha1/organizations/current/usage")
     assert response.status_code == 200, response.text
     body = response.json()
+    # The three model requests; the mock's MCP rows are not among them.
     assert body["totals"]["requests"] == 3
+    assert body["tools"] == [
+        {"server": "mock00000000", "tool": "echo", "calls": 2}
+    ]
+    assert all(not t["target"].startswith("MCP") for t in body["by_target"])
     assert {r["user"] for r in body["rows"]} == {
         "dev@example.test",
         "someone@example.com",

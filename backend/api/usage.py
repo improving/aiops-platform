@@ -26,11 +26,14 @@ from api.chat import (
 )
 from api.organizations import _current_org, _org_budget
 from auth.current_user import CurrentUser, get_current_user, require_admin
+from auth.policy import org_scope
 from auth.roles import ROLE_ADMIN
 from db.database import get_db
+from models.mcp_server import McpServer
 from models.organization import Organization
 from models.user import User
 from utils.litellm import LiteLLMError, ensure_org_key, get_client
+from utils.mcp import TOOL_SEPARATOR, litellm_alias
 
 router = APIRouter()
 
@@ -254,6 +257,44 @@ def _add_row(bucket: dict, row: dict) -> None:
     bucket["spend"] += row.get("spend") or 0.0
 
 
+# LiteLLM writes one spend-log row for each MCP call, named like a
+# model: "MCP: list_tools", "MCP: <alias>-<tool>". They are not model
+# requests (no tokens, no spend), so they get a table of their own and
+# stay out of the totals; listing the tools is bookkeeping of every chat
+# turn and is left out.
+MCP_PREFIX = "MCP: "
+MCP_LIST_TOOLS = "list_tools"
+
+
+def _is_mcp_row(row: dict) -> bool:
+    return _row_target(row).startswith(MCP_PREFIX)
+
+
+def _mcp_server_names(db: Session, user: CurrentUser) -> dict[str, str]:
+    """LiteLLM alias -> the server's name, for the caller's organization."""
+    servers = db.query(McpServer).filter(org_scope(McpServer, user)).all()
+    return {litellm_alias(s.id, s.name): s.name for s in servers}
+
+
+def _aggregate_tools(rows: list[dict], servers: dict[str, str]) -> list[dict]:
+    """Tool calls by server and tool, most used first. A server that was
+    deleted keeps its alias as the name."""
+    counts: dict[tuple[str, str], int] = {}
+    for row in rows:
+        name = _row_target(row)[len(MCP_PREFIX) :]
+        if name == MCP_LIST_TOOLS:
+            continue
+        alias, _, tool = name.partition(TOOL_SEPARATOR)
+        key = (servers.get(alias, alias), tool or name)
+        counts[key] = counts.get(key, 0) + 1
+    return [
+        {"server": server, "tool": tool, "calls": calls}
+        for (server, tool), calls in sorted(
+            counts.items(), key=lambda item: (-item[1], item[0])
+        )
+    ]
+
+
 def _aggregate_usage(
     rows: list[dict], labels: dict[str, str], names: dict[str, str]
 ) -> tuple[dict, list[dict], list[dict]]:
@@ -350,6 +391,23 @@ def _mock_usage_rows(user: CurrentUser, now: datetime) -> list[dict]:
             "completion_tokens": 40,
             "spend": 0.03,
         },
+        # What LiteLLM logs for MCP calls: no user, no tokens.
+        *(
+            {
+                "model_group": "",
+                "model": f"{MCP_PREFIX}{name}",
+                "end_user": "",
+                "startTime": today,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "spend": 0,
+            }
+            for name in (
+                MCP_LIST_TOOLS,
+                "mock00000000-echo",
+                "mock00000000-echo",
+            )
+        ),
     ]
 
 
@@ -416,8 +474,16 @@ async def current_org_usage(
     names = await asyncio.to_thread(
         _user_names, db, {u for u in map(_row_user, visible) if u}
     )
-    totals, by_target, entries = _aggregate_usage(visible, labels, names)
+    model_rows = [r for r in visible if not _is_mcp_row(r)]
+    totals, by_target, entries = _aggregate_usage(model_rows, labels, names)
+    # Tool calls carry no end user in LiteLLM's log, so they are the
+    # organization's: an admin sees them, a member does not (yet).
+    tool_rows = (
+        [r for r in rows if _is_mcp_row(r)] if scope == "organization" else []
+    )
+    servers = await asyncio.to_thread(_mcp_server_names, db, user)
     return {
+        "tools": _aggregate_tools(tool_rows, servers),
         "days": days,
         "since": since.isoformat(),
         "until": now.isoformat(),
