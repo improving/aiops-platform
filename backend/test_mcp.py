@@ -154,13 +154,26 @@ def test_discover_lists_tools_and_never_stores(env):
             "name": "search_issues",
             "description": "Search issues",
             "read_only": True,
+            # The characters of the whole definition (name, description
+            # and the input schema, here "{}"): what Chat estimates the
+            # window share of the tools from.
+            "size": len("search_issues") + len("Search issues") + 2,
         },
         {
             "name": "create_issue",
             "description": "Create an issue",
             "read_only": None,
+            "size": len("create_issue") + len("Create an issue") + 2,
         },
     ]
+    big = mcp_utils.tool_summary(
+        {
+            "name": "t",
+            "description": "d",
+            "inputSchema": {"type": "object", "properties": {"q": {}}},
+        }
+    )
+    assert big["size"] == 2 + len('{"type":"object","properties":{"q":{}}}')
     sent = litellm.list_mcp_tools.call_args.args[0]
     assert sent["transport"] == "http"
     assert sent["static_headers"] == {"Authorization": "Bearer ghp_secret"}

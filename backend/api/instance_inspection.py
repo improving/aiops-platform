@@ -57,6 +57,10 @@ class InstanceKind:
     restart: bool
     # The response model of the restart route (the row's schema).
     response_model: type | None = None
+    # Who may read the logs, when that is not everybody who may read the
+    # row: an MCP server's logs can repeat the arguments of other
+    # members' tool calls. None means ``authorize_read``.
+    authorize_logs: Authorizer | None = None
 
 
 def _pods(kind: InstanceKind, db: Session, row) -> tuple[str, str]:
@@ -105,7 +109,7 @@ def add_inspection_routes(
     ):
         """The logs of the instance's pods (spec 6.2)."""
         row = kind.find(db, id, user)
-        kind.authorize_read(user, row, kind.label)
+        (kind.authorize_logs or kind.authorize_read)(user, row, kind.label)
         try:
             return await asyncio.to_thread(
                 _read_logs_sync, kind, db, row, tail, previous, container

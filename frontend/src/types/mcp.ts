@@ -8,6 +8,8 @@ export interface McpTool {
   description: string;
   /** The MCP readOnlyHint; null when the server sends no annotations. */
   read_only: boolean | null;
+  /** Characters of the whole definition; absent on an older tool list. */
+  size?: number | null;
 }
 
 export type McpTransport = "http" | "sse";

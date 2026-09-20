@@ -29,6 +29,7 @@ from api.chat import chat_mock_enabled
 from api.instance_inspection import InstanceKind, add_inspection_routes
 from auth.current_user import CurrentUser, get_current_user, require_admin
 from auth.policy import authorize_read, authorize_write
+from auth.roles import ROLE_ADMIN
 from controller.mcp_server_controller import DeploySpec, McpServerController
 from db.database import get_db
 from logger import setup_logger
@@ -507,6 +508,19 @@ def upgrade_image(
     return _instance_response(instance)
 
 
+def _admins_read_logs(user: CurrentUser, row, label: str) -> None:
+    """Every member uses a deployed server, and a server can log the
+    arguments of the calls it gets: a member must not read there what
+    another member asked. Events say nothing of the calls, so they stay
+    with everybody who sees the server."""
+    if user.role != ROLE_ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="Only an organization admin reads the logs of an MCP "
+            "server: they can show what other members asked",
+        )
+
+
 MCP_INSTANCE_KIND = InstanceKind(
     label="MCP server",
     find=_find_instance,
@@ -517,6 +531,7 @@ MCP_INSTANCE_KIND = InstanceKind(
     pod_labels=lambda db, controller, row: controller.get_pod_labels(row),
     restart=True,
     response_model=McpInstanceStateSchema,
+    authorize_logs=_admins_read_logs,
 )
 add_inspection_routes(router, INSTANCES, MCP_INSTANCE_KIND)
 

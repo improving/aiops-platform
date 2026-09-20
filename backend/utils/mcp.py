@@ -11,6 +11,7 @@ name with ``_`` (found on the live stack).
 """
 
 import ipaddress
+import json
 import os
 import re
 import socket
@@ -102,8 +103,20 @@ def tool_summary(tool: dict) -> dict:
     annotations, so the UI says "changes data" only where it knows."""
     annotations = tool.get("annotations") or {}
     hint = annotations.get("readOnlyHint")
+    name = tool.get("name", "")
+    description = tool.get("description") or ""
+    schema = tool.get("inputSchema") or tool.get("input_schema") or {}
+    try:
+        schema_size = len(json.dumps(schema, separators=(",", ":")))
+    except (TypeError, ValueError):
+        schema_size = 0
     return {
-        "name": tool.get("name", ""),
-        "description": tool.get("description") or "",
+        "name": name,
+        "description": description,
         "read_only": hint if isinstance(hint, bool) else None,
+        # Characters of the whole definition as a model gets it (name,
+        # description, input schema): what Chat needs to say how much of
+        # a model's window the tools take before a message is sent. The
+        # schema itself is not kept.
+        "size": len(name) + len(description) + schema_size,
     }

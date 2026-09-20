@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Switch } from "@/components/ui/switch";
 import { allowedTools, usable, type McpServer } from "@/types/mcp";
+import type { ToolBudget } from "@/lib/toolBudget";
 
 /** Why the tools cannot be used with this target, or "" when they can.
     `null` (unknown, for example Ollama) can: it depends on the model. */
@@ -54,6 +55,7 @@ export function ChatTools({
   functions,
   onFunctionToggle,
   onFunctionEdit,
+  budget,
 }: {
   /** Functions typed in the playground (nothing runs; the user types
       the result). */
@@ -77,6 +79,8 @@ export function ChatTools({
   settingsHref?: string;
   isViewer: boolean;
   isAdmin: boolean;
+  /** What the tools that are on take of the target's window. */
+  budget?: ToolBudget;
 }) {
   const reason = blocked(targetTools, engine, isViewer);
   return (
@@ -99,6 +103,34 @@ export function ChatTools({
             <Link href={settingsHref} className="underline">
               Turn it on in Edit settings
             </Link>
+          )}
+        </p>
+      )}
+      {!reason && budget && budget.tools > 0 && (
+        <p
+          data-testid="tools-budget"
+          role={budget.warn ? "alert" : undefined}
+          className={
+            budget.warn
+              ? "rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+              : "text-xs text-muted-foreground"
+          }
+        >
+          {budget.tools} {budget.tools === 1 ? "tool" : "tools"}, about{" "}
+          {budget.tokens.toLocaleString("en-US")} tokens
+          {budget.share !== null &&
+            ` (${Math.round(budget.share * 100)}% of this model's window)`}
+          .
+          {budget.warn && (
+            <>
+              {" "}
+              The definitions go with every step, so little room stays for the
+              conversation.
+              {budget.largest && ` Most of it is ${budget.largest.name}.`}{" "}
+              {isAdmin
+                ? "Limit its tools (MCP page, Edit tools) or turn a server off."
+                : "Turn a server off, or ask an admin to limit its tools."}
+            </>
           )}
         </p>
       )}

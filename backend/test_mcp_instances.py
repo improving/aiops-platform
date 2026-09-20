@@ -574,6 +574,27 @@ def test_an_entry_in_use_cannot_be_deleted_and_a_deployed_row_is_never_personal(
     assert _server(client, server["id"], OUTSIDER) is None
 
 
+def test_only_an_admin_reads_the_logs_of_a_deployed_server(env, monkeypatch):
+    """The logs can repeat the arguments of other members' tool calls."""
+    client, _ = env
+    server = _deploy(client).json()
+    base = f"{INSTANCES}/{server['deploy']['instance_id']}"
+    monkeypatch.setattr(
+        "api.instance_inspection.pod_logs",
+        lambda *args, **kwargs: {"pods": []},
+    )
+    monkeypatch.setattr(
+        "api.instance_inspection.pod_events", lambda *args, **kwargs: []
+    )
+    assert client.get(f"{base}/logs").status_code == 200
+    assert client.get(f"{base}/logs", headers=ORGADMIN).status_code == 200
+    refused = client.get(f"{base}/logs", headers=ALICE)
+    assert refused.status_code == 403
+    assert "other members" in refused.json()["detail"]
+    # Events say nothing of the calls.
+    assert client.get(f"{base}/events", headers=ALICE).status_code == 200
+
+
 def test_the_create_request_of_a_remote_server_has_no_source():
     from schemas.mcp import McpServerCreateRequest
 

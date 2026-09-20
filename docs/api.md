@@ -237,7 +237,7 @@ the client and every member's tokens belong to that URL, so delete the server an
 `refresh` on a `per_user` server uses the caller's own credential and answers 409 when they have none (an OAuth server: "Sign in to this server first"), so such a check never marks the server unreachable.
 The URL must be `https` and public: loopback, private, link-local, metadata and cluster-internal addresses are refused.
 A server answers with `credential_mode` (`none`, `shared` or `per_user`), `my_credential` (`not_needed`, or `set` or `missing` on a `per_user` server), `credential_header`, `credential_help_url`,
-`oauth`, `status` (`connected` or `unreachable`), `checked_at`, `tools`, and `tool_prefix`: a model sees each tool as `<tool_prefix><tool>`.
+`oauth`, `status` (`connected` or `unreachable`), `checked_at`, `tools` (each with `name`, `description`, `read_only` and `size`, the characters of the whole definition with its input schema, from which Chat says how much of a model's window the tools take), and `tool_prefix`: a model sees each tool as `<tool_prefix><tool>`.
 
 `/v1alpha1/mcp` is one MCP server (streamable HTTP; `POST` and `DELETE`) with the tools of every enabled server of the caller's organization.
 `GET` answers 405, which the protocol allows: there is no server-to-client stream, because each open one would hold a worker thread of the API for as long as an IDE stays connected.
@@ -277,7 +277,7 @@ There is no gateway host: only the LiteLLM proxy calls the pod, and the chart's 
 | `GET /v1alpha1/mcp/instances/{id}` | member | The `deploy` block, the plain settings, which secret settings have a value (`secret_settings`), and the entry's `schema`. Never a secret value. |
 | `PUT /v1alpha1/mcp/instances/{id}/settings` | organization admin | Replace the settings and roll the pod. A secret that is left out keeps its value. Also the way to repair a `Failed` server. |
 | `POST /v1alpha1/mcp/instances/{id}/upgrade` | organization admin | Move to the catalog entry's current image, arguments and settings (`upgrade_available` says when they differ). A running server keeps a copy of what it was deployed with and never moves by itself; 409 when the entry is not published, or when its port or path changed (delete and deploy again). |
-| `GET .../logs`, `GET .../events`, `POST .../restart` | as the other kinds | See "Logs and events" and "Day-2 actions". |
+| `GET .../logs`, `GET .../events`, `POST .../restart` | logs: organization admin; the rest as the other kinds | See "Logs and events" and "Day-2 actions". The logs are for an admin only (403 for a member): an MCP server can log the arguments of the calls it gets, so a member could read there what another member asked. |
 | `DELETE /v1alpha1/mcp/servers/{id}` | organization admin | The proxy's registration first (502 and everything stays when it refuses), then the release and the Secret, then the rows. When the uninstall fails (500) the server stays, disabled and unknown to the proxy; a second delete finishes. A `Failed` server is always deletable. |
 
 A deployed server carries `deploy` in the list: `instance_id`, `catalog`, `image`, `tag`, `status` (`Pending`, `Running`, `Failed`), `ready`, `launch`, `last_error`, `upgrade_available` and `usable`.

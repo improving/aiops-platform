@@ -97,11 +97,15 @@ export function McpInstancePanels({
           {error}
         </p>
       )}
-      <Tabs defaultValue={initialTab} className="w-full min-w-0">
+      <Tabs
+        defaultValue={!admin && initialTab === "logs" ? "events" : initialTab}
+        className="w-full min-w-0"
+      >
         <TabsList>
           <TabsTrigger value="tools">Tools</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
+          {/* An MCP server can log what members asked: admins only. */}
+          {admin && <TabsTrigger value="logs">Logs</TabsTrigger>}
           <TabsTrigger value="events">Events</TabsTrigger>
         </TabsList>
         <TabsContent value="tools">{tools}</TabsContent>
@@ -185,9 +189,11 @@ export function McpInstancePanels({
             </ul>
           )}
         </TabsContent>
-        <TabsContent value="logs">
-          <LogsPanel fetchLogs={fetchLogs} />
-        </TabsContent>
+        {admin && (
+          <TabsContent value="logs">
+            <LogsPanel fetchLogs={fetchLogs} />
+          </TabsContent>
+        )}
         <TabsContent value="events">
           <EventsPanel fetchEvents={fetchEvents} />
         </TabsContent>

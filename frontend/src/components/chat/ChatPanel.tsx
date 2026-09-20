@@ -29,6 +29,7 @@ import { ChatTools } from "@/components/chat/ChatTools";
 import { ConnectCredentialDialog } from "@/components/mcp/ConnectCredentialDialog";
 import type { McpServer } from "@/types/mcp";
 import { useToolServers } from "@/components/chat/useToolServers";
+import { toolBudget } from "@/lib/toolBudget";
 import { usePlaygroundFunctions } from "@/components/chat/usePlaygroundFunctions";
 import { FunctionDialog } from "@/components/chat/FunctionDialog";
 import { useOrg } from "@/hooks/useOrg";
@@ -127,6 +128,25 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   // Functions typed in the playground; `editing` is the name in the
   // dialog, "" for a new one, undefined when it is closed.
   const typed = usePlaygroundFunctions(userKey);
+  // What the tools that are on take of this target's window, before a
+  // message is sent: a server with many tools can leave a small model no
+  // room for the conversation.
+  const budget = useMemo(
+    () =>
+      toolBudget(
+        toolServers.servers,
+        activeTools,
+        toolsBlocked ? [] : typed.functions.filter((f) => f.enabled),
+        selected?.context_length
+      ),
+    [
+      toolServers.servers,
+      activeTools,
+      toolsBlocked,
+      typed.functions,
+      selected?.context_length,
+    ]
+  );
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const typedSources = useMemo(
     () => (toolsBlocked ? [] : typed.sources),
@@ -433,6 +453,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
               }
               isViewer={isViewer}
               isAdmin={isAdmin}
+              budget={budget}
               onConnect={setConnecting}
               askFirst={toolServers.askFirst}
               onAskFirstChange={toolServers.setAskFirst}

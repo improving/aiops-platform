@@ -283,3 +283,69 @@ test.describe("chat when the tools are down", () => {
     await page.request.delete(`${SERVERS}/${id}`);
   });
 });
+
+test.describe("the tools and the model's window", () => {
+  const tool = (i: number, size: number) => ({
+    name: `tool_${i}`,
+    description: "A tool",
+    read_only: true,
+    size,
+  });
+  const server = (name: string, tools: unknown[]) => ({
+    id: `00000000-0000-4000-8000-00000000000${name.length}`,
+    name,
+    description: null,
+    source: "remote",
+    url: "https://mcp.example.com/mcp",
+    transport: "http",
+    credential_mode: "none",
+    my_credential: "not_needed",
+    credential_set_at: null,
+    credential_header: null,
+    credential_help_url: null,
+    oauth: false,
+    allowed_tools: null,
+    approval: "never",
+    enabled: true,
+    status: "connected",
+    checked_at: null,
+    tools,
+    tool_prefix: `${name}00000000-`,
+    scope: "organization",
+    can_change: true,
+    deploy: null,
+  });
+
+  test("says what the tools take, and warns when that is most of the window", async ({
+    page,
+  }) => {
+    // inst-mock has a window of 4,096 tokens. Forty definitions of 1,500
+    // characters are about 18,000 tokens; two small ones are about 100.
+    await page.route("**/api/v1alpha1/mcp/servers", (route) =>
+      route.fulfill({
+        json: [
+          server(
+            "big",
+            Array.from({ length: 40 }, (_, i) => tool(i, 1500))
+          ),
+          server("small", [tool(1, 100), tool(2, 100)]),
+        ],
+      })
+    );
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    const budget = chat.tools.getByTestId("tools-budget");
+    await expect(budget).toBeHidden();
+
+    await chat.tools.getByRole("switch", { name: "Use small" }).click();
+    await expect(budget).toContainText("2 tools, about");
+    await expect(budget).toContainText("% of this model's window");
+    await expect(budget).not.toHaveAttribute("role", "alert");
+
+    await chat.tools.getByRole("switch", { name: "Use big" }).click();
+    await expect(budget).toHaveAttribute("role", "alert");
+    await expect(budget).toContainText("42 tools");
+    await expect(budget).toContainText("Most of it is big.");
+    await expect(budget).toContainText("Limit its tools");
+  });
+});

@@ -32,6 +32,9 @@ class McpToolSchema(BaseModel):
     description: str = ""
     # The MCP readOnlyHint; null when the server sends no annotations.
     read_only: bool | None = None
+    # Characters of the whole definition (name, description, input
+    # schema); None for a tool listed before this was kept.
+    size: int | None = None
 
 
 class McpServerSchema(BaseModel):
