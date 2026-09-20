@@ -21,7 +21,10 @@ test.describe("MCP servers page", () => {
     await expect(mcp.connectClientButton).toBeVisible();
   });
 
-  test("a member sees the row read-only", async ({ page, asUser }) => {
+  test("a member sees the organization's server read-only, and adds one of their own", async ({
+    page,
+    asUser,
+  }) => {
     const mcp = new McpServersPage(page);
     await mcp.open();
     await mcp.waitForLoaded();
@@ -35,7 +38,6 @@ test.describe("MCP servers page", () => {
     await memberMcp.open();
     await memberMcp.waitForLoaded();
     await expect(memberMcp.serverRow(name)).toBeVisible();
-    await expect(memberMcp.headerAddButton).toHaveCount(0);
 
     const menu = await memberMcp.openActions(name);
     await expect(
@@ -47,6 +49,46 @@ test.describe("MCP servers page", () => {
     await expect(menu.getByRole("menuitem", { name: "Delete" })).toHaveCount(0);
     await memberPage.keyboard.press("Escape");
 
+    // A member adds a server for themselves: no choice of who uses it,
+    // it is theirs to change, and nobody else sees it, an admin included.
+    const own = `mine_${shortId()}`;
+    await memberMcp.openAddDialog();
+    const dialog = memberPage.getByRole("dialog", { name: "Add MCP server" });
+    await expect(dialog).toContainText("Only you can use this server");
+    await expect(dialog.getByText("Who can use it")).toHaveCount(0);
+    await memberMcp.fillConnection({
+      name: own,
+      url: "https://mcp.example.com/mcp",
+    });
+    await memberMcp.testConnection();
+    await memberMcp.finishAdd();
+    await expect(memberMcp.serverRow(own)).toContainText("only me");
+    const ownMenu = await memberMcp.openActions(own);
+    await expect(
+      ownMenu.getByRole("menuitem", { name: "Delete" })
+    ).toBeVisible();
+    await memberPage.keyboard.press("Escape");
+    await page.reload();
+    await mcp.waitForLoaded();
+    await expect(mcp.serverRow(name)).toBeVisible();
+    await expect(mcp.serverRow(own)).toHaveCount(0);
+
+    // The admin chooses who uses a new server.
+    await mcp.openAddDialog();
+    const adminDialog = page.getByRole("dialog", { name: "Add MCP server" });
+    await expect(
+      adminDialog.getByRole("radio", {
+        name: "Every member of this organization",
+      })
+    ).toBeChecked();
+    await expect(
+      adminDialog.getByRole("radio", {
+        name: "Every organization of the platform",
+      })
+    ).toBeVisible();
+    await adminDialog.getByRole("button", { name: "Cancel" }).click();
+
+    await memberMcp.deleteServer(own);
     await mcp.deleteServer(name);
   });
 

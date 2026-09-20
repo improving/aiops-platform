@@ -328,6 +328,24 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   `delete_server` fails closed (502, everything stays) when the proxy refuses, and `remove_member` deletes the leaver's MCP credentials after the LiteLLM steps.
   `McpServer.approval` (`never`, `writes`, `always`; migration `0011`) is the admin's floor for approval in the chat playground; the backend only stores and serves it, the UI's chat route applies it.
   The mock endpoint names its tools `<alias>-echo` for each selected server, as the proxy does, because that route tells the servers apart by the prefix.
+  Scopes (`utils/mcp_scope.py`, migration `0012`): organization (`owner_id` NULL), personal (`owner_id` set: the owner alone, any writer adds one) and platform (`org_id` NULL: every organization, a platform admin changes it).
+  `visible(user)` is the one filter for the list, the endpoint's selection and the usage labels; `can_create`/`can_change` decide writes, so the write routes are `require_writer` plus that check; an invisible server is a 404.
+  A name is unique among what its creator sees (`_name_taken`), because it selects a server on the endpoint. A platform server is registered with `allow_all_keys` (measured on v1.99.1), and the relay still names the servers of each request.
+  `remove_member` also deletes the leaver's personal servers (`delete_personal_servers`).
+  OAuth sign-in (`utils/mcp_oauth.py`, pure protocol: discovery, client registration, PKCE, code exchange, refresh; migration `0013`): in the data it is `per_user` with `user_auth_type = "oauth"` (`creds.is_oauth`), not a new mode, so every `per_user` branch holds.
+  `McpServer.oauth` keeps the endpoints, the client id and the scopes (the client secret is a Secret, `oauth_client_secret_name`); `McpOAuthState` keeps the hash of each state with its PKCE verifier, bound to user and server, ten minutes, one use.
+  The redirect URI is a page of the UI (`AIOPS_UI_URL` + `/mcp-servers/oauth/callback`), which posts `code` and `state` to `POST /v1alpha1/mcp/oauth/callback`: a callback on `/api` answers a login redirect when the session has ended, and a GET would put the code in access logs.
+  The create cannot discover tools (`tools_cache = []`); the callback fills the list the first time. `creds.oauth_access_token` renews a token that ends within 60 s under one lock for each Secret, reads the Secret again inside the lock (a rotated refresh token is good once),
+  and on `invalid_grant` deletes the Secret and the row, so the member reads `missing` and signs in again; a network error deletes nothing. The token cache never outlives the token.
+  Every URL of the flow comes from the server or its metadata, so each passes `validate_server_url` at every use and redirects are not followed; these requests leave the backend pod, which the proxy's egress policy does not cover.
+  From the review of #74: both endpoints are on the issuer's origin or on a host of `oauth.allow_hosts` (the mix-up of authorization servers: PKCE does not help when the verifier goes to the wrong token endpoint), `check_issuer` applies RFC 9207 `iss`,
+  `_fetch` streams every answer under a byte cap and a deadline for the whole answer (a drip-feed held a worker thread), `expires_in` is clamped before any arithmetic (a huge integer overflows a float),
+  and a Secret is written in one step, never deleted first: `KubernetesSecretStore.write` replaces, `MemorySecretStore.write` now does too, and a reader between a delete and a write found nothing and told the member to sign in. After `invalid_grant` the Secret is read a few times (`RACE_WAITS_SECONDS`) for another replica's write before the sign-in is given up,
+  and after a passing failure the old token is cached for `RETRY_AFTER_SECONDS`, so calls do not queue on the same failure under the lock.
+  A personal server's credential is always its owner's own (`_owners_mode`), never `shared`: the proxy keeps a shared one as `static_headers`, and any key of the organization's team could call with it.
+  Names (`_name_taken`, three partial unique indexes, migration `0014`): unique among the shared servers and among one member's own; `scopes.by_name` picks the nearer server where a caller sees two.
+  `delete_for_user` also deletes what a leaver stored for platform servers when this was their last membership.
+  The mock (`mock_oauth_metadata`, code `mock`) points the authorization URL at the UI's own callback page. `test_mcp_oauth.py`.
   `McpUpstream` is the seam for a direct connection later. The path is excluded from the audit log by exact match (`audit/events.py` `EXCLUDED_PATHS`); each `tools/call` is an info log line.
   Token scope `mcp` (`auth/tokens.py`) is valid on that path only, with the member's role (`get_current_user` answers 403 elsewhere).
   `checked_at` and `credential_set_at` go out with the server's offset (`_aware`): the rows hold naive `datetime.now()` values, and a browser read a naive one in its own zone ("6 h" in IST for a minute-old check).
@@ -506,7 +524,7 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   drop the spurious `NUMERIC` to `UUID` `alter_column` calls SQLite reflection produces).
   Data steps go through typed `sa.table()`/`sa.column()` objects so UUID binds work on SQLite and Postgres.
   `make db-migrate` applies them to the local Postgres; `uv run alembic history` shows the chain.
-- The chain is linear and `0010` (MCP servers, then a member's own credential) is the single head; a new change is a new revision on top of it.
+- The chain is linear and `0014` (MCP servers: tables, a member's own credential, approval, scopes, OAuth, names) is the single head; a new change is a new revision on top of it.
   (While the enterprise streams were open, their columns went into `0008` so that `upgrade_to_head` never saw a fork; that rule ended with their merge.)
   `test_migrations.py` checks every model agrees column for column.
 - Every `HTTPException` carries a human-readable string `detail`; the frontend shows it in a toast.

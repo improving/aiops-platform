@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +32,7 @@ import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { useOrg } from "@/hooks/useOrg";
 import { mcpService } from "@/services/mcpService";
-import { allowedTools, type McpServer } from "@/types/mcp";
+import { allowedTools, type McpScope, type McpServer } from "@/types/mcp";
 import { TableSkeleton } from "@/components/LoadingState";
 import { ConnectCredentialDialog } from "@/components/mcp/ConnectCredentialDialog";
 import { AddMcpServerDialog } from "@/components/mcp/AddMcpServerDialog";
@@ -94,8 +95,16 @@ function relativeTime(iso: string | null): string {
  */
 export default function McpServersPage() {
   const { toast } = useToast();
-  const { isAdmin, role, loading: orgLoading } = useOrg();
+  const { isAdmin, isPlatformAdmin, role, loading: orgLoading } = useOrg();
   const isViewer = role === "viewer";
+  // What this user may add, the default first. Anyone who can use tools
+  // can add a server for themselves.
+  const addScopes: McpScope[] = [
+    ...(isAdmin ? (["organization"] as const) : []),
+    ...(!isViewer ? (["personal"] as const) : []),
+    ...(isPlatformAdmin ? (["platform"] as const) : []),
+  ];
+  const canAdd = addScopes.length > 0;
   const [connectServer, setConnectServer] = useState<McpServer | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +124,15 @@ export default function McpServersPage() {
   );
   const [deleteTarget, setDeleteTarget] = useState<McpServer | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Back from a sign-in at an MCP server (the OAuth callback page).
+  const router = useRouter();
+  const connected = useSearchParams().get("connected");
+  useEffect(() => {
+    if (!connected) return;
+    toast({ title: `Signed in to ${connected}` });
+    router.replace("/mcp-servers");
+  }, [connected, router, toast]);
 
   const fetchServers = useCallback(async () => {
     try {
@@ -224,7 +242,7 @@ export default function McpServersPage() {
           >
             Connect a client
           </Button>
-          {isAdmin && !litellmError && servers.length > 0 && (
+          {canAdd && !litellmError && servers.length > 0 && (
             <Button type="button" onClick={() => openAdd()}>
               Add MCP server
             </Button>
@@ -245,7 +263,7 @@ export default function McpServersPage() {
         <div className="flex justify-center">
           <div className="w-full max-w-md space-y-3 rounded-xl border p-6 text-center">
             <p className="font-medium">No MCP servers yet</p>
-            {isAdmin ? (
+            {canAdd ? (
               !litellmError && (
                 <>
                   <Button type="button" onClick={() => openAdd()}>
@@ -273,7 +291,8 @@ export default function McpServersPage() {
               )
             ) : (
               <p className="text-sm text-muted-foreground">
-                Ask an organization admin to add a server.
+                Viewers cannot use tools. Ask an organization admin for a role
+                that can.
               </p>
             )}
           </div>
@@ -305,6 +324,11 @@ export default function McpServersPage() {
                     >
                       {server.name}
                     </Button>
+                    {server.scope && server.scope !== "organization" && (
+                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {server.scope === "personal" ? "only me" : "platform"}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{hostAndPath(server.url)}</TableCell>
                   <TableCell>{toolsLabel(server)}</TableCell>
@@ -337,7 +361,7 @@ export default function McpServersPage() {
                             Try in chat
                           </Link>
                         </DropdownMenuItem>
-                        {isAdmin ? (
+                        {(server.can_change ?? isAdmin) ? (
                           <>
                             <DropdownMenuItem
                               onSelect={() => handleRefresh(server)}
@@ -349,11 +373,15 @@ export default function McpServersPage() {
                             >
                               Edit tools
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setCredentialServer(server)}
-                            >
-                              Change credential
-                            </DropdownMenuItem>
+                            {/* An OAuth server has no credential to
+                                change: each member signs in. */}
+                            {!server.oauth && (
+                              <DropdownMenuItem
+                                onSelect={() => setCredentialServer(server)}
+                              >
+                                Change credential
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onSelect={() => handleToggleEnabled(server)}
                             >
@@ -378,15 +406,21 @@ export default function McpServersPage() {
                             <DropdownMenuItem
                               onSelect={() => setConnectServer(server)}
                             >
-                              {server.my_credential === "set"
-                                ? "Replace my credential"
-                                : "Connect my credential"}
+                              {server.oauth
+                                ? server.my_credential === "set"
+                                  ? "Sign in again"
+                                  : "Sign in"
+                                : server.my_credential === "set"
+                                  ? "Replace my credential"
+                                  : "Connect my credential"}
                             </DropdownMenuItem>
                             {server.my_credential === "set" && (
                               <DropdownMenuItem
                                 onSelect={() => handleDisconnect(server)}
                               >
-                                Disconnect my credential
+                                {server.oauth
+                                  ? "Sign out of this server"
+                                  : "Disconnect my credential"}
                               </DropdownMenuItem>
                             )}
                           </>
@@ -410,6 +444,7 @@ export default function McpServersPage() {
         open={addOpen}
         onOpenChange={setAddOpen}
         initial={addInitial}
+        scopes={addScopes}
         onCreated={(server) => {
           setServers((prev) => [...prev, server]);
           setAddOpen(false);
@@ -426,7 +461,7 @@ export default function McpServersPage() {
         server={sheetServer}
         open={sheetServer !== null}
         onOpenChange={(open) => !open && setSheetServer(null)}
-        admin={isAdmin}
+        admin={sheetServer?.can_change ?? isAdmin}
         onRequestDelete={(server) => {
           setSheetServer(null);
           setDeleteTarget(server);

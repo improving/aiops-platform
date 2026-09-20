@@ -254,6 +254,8 @@ Flows reach models through LiteLLM and tools through the backend's MCP endpoint,
 so the pod's `LANGFLOW_SSRF_ALLOWED_HOSTS` names `litellm.litellm.svc` and `aiops-backend.ai-stack.svc`
 (the selector-less Service of `make gateway-up` that points at the backend on the laptop).
 `make backend` sets `AIOPS_BACKEND_CLUSTER_URL` to that Service, and the Develop page then writes `AIOPS_MCP_URL` and `AIOPS_MCP_TOKEN` into the member's Langflow variables.
+`make backend` also sets `AIOPS_UI_URL=http://localhost:3000`, where an MCP server's OAuth sign-in sends the browser back (`/mcp-servers/oauth/callback`);
+an authorization server must accept that redirect URI, and most accept `localhost` for development.
 `make mcp-test-up` deploys a small MCP server in kind (`echo`, `whoami`, any bearer) to register on the MCP servers page:
 `http://mcp-test.mcp-test.svc.cluster.local:8000/mcp`, a host `make backend` allows although the URL rule refuses cluster addresses.
 `make frontend` passes `NEXT_PUBLIC_LANGFLOW_URL` (default `LANGFLOW_URL`, `https://langflow.127.0.0.1.nip.io`)

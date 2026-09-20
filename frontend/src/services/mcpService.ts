@@ -1,6 +1,7 @@
 import api from "./api";
 import type {
   McpApproval,
+  McpScope,
   McpCredentialInput,
   McpServer,
   McpTool,
@@ -17,6 +18,9 @@ export interface McpServerInput {
   credential?: McpCredentialInput;
   allowed_tools?: string[] | null;
   approval?: McpApproval;
+  scope?: McpScope;
+  /** Each member signs in with OAuth; `credential` is then not used. */
+  oauth?: { client_id?: string; client_secret?: string; scopes?: string[] };
   /** "per_user": `credential` is the admin's own, and every other
       member brings theirs. */
   credential_mode?: "shared" | "per_user";
@@ -62,6 +66,25 @@ export const mcpService = {
       tries it against the server before it stores it. */
   setOwnCredential: async (id: string, value: string) =>
     (await api.put<McpServer>(`${SERVERS}/${id}/credential`, { value })).data,
+
+  /** Where the browser goes to sign in to an OAuth server. */
+  startSignIn: async (id: string) =>
+    (
+      await api.post<{ authorization_url: string }>(
+        `${SERVERS}/${id}/oauth/start`
+      )
+    ).data.authorization_url,
+
+  /** What the authorization server sent back to the callback page. */
+  finishSignIn: async (code: string, state: string, iss?: string) =>
+    (
+      await api.post<McpServer>("/api/v1alpha1/mcp/oauth/callback", {
+        code,
+        state,
+        // RFC 9207: which authorization server answered, when it says so.
+        ...(iss ? { iss } : {}),
+      })
+    ).data,
 
   deleteOwnCredential: async (id: string) =>
     (await api.delete<McpServer>(`${SERVERS}/${id}/credential`)).data,

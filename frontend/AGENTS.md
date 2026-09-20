@@ -96,6 +96,10 @@ pnpm e2e:ui                               # Playwright UI mode
   The admin's floor is `McpServer.approval` (`never`, `writes`, `always`; `ApprovalField.tsx` in the Edit tools dialog): `resolveMcp` reads `/v1alpha1/mcp/servers` from the backend with the caller's headers (never from the browser's request)
   and `needsApproval(toolName)` finds the server by `tool_prefix`; `writes` asks for every tool that does not say `read_only: true`; a tool of no known server, or a policy that cannot be read, asks. The member's switch can only add to it.
   The Tools section says "asks first" or "asks before changes" next to such a server, and a denied call reads "not approved".
+  Functions typed in the playground are a second tool source (`{ type: "function", name, description, parameters }`, `usePlaygroundFunctions.ts`, `FunctionDialog.tsx`, the "Functions" group of the Tools section; kept per user in the browser):
+  the route gives the model a tool with no executor, the loop stops at the call, and `ToolCallBlock` (`data-state="yours"`, "waiting for your result") takes the result the user types, as a result or as an error (`addToolOutput`).
+  The conversation then goes back by itself, but only when the last step calls a typed function (`lastStepCallsATypedFunction`): for every finished tool step it would restart a loop the route cut at its step limit.
+  A function name has no `-`, so it can never be the name of a platform tool (`<alias>-<tool>`); `e2e/fast/chat-functions.spec.ts`.
   The approver is the user whose session sends the request, so the approval is not signed (`experimental_toolApprovalSecret` is for a server that must not trust its client).
   An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.
   `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),
@@ -153,6 +157,14 @@ pnpm e2e:ui                               # Playwright UI mode
   A server where each member brings their own credential (`credential_mode: "per_user"`, the "Each member brings their own" choice of the add dialog, with "Where to get a credential"):
   `ConnectCredentialDialog.tsx` ("Connect <name>", "Test and save"; a refusal shows inline, the value is never shown again) opens from the row menu
   ("Connect my credential", "Replace my credential", "Disconnect my credential") and from the Tools section of Chat, where such a server reads "needs your credential" with a `Connect <name>` button and turns on once connected.
+  Scopes: the add dialog's "Who can use it" lists what the user may add (`addScopes` on the page: an admin the organization first, every non-viewer "Only me", a platform admin the platform), a member sees no choice and the note "Only you can use this server";
+  a row shows "only me" or "platform", and its menu follows `server.can_change`, not the role. The MCP dialogs scroll inside the viewport (`max-h-[90vh] overflow-y-auto`): the add form grew past 720 px and its button could not be reached.
+  OAuth sign-in: the add dialog's fourth Authentication choice, "OAuth: each member signs in" (optional client id, client secret and scopes), has no "Test connection" and no step 2, because nobody has a token yet; its button is "Add server".
+  Such a server (`server.oauth`) reads "Sign in" / "Sign in again" / "Sign out of this server" in the row menu and "needs your sign-in" in Chat; `ConnectCredentialDialog` then shows "Sign in to <name>",
+  which asks the backend for the authorization URL, keeps the current path in `sessionStorage` (`OAUTH_RETURN_KEY`) and leaves the page.
+  The dialog names the host the member signs in at (`server.sign_in_host`). For a personal server the add dialog offers no credential mode: the credential is the owner's own.
+  `/mcp-servers/oauth/callback` (`app/mcp-servers/oauth/callback/page.tsx`) is the redirect URI (it passes `iss` on when the authorization server sent it, and resolves the kept path against its own origin): a page, so a lost session goes through the login and comes back; it posts `code` and `state` once (a ref guards strict mode, a code is good once),
+  returns to the kept path (same-origin paths only) with `?connected=<name>`, which the MCP page and the chat page turn into a toast and remove (Chat also turns the server on); an OAuth server has no "Change credential"; and shows a refusal as text in a `role="alert"`. `e2e/fast/mcp-oauth.spec.ts` makes the whole round trip against the mock.
   A `Link` inside a `DropdownMenuItem asChild` needs `prefetch={false}`, as in `UserMenu.tsx`.
   The nav label is "MCP", short on purpose: one more long label wraps the header to a second line at 1280 px, and the chat page's bounded height (`100vh-18rem`) counts on one line.
   The page object's `openActions` waits until the previous menu has left the DOM: a click on the trigger while a menu animates out opens one that closes at once.

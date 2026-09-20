@@ -24,11 +24,15 @@ patches them here for both.
 (``utils/mcp_mock.py``) for the Playwright fast tier.
 """
 
+import time
 import uuid
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -36,26 +40,25 @@ from api.chat import chat_mock_enabled
 from auth.current_user import (
     CurrentUser,
     get_current_user,
-    require_admin,
     require_writer,
 )
-from auth.policy import authorize_read, org_scope
-from auth.roles import ROLE_ADMIN
 from db.database import get_db
 from logger import setup_logger
-from models.mcp_server import McpServer
+from models.mcp_server import McpOAuthState, McpServer
 from models.organization import Organization
 from schemas.mcp import (
     McpCredentialInput,
     McpDiscoverRequest,
+    McpOAuthCallbackRequest,
     McpOwnCredentialRequest,
     McpServerCreateRequest,
     McpServerSchema,
     McpServerUpdateRequest,
     McpToolSchema,
 )
-from utils import genid
+from utils import genid, mcp_oauth
 from utils import mcp_credentials as creds
+from utils import mcp_scope as scopes
 from utils.litellm import LiteLLMError, ensure_org_key
 from utils.litellm import get_client as get_litellm_client
 from utils.mcp import (
@@ -67,7 +70,12 @@ from utils.mcp import (
     valid_name,
     validate_server_url,
 )
-from utils.mcp_mock import MOCK_LITELLM_SERVER_ID, MOCK_TOOLS
+from utils.mcp_mock import (
+    MOCK_LITELLM_SERVER_ID,
+    MOCK_OAUTH_CODE,
+    MOCK_TOOLS,
+    mock_oauth_metadata,
+)
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -106,9 +114,28 @@ def org_key(db: Session, user: CurrentUser) -> str:
 
 def _find(db: Session, id: uuid.UUID, user: CurrentUser) -> McpServer:
     server = db.query(McpServer).filter(McpServer.id == id).first()
-    if server is None:
+    # Not visible reads like not there: a member learns nothing about
+    # another member's personal server or another organization's.
+    if server is None or not scopes.can_see(user, server):
         raise HTTPException(status_code=404, detail="MCP server not found")
-    authorize_read(user, server, "MCP server")
+    return server
+
+
+def _find_to_change(
+    db: Session, id: uuid.UUID, user: CurrentUser
+) -> McpServer:
+    server = _find(db, id, user)
+    if not scopes.can_change(user, server):
+        raise HTTPException(
+            status_code=403,
+            detail="Only "
+            + {
+                scopes.SCOPE_PLATFORM: "a platform admin",
+                scopes.SCOPE_PERSONAL: "its owner",
+                scopes.SCOPE_ORGANIZATION: "an organization admin",
+            }[scopes.scope_of(server)]
+            + " can change this MCP server",
+        )
     return server
 
 
@@ -132,10 +159,16 @@ def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
         credential_mode=server.credential_mode,
         my_credential=creds.state(server, user),
         credential_set_at=_aware(shared.updated_at)
-        if shared is not None and user.role == ROLE_ADMIN
+        if shared is not None and scopes.can_change(user, server)
         else None,
         credential_header=_user_header(server),
         credential_help_url=server.credential_help_url,
+        oauth=creds.is_oauth(server),
+        sign_in_host=urlsplit(
+            (server.oauth or {}).get("authorization_endpoint", "")
+        ).hostname
+        if creds.is_oauth(server)
+        else None,
         allowed_tools=server.allowed_tools,
         approval=server.approval,
         enabled=server.enabled,
@@ -143,11 +176,13 @@ def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
         checked_at=_aware(server.checked_at),
         tools=[McpToolSchema(**t) for t in server.tools_cache or []],
         tool_prefix=litellm_alias(server.id, server.name) + TOOL_SEPARATOR,
+        scope=scopes.scope_of(server),
+        can_change=scopes.can_change(user, server),
     )
 
 
 def _user_header(server: McpServer) -> str | None:
-    if server.credential_mode != creds.MODE_PER_USER:
+    if server.credential_mode != creds.MODE_PER_USER or creds.is_oauth(server):
         return None
     if server.user_auth_type == creds.AUTH_HEADER:
         return server.user_auth_header
@@ -173,6 +208,78 @@ def _requested_mode(
             "one, or your own for a server where each member brings theirs",
         )
     return mode
+
+
+def _owners_mode() -> str:
+    """A personal server never has a shared credential. The proxy keeps
+    a shared one as ``static_headers``, and the server is in the
+    organization's team (the relay calls with the organization's key),
+    so any key of that team would call with the owner's value. As the
+    owner's own it travels with their calls only and the proxy never
+    holds it."""
+    return creds.MODE_PER_USER
+
+
+@dataclass(frozen=True)
+class _OAuthSetup:
+    # What the row keeps (no secret), and the client secret apart.
+    public: dict
+    client_secret: str | None
+
+
+def _oauth_setup(url: str, given) -> _OAuthSetup:
+    """Discovery and, when the authorization server offers it, client
+    registration; else the client the admin made there. 400 with the
+    reason when the server cannot be signed in to."""
+    if chat_mock_enabled():
+        return _OAuthSetup(mock_oauth_metadata(), None)
+    try:
+        mcp_oauth.redirect_uri()
+        metadata = mcp_oauth.discover(url, allow_hosts=given.allow_hosts)
+        if given.client_id:
+            client_id, client_secret = given.client_id, given.client_secret
+        else:
+            client_id, client_secret = mcp_oauth.register_client(metadata)
+    except mcp_oauth.OAuthError as e:
+        raise HTTPException(status_code=400, detail=e.detail) from e
+    return _OAuthSetup(
+        {
+            "issuer": metadata["issuer"],
+            "authorization_endpoint": metadata["authorization_endpoint"],
+            "token_endpoint": metadata["token_endpoint"],
+            "client_id": client_id,
+            "scopes": given.scopes or [],
+            "iss_required": metadata["iss_required"],
+            "token_auth": mcp_oauth.TOKEN_AUTH_POST
+            if client_secret
+            else mcp_oauth.TOKEN_AUTH_NONE,
+        },
+        client_secret,
+    )
+
+
+def _name_taken(db: Session, user: CurrentUser, name: str, scope: str) -> bool:
+    """A name selects a server on the endpoint (``X-Mcp-Servers``). A
+    personal server's name is free among everything its owner sees. An
+    organization's or the platform's is free among the shared servers
+    only: a member's personal server neither blocks the name for an
+    admin nor shows them that it exists, and where both are visible the
+    member's own wins (``scopes.by_name``). The partial unique indexes
+    of the table say the same."""
+    if scope == scopes.SCOPE_PERSONAL:
+        among = scopes.visible(user)
+    else:
+        among = or_(
+            McpServer.org_id.is_(None),
+            and_(
+                McpServer.org_id == user.org_id,
+                McpServer.owner_id.is_(None),
+            ),
+        )
+    return (
+        db.query(McpServer.id).filter(among, McpServer.name == name).first()
+        is not None
+    )
 
 
 def _validated_url(url: str) -> str:
@@ -215,6 +322,7 @@ def _litellm_server(
     credential: McpCredentialInput | None,
     allowed_tools: list[str] | None,
     description: str | None = None,
+    all_keys: bool = False,
 ) -> dict:
     """The proxy's ``NewMCPServerRequest``. ``transport`` is always
     sent: the proxy's default is ``sse``. The credential goes as static
@@ -227,6 +335,11 @@ def _litellm_server(
         "description": description,
         "allowed_tools": allowed_tools or [],
         "static_headers": {},
+        # A platform server is for every organization's key (measured:
+        # a team with no permission for it lists its tools). The relay
+        # still names the servers of each request, so an organization
+        # reaches only what it may see.
+        "allow_all_keys": all_keys,
     }
     if credential is not None:
         body["static_headers"] = creds.credential_headers(
@@ -236,12 +349,18 @@ def _litellm_server(
 
 
 def _own_credential(
-    server: McpServer, user: CurrentUser
+    server: McpServer, user: CurrentUser, db: Session | None = None
 ) -> McpCredentialInput | None:
     """The caller's own credential on a per_user server, for a
     connection test on their behalf; None when they have none."""
     row = creds.user_credential(server, user.id)
-    value = creds.read_value(row) if row is not None else None
+    if row is None:
+        return None
+    if creds.is_oauth(server):
+        # With the session, a sign-in that has ended also loses its row.
+        value = creds.oauth_access_token(db, server, row)
+    else:
+        value = creds.read_value(row)
     if value is None:
         return None
     return McpCredentialInput(
@@ -301,7 +420,7 @@ def _sync_team(
     ids = [
         s.litellm_server_id
         for s in db.query(McpServer)
-        .filter(org_scope(McpServer, user), McpServer.enabled.is_(True))
+        .filter(McpServer.org_id == user.org_id, McpServer.enabled.is_(True))
         .all()
         if s.litellm_server_id
         and s.litellm_server_id != MOCK_LITELLM_SERVER_ID
@@ -314,7 +433,7 @@ def _sync_team(
 )
 def discover(
     body: McpDiscoverRequest,
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_writer),
 ):
     """The preflight of the "Add MCP server" dialog, before a row
     exists: connect once and list the tools."""
@@ -335,7 +454,7 @@ async def list_servers(
 ):
     servers = (
         db.query(McpServer)
-        .filter(org_scope(McpServer, user))
+        .filter(scopes.visible(user))
         .order_by(McpServer.name)
         .all()
     )
@@ -348,7 +467,7 @@ async def list_servers(
 def create_server(
     body: McpServerCreateRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_writer),
 ):
     if not valid_name(body.name):
         raise HTTPException(
@@ -359,7 +478,32 @@ def create_server(
     _validate_transport(body.transport)
     _validate_credential(body.credential)
     url = _validated_url(body.url)
-    mode = _requested_mode(body.credential_mode, body.credential)
+    if not scopes.can_create(user, body.scope):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                scopes.SCOPE_PLATFORM: "Only a platform admin adds a server "
+                "for every organization",
+                scopes.SCOPE_ORGANIZATION: "Only an organization admin adds a "
+                "server for the organization; add one for yourself",
+            }.get(body.scope, "You cannot add MCP servers"),
+        )
+    if _name_taken(db, user, body.name, body.scope):
+        raise HTTPException(
+            status_code=409, detail=f"MCP server '{body.name}' already exists"
+        )
+    by_sign_in = body.oauth is not None
+    if by_sign_in:
+        # Each member signs in: a per_user server whose values arrive
+        # by OAuth. Nobody has a token yet, so there is no connection
+        # test and no tool list until the first member has signed in.
+        mode = creds.MODE_PER_USER
+        oauth = _oauth_setup(url, body.oauth)
+    else:
+        mode = _requested_mode(body.credential_mode, body.credential)
+        oauth = None
+    if body.scope == scopes.SCOPE_PERSONAL and mode == creds.MODE_SHARED:
+        mode = _owners_mode()
     per_user = mode == creds.MODE_PER_USER
     litellm = _require_litellm()
     try:
@@ -369,15 +513,21 @@ def create_server(
 
     server = McpServer(
         id=genid.uuid4(),
-        org_id=user.org_id,
+        org_id=None if body.scope == scopes.SCOPE_PLATFORM else user.org_id,
+        owner_id=user.id if body.scope == scopes.SCOPE_PERSONAL else None,
         name=body.name,
         description=body.description,
         source="remote",
         url=url,
         transport=body.transport,
         credential_mode=mode,
-        user_auth_type=body.credential.auth_type if per_user else None,
-        user_auth_header=body.credential.auth_header if per_user else None,
+        user_auth_type=creds.AUTH_OAUTH
+        if by_sign_in
+        else (body.credential.auth_type if per_user else None),
+        user_auth_header=body.credential.auth_header
+        if per_user and not by_sign_in
+        else None,
+        oauth=oauth.public if oauth else None,
         credential_help_url=body.credential_help_url,
         allowed_tools=body.allowed_tools,
         approval=body.approval,
@@ -392,7 +542,10 @@ def create_server(
             status_code=409, detail=f"MCP server '{body.name}' already exists"
         ) from None
 
-    if per_user:
+    if by_sign_in:
+        if oauth.client_secret:
+            creds.store_oauth_client_secret(server, oauth.client_secret)
+    elif per_user:
         # The admin's own, which the connection test below uses; the
         # proxy is registered without any, and gets each caller's value
         # with the call.
@@ -410,8 +563,10 @@ def create_server(
     alias = litellm_alias(server.id, server.name)
     registered: str | None = None
     try:
-        server.tools_cache = _discover(
-            litellm, url, body.transport, body.credential
+        server.tools_cache = (
+            []
+            if by_sign_in
+            else _discover(litellm, url, body.transport, body.credential)
         )
         if litellm is None:
             server.litellm_server_id = MOCK_LITELLM_SERVER_ID
@@ -424,6 +579,7 @@ def create_server(
                     registered_credential,
                     body.allowed_tools,
                     body.description,
+                    all_keys=body.scope == scopes.SCOPE_PLATFORM,
                 ),
             )
             server.litellm_server_id = registered
@@ -457,6 +613,12 @@ def _target_mode(server: McpServer, body: McpServerUpdateRequest) -> str:
             detail="credential_mode must be one of "
             + ", ".join(creds.CREDENTIAL_MODES),
         )
+    personal = server.owner_id is not None
+    if personal and (
+        mode == creds.MODE_SHARED
+        or (mode is None and body.credential is not None)
+    ):
+        mode = _owners_mode()
     if mode is None:
         if body.remove_credential:
             mode = creds.MODE_NONE
@@ -464,7 +626,7 @@ def _target_mode(server: McpServer, body: McpServerUpdateRequest) -> str:
             return current
         else:
             mode = creds.MODE_SHARED
-        if current == creds.MODE_PER_USER:
+        if current == creds.MODE_PER_USER and not personal:
             raise HTTPException(
                 status_code=400,
                 detail="Each member has their own credential on this "
@@ -482,6 +644,7 @@ def _target_mode(server: McpServer, body: McpServerUpdateRequest) -> str:
         )
     if (
         mode == current == creds.MODE_PER_USER
+        and not personal  # the owner's is the only one there is
         and body.credential is not None
         and (
             body.credential.auth_type != server.user_auth_type
@@ -538,11 +701,25 @@ def update_server(
     id: uuid.UUID,
     body: McpServerUpdateRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_writer),
 ):
-    server = _find(db, id, user)
+    server = _find_to_change(db, id, user)
     litellm = _require_litellm()
     _validate_credential(body.credential)
+    if creds.is_oauth(server) and (
+        body.credential is not None
+        or body.credential_mode is not None
+        or body.remove_credential
+        or (body.url is not None and body.url != server.url)
+    ):
+        # The client, the endpoints and every member's tokens belong to
+        # this URL and this kind of sign-in; a half-changed row would
+        # keep them and mean something else.
+        raise HTTPException(
+            status_code=409,
+            detail="Members sign in to this server with OAuth, so its URL "
+            "and credential cannot change. Delete it and add it again",
+        )
     try:
         team_id = _team_id(litellm, db, user)
     except LiteLLMError as e:
@@ -590,6 +767,7 @@ def update_server(
                     registered,
                     server.allowed_tools,
                     server.description,
+                    all_keys=server.org_id is None,
                 ),
             )
         db.flush()
@@ -609,27 +787,167 @@ def update_server(
 def refresh_server(
     id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_writer),
 ):
     """Connect again and replace the tool list. A failure keeps the
     last known list and marks the server unreachable; it is an answer,
     not an error."""
-    server = _find(db, id, user)
+    server = _find_to_change(db, id, user)
     litellm = _require_litellm()
+    if server.credential_mode == creds.MODE_PER_USER:
+        credential = _own_credential(server, user, db)
+        if credential is None:
+            # A check with no credential fails, and "unreachable" would
+            # take the server away from every member who has one.
+            raise HTTPException(
+                status_code=409,
+                detail="Sign in to this server first"
+                if creds.is_oauth(server)
+                else "Connect your own credential to this server first",
+            )
+    else:
+        credential = _stored_credential(server)
     try:
         server.tools_cache = _discover(
             litellm,
             server.url,
             server.transport,
-            _own_credential(server, user)
-            if server.credential_mode == creds.MODE_PER_USER
-            else _stored_credential(server),
+            credential,
         )
         server.status = STATUS_CONNECTED
     except LiteLLMError as e:
         logger.info("MCP server %s is unreachable: %s", server.name, e)
         server.status = STATUS_UNREACHABLE
     server.checked_at = datetime.now()
+    db.commit()
+    db.refresh(server)
+    return _response(server, user)
+
+
+def _require_person(user: CurrentUser) -> None:
+    """A sign-in belongs to a person in a browser: not to a personal
+    token, not to a service account."""
+    if not user.is_browser_session:
+        raise HTTPException(
+            status_code=409, detail="Sign in through the platform's UI"
+        )
+
+
+@router.post("/v1alpha1/mcp/servers/{id}/oauth/start")
+def oauth_start(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
+):
+    """Where the member's browser goes to sign in. The ``state`` that
+    comes back is kept hashed, with the PKCE verifier, for this member
+    and this server, for ten minutes and one use."""
+    _require_person(user)
+    server = _find(db, id, user)
+    if not creds.is_oauth(server) or not server.oauth:
+        raise HTTPException(
+            status_code=409, detail="Nobody signs in to this server"
+        )
+    state, state_hash = mcp_oauth.new_state()
+    verifier = mcp_oauth.new_verifier()
+    db.query(McpOAuthState).filter(
+        McpOAuthState.created_at
+        < datetime.now() - timedelta(seconds=mcp_oauth.STATE_TTL_SECONDS)
+    ).delete()
+    db.add(
+        McpOAuthState(
+            state_hash=state_hash,
+            server_id=server.id,
+            user_id=user.id,
+            code_verifier=verifier,
+        )
+    )
+    db.commit()
+    try:
+        if chat_mock_enabled():
+            url = (
+                f"{mcp_oauth.redirect_uri()}?code={MOCK_OAUTH_CODE}"
+                f"&state={state}"
+            )
+        else:
+            url = mcp_oauth.authorization_url(
+                server.oauth, server.url, state, verifier
+            )
+    except mcp_oauth.OAuthError as e:
+        raise HTTPException(status_code=400, detail=e.detail) from e
+    return {"authorization_url": url}
+
+
+@router.post("/v1alpha1/mcp/oauth/callback", response_model=McpServerSchema)
+def oauth_callback(
+    body: McpOAuthCallbackRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_writer),
+):
+    """The UI's callback page posts what the authorization server sent
+    back. The state must be one this member started, unused and not
+    older than ten minutes; then the code becomes the member's tokens."""
+    _require_person(user)
+    started = db.get(McpOAuthState, mcp_oauth.hash_state(body.state))
+    # One answer for unknown, used, expired and somebody else's: a
+    # caller learns nothing about the states of other members.
+    refused = HTTPException(
+        status_code=400,
+        detail="This sign-in has expired or was not started here; start again",
+    )
+    if started is None:
+        raise refused
+    expired = datetime.now() - started.created_at > timedelta(
+        seconds=mcp_oauth.STATE_TTL_SECONDS
+    )
+    mine = started.user_id == user.id
+    verifier, server_id = started.code_verifier, started.server_id
+    if mine:
+        db.delete(started)  # single use, whatever happens next
+        db.commit()
+    if not mine or expired:
+        raise refused
+    server = _find(db, server_id, user)
+    if not creds.is_oauth(server):
+        raise refused
+    try:
+        if chat_mock_enabled():
+            if body.code != MOCK_OAUTH_CODE:
+                raise mcp_oauth.OAuthError(
+                    "The mock accepts its own code only"
+                )
+            tokens = mcp_oauth.Tokens(
+                "mock-access-token", "mock-refresh-token", time.time() + 3600
+            )
+        else:
+            mcp_oauth.check_issuer(server.oauth or {}, body.iss)
+            tokens = mcp_oauth.exchange_code(
+                server.oauth,
+                creds.read_oauth_client_secret(server),
+                server.url,
+                body.code,
+                verifier,
+            )
+    except mcp_oauth.OAuthError as e:
+        raise HTTPException(status_code=400, detail=e.detail) from e
+    creds.store_oauth_tokens(db, server, user.id, tokens)
+    # The first member in lists the tools: nobody could before.
+    if not server.tools_cache:
+        try:
+            server.tools_cache = _discover(
+                None if chat_mock_enabled() else litellm_client(),
+                server.url,
+                server.transport,
+                McpCredentialInput(
+                    auth_type=creds.AUTH_BEARER, value=tokens.access_token
+                ),
+            )
+            server.status = STATUS_CONNECTED
+            server.checked_at = datetime.now()
+        except LiteLLMError as e:
+            logger.info(
+                "Could not list the tools of %s yet: %s", server.name, e
+            )
     db.commit()
     db.refresh(server)
     return _response(server, user)
@@ -653,6 +971,11 @@ def set_own_credential(
         raise HTTPException(
             status_code=409,
             detail="This server does not take a credential of your own",
+        )
+    if creds.is_oauth(server):
+        raise HTTPException(
+            status_code=409,
+            detail="This server takes no pasted credential: sign in to it",
         )
     litellm = _require_litellm()
     attempt = McpCredentialInput(
@@ -692,13 +1015,13 @@ def delete_own_credential(
 def delete_server(
     id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(require_writer),
 ):
     """The proxy first: it holds a copy of a shared credential, and once
     the row is gone nothing would ever retry. When it refuses, the
     delete fails (502) and everything stays. Without a configured proxy
     there is no copy, and the Secrets and the row go."""
-    server = _find(db, id, user)
+    server = _find_to_change(db, id, user)
     litellm = None if chat_mock_enabled() else litellm_client()
     registered = server.litellm_server_id
     if litellm is not None and registered:

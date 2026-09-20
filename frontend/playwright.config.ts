@@ -118,6 +118,8 @@ export default defineConfig<E2EOptions>({
             KUBECONFIG: NO_KUBECONFIG,
             AIOPS_CHAT_MOCK: "true",
             AIOPS_SECRET_STORE: "memory",
+            // Where a mock OAuth sign-in sends the browser back to.
+            AIOPS_UI_URL: managedFrontendURL,
           },
           // A fresh SQLite per run is the point of TEST_MODE; never reuse.
           reuseExistingServer: false,

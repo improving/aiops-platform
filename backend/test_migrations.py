@@ -158,7 +158,7 @@ def test_upgrade_fresh_database(tmp_path):
     )
     assert current_revision(engine) == head_revision()
     # A mis-numbered file would still satisfy the dynamic check above.
-    assert head_revision() == "0011"
+    assert head_revision() == "0014"
     assert {"organizations", "users", "memberships"} <= table_names(engine)
     assert "model_serving_options" in table_names(engine)
     assert "reference" in column_names(engine, "inference_instances")
@@ -263,7 +263,7 @@ def test_registry_migration_seeds_serving_options_from_category_and_model_id(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0011"
+    assert current_revision(engine) == head_revision() == "0014"
     with engine.connect() as conn:
         rows = conn.execute(
             sa.select(
@@ -368,7 +368,7 @@ def test_enterprise_migration_adds_tables_and_columns_and_downgrades(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0011"
+    assert current_revision(engine) == head_revision() == "0014"
     assert set(ENTERPRISE_TABLES) <= table_names(engine)
     assert column_names(engine, "invitations") == {
         "id",
@@ -457,7 +457,7 @@ def test_mcp_migration_matches_the_models_and_downgrades(tmp_path):
     both."""
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'mcp.db'}")
     upgrade_to_head(engine)
-    for table in ("mcp_servers", "mcp_credentials"):
+    for table in ("mcp_servers", "mcp_credentials", "mcp_oauth_states"):
         declared = set(Base.metadata.tables[table].columns.keys())
         assert column_names(engine, table) == declared, table
     assert {
@@ -468,4 +468,8 @@ def test_mcp_migration_matches_the_models_and_downgrades(tmp_path):
     with engine.begin() as conn:
         command.downgrade(alembic_config(conn), "0008")
     assert current_revision(engine) == "0008"
-    assert not {"mcp_servers", "mcp_credentials"} & table_names(engine)
+    assert not {
+        "mcp_servers",
+        "mcp_credentials",
+        "mcp_oauth_states",
+    } & table_names(engine)

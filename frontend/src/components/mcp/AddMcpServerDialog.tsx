@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { mcpService } from "@/services/mcpService";
-import type { McpServer, McpTool, McpTransport } from "@/types/mcp";
+import type { McpScope, McpServer, McpTool, McpTransport } from "@/types/mcp";
 import {
   CredentialFields,
   OWN_HINT,
@@ -33,13 +33,23 @@ interface AddMcpServerDialogProps {
   onCreated: (server: McpServer) => void;
   /** Prefills the connection step from a "Try one" link (W1). */
   initial?: { name: string; url: string };
+  /** What this user may add, the default first: an admin
+      ["organization", "personal", ...], a member ["personal"]. */
+  scopes: McpScope[];
 }
+
+const SCOPE_LABEL: Record<McpScope, string> = {
+  organization: "Every member of this organization",
+  personal: "Only me",
+  platform: "Every organization of the platform",
+};
 
 export function AddMcpServerDialog({
   open,
   onOpenChange,
   onCreated,
   initial,
+  scopes,
 }: AddMcpServerDialogProps) {
   const { toast } = useToast();
   const [step, setStep] = useState<1 | 2>(1);
@@ -51,8 +61,14 @@ export function AddMcpServerDialog({
   const [token, setToken] = useState("");
   const [headerName, setHeaderName] = useState("");
   const [headerValue, setHeaderValue] = useState("");
+  const [scope, setScope] = useState<McpScope>(scopes[0] ?? "personal");
   const [perUser, setPerUser] = useState(false);
   const [helpUrl, setHelpUrl] = useState("");
+  // OAuth: each member signs in. Empty is enough when the server's
+  // authorization server registers clients by itself.
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [oauthScopes, setOauthScopes] = useState("");
   const [tools, setTools] = useState<McpTool[]>([]);
   const [allowAll, setAllowAll] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -63,6 +79,9 @@ export function AddMcpServerDialog({
   // A new "Try one" link re-fills the form while the dialog is already
   // mounted (it is rendered once by the page, not per link).
   useEffect(() => {
+    // What the user may add is known once the organization has loaded,
+    // which can be after the first render: take the default on open.
+    if (open) setScope(scopes[0] ?? "personal");
     if (open && initial) {
       setName(initial.name);
       setUrl(initial.url);
@@ -83,7 +102,11 @@ export function AddMcpServerDialog({
     setHeaderName("");
     setHeaderValue("");
     setPerUser(false);
+    setScope(scopes[0] ?? "personal");
     setHelpUrl("");
+    setClientId("");
+    setClientSecret("");
+    setOauthScopes("");
     setTools([]);
     setAllowAll(true);
     setSelected(new Set());
@@ -95,7 +118,8 @@ export function AddMcpServerDialog({
     onOpenChange(next);
   };
 
-  const ownCredentials = authType !== "none" && perUser;
+  const bySignIn = authType === "oauth";
+  const ownCredentials = authType !== "none" && !bySignIn && perUser;
   const nameValid = NAME_RE.test(name);
   const credentialComplete =
     authType !== "bearer" && authType !== "header"
@@ -149,13 +173,21 @@ export function AddMcpServerDialog({
         url: url.trim(),
         transport,
         description: description.trim() || undefined,
-        credential: credentialFromFields(
-          authType,
-          token,
-          headerName,
-          headerValue
-        ),
-        allowed_tools: allowAll ? null : Array.from(selected),
+        credential: bySignIn
+          ? undefined
+          : credentialFromFields(authType, token, headerName, headerValue),
+        // Nobody has a token yet, so there was no tool list to pick from.
+        allowed_tools: bySignIn || allowAll ? null : Array.from(selected),
+        scope,
+        ...(bySignIn
+          ? {
+              oauth: {
+                client_id: clientId.trim() || undefined,
+                client_secret: clientSecret.trim() || undefined,
+                scopes: oauthScopes.split(/[\s,]+/).filter(Boolean),
+              },
+            }
+          : {}),
         ...(ownCredentials
           ? {
               credential_mode: "per_user" as const,
@@ -179,7 +211,7 @@ export function AddMcpServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add MCP server</DialogTitle>
           <DialogDescription>
@@ -248,6 +280,32 @@ export function AddMcpServerDialog({
               </div>
             </fieldset>
 
+            {scopes.length > 1 && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">Who can use it</legend>
+                {scopes.map((value) => (
+                  <div key={value} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      id={`mcp-add-scope-${value}`}
+                      name="mcp-add-scope"
+                      checked={scope === value}
+                      onChange={() => setScope(value)}
+                    />
+                    <Label htmlFor={`mcp-add-scope-${value}`}>
+                      {SCOPE_LABEL[value]}
+                    </Label>
+                  </div>
+                ))}
+              </fieldset>
+            )}
+            {scopes.length === 1 && scope === "personal" && (
+              <p className="text-xs text-muted-foreground">
+                Only you can use this server. An organization admin adds servers
+                for everyone.
+              </p>
+            )}
+
             <CredentialFields
               idPrefix="mcp-add"
               hint={perUser ? OWN_HINT : undefined}
@@ -259,8 +317,58 @@ export function AddMcpServerDialog({
               onHeaderNameChange={setHeaderName}
               headerValue={headerValue}
               onHeaderValueChange={setHeaderValue}
+              extraOptions={[
+                { value: "oauth", label: "OAuth: each member signs in" },
+              ]}
             />
-            {authType !== "none" && (
+            {bySignIn && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Each member signs in at the server and the platform keeps
+                  their token. There is no connection test now: the tools are
+                  listed when the first member has signed in. Leave the client
+                  empty when the server registers clients by itself; else create
+                  an OAuth application there.
+                </p>
+                <div className="space-y-1">
+                  <Label htmlFor="mcp-add-client-id">
+                    Client ID (optional)
+                  </Label>
+                  <Input
+                    id="mcp-add-client-id"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="mcp-add-client-secret">
+                    Client secret (optional)
+                  </Label>
+                  <Input
+                    id="mcp-add-client-secret"
+                    type="password"
+                    autoComplete="off"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="mcp-add-scopes">Scopes (optional)</Label>
+                  <Input
+                    id="mcp-add-scopes"
+                    value={oauthScopes}
+                    onChange={(e) => setOauthScopes(e.target.value)}
+                    placeholder="read write"
+                  />
+                </div>
+              </div>
+            )}
+            {authType !== "none" && !bySignIn && scope === "personal" && (
+              <p className="text-xs text-muted-foreground">
+                The credential is your own: only your requests carry it.
+              </p>
+            )}
+            {authType !== "none" && !bySignIn && scope !== "personal" && (
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">Credential</legend>
                 <div className="flex items-center gap-2">
@@ -331,11 +439,13 @@ export function AddMcpServerDialog({
               onToggle={toggleTool}
             />
             <p className="text-xs text-muted-foreground">
-              {ownCredentials
-                ? "Each member's models call these tools with that member's own credential."
-                : authType === "none"
-                  ? "Members' models call these tools; the server asks for no credential."
-                  : "Members' models call these tools with the shared credential above."}
+              {scope === "personal"
+                ? "Your models call these tools; nobody else sees this server."
+                : ownCredentials
+                  ? "Each member's models call these tools with that member's own credential."
+                  : authType === "none"
+                    ? "Members' models call these tools; the server asks for no credential."
+                    : "Members' models call these tools with the shared credential above."}
             </p>
             {error && (
               <p role="alert" className="text-sm text-destructive">
@@ -355,14 +465,25 @@ export function AddMcpServerDialog({
               >
                 Cancel
               </Button>
-              <Button
-                type="button"
-                onClick={handleTest}
-                disabled={!canTest}
-                loading={testing}
-              >
-                Test connection
-              </Button>
+              {bySignIn ? (
+                <Button
+                  type="button"
+                  onClick={handleAdd}
+                  disabled={!nameValid || url.trim() === "" || saving}
+                  loading={saving}
+                >
+                  Add server
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleTest}
+                  disabled={!canTest}
+                  loading={testing}
+                >
+                  Test connection
+                </Button>
+              )}
             </>
           ) : (
             <>

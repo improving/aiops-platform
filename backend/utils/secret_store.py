@@ -23,6 +23,12 @@ class SecretStore(Protocol):
 
     def read(self, namespace: str, name: str, key: str) -> str | None: ...
 
+    def read_all(self, namespace: str, name: str) -> dict[str, str] | None:
+        """Every key of the Secret in one read, or None when it is not
+        there: an OAuth credential is a token, its refresh token and its
+        expiry, which must be read together."""
+        ...
+
     def delete(self, namespace: str, name: str) -> None: ...
 
 
@@ -63,6 +69,23 @@ class KubernetesSecretStore:
         encoded = (secret.data or {}).get(key)
         return b64decode(encoded).decode() if encoded else None
 
+    def read_all(self, namespace: str, name: str) -> dict[str, str] | None:
+        from base64 import b64decode
+
+        from kubernetes.client.exceptions import ApiException
+
+        try:
+            secret = self._client().read_namespaced_secret(
+                name=name, namespace=namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        return {
+            k: b64decode(v).decode() for k, v in (secret.data or {}).items()
+        }
+
     def delete(self, namespace: str, name: str) -> None:
         _delete_secret(self._client(), namespace, name)
 
@@ -75,10 +98,16 @@ class MemorySecretStore:
     """A module-level dict, for the fast tier without a cluster."""
 
     def write(self, namespace: str, name: str, data: dict[str, str]) -> None:
-        _memory.setdefault((namespace, name), {}).update(data)
+        # Replaces, as the Kubernetes store does: a key that is left
+        # out is gone.
+        _memory[(namespace, name)] = dict(data)
 
     def read(self, namespace: str, name: str, key: str) -> str | None:
         return _memory.get((namespace, name), {}).get(key)
+
+    def read_all(self, namespace: str, name: str) -> dict[str, str] | None:
+        data = _memory.get((namespace, name))
+        return dict(data) if data is not None else None
 
     def delete(self, namespace: str, name: str) -> None:
         _memory.pop((namespace, name), None)

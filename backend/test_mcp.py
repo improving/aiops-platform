@@ -31,6 +31,7 @@ TOOLS = [
 ALICE = {"X-Dev-User": "alice"}
 VIEWER = {"X-Dev-User": "viewer"}
 OUTSIDER = {"X-Dev-User": "outsider"}
+BOB = {"X-Dev-User": "bob"}
 
 
 @pytest.fixture(autouse=True)
@@ -329,9 +330,17 @@ def test_writes_are_for_admins_and_reads_for_members(env):
         SERVERS, json={"name": _name(), "url": URL}, headers=ALICE
     )
     assert member.status_code == 403
+    assert "for yourself" in member.json()["detail"]
+    # A member may test a connection: they can add a server of their own.
     assert (
         client.post(
             f"{SERVERS}/discover", json={"url": URL}, headers=ALICE
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"{SERVERS}/discover", json={"url": URL}, headers=VIEWER
         ).status_code
         == 403
     )
@@ -646,10 +655,203 @@ def test_the_endpoint_is_not_audited_but_the_registry_is():
     assert should_record("DELETE", f"/v1alpha1/mcp/servers/{uuid.uuid4()}")
 
 
+# --- scopes: organization, personal, platform --------------------------
+
+
+def _names(client, headers=None):
+    return {s["name"]: s for s in client.get(SERVERS, headers=headers).json()}
+
+
+def test_a_personal_server_is_the_owners_alone(env, monkeypatch):
+    client, litellm = env
+    name = _name()
+    created = _create(client, name=name, scope="personal", headers=None)
+    assert created.status_code == 201
+    mine = client.post(
+        SERVERS,
+        json={"name": _name(), "url": URL, "scope": "personal"},
+        headers=ALICE,
+    )
+    assert mine.status_code == 201, mine.text
+    body = mine.json()
+    assert body["scope"] == "personal" and body["can_change"] is True
+
+    assert body["name"] in _names(client, ALICE)
+    assert body["name"] not in _names(client, BOB)
+    # Not even an admin of the organization sees it.
+    assert body["name"] not in _names(client)
+    url = f"{SERVERS}/{body['id']}"
+    assert client.patch(url, json={"enabled": False}).status_code == 404
+    assert client.delete(url, headers=BOB).status_code == 404
+
+    seen = {}
+
+    def handler(request):
+        seen["servers"] = request.headers["x-mcp-servers"]
+        return httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": 1, "result": {}}
+        )
+
+    monkeypatch.setattr("api.mcp.litellm_client", lambda: _proxy(handler))
+    alias = body["tool_prefix"].rstrip("-")
+    client.post(ENDPOINT, json=RPC, headers=ALICE)
+    assert alias in seen["servers"]
+    client.post(ENDPOINT, json=RPC, headers=BOB)
+    assert alias not in seen["servers"]
+    named = client.post(
+        ENDPOINT, json=RPC, headers={**BOB, "X-Mcp-Servers": body["name"]}
+    )
+    assert named.status_code == 400
+
+    monkeypatch.setattr("api.mcp.litellm_client", lambda: litellm)
+    assert client.delete(url, headers=ALICE).status_code == 204
+    assert (
+        client.post(
+            SERVERS,
+            json={"name": _name(), "url": URL, "scope": "personal"},
+            headers=VIEWER,
+        ).status_code
+        == 403
+    )
+
+
+def test_a_platform_server_is_for_every_organization(env):
+    client, litellm = env
+    name = _name()
+    # alice is no platform admin; dev is.
+    refused = client.post(
+        SERVERS,
+        json={"name": name, "url": URL, "scope": "platform"},
+        headers=ALICE,
+    )
+    assert refused.status_code == 403
+    created = _create(client, name=name, scope="platform")
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["scope"] == "platform"
+    # For every organization's key, and the relay names the servers.
+    assert (
+        litellm.register_mcp_server.call_args.args[0]["allow_all_keys"] is True
+    )
+
+    other = _names(client, OUTSIDER)
+    assert name in other
+    assert other[name]["can_change"] is False
+    assert (
+        client.delete(f"{SERVERS}/{body['id']}", headers=OUTSIDER).status_code
+        == 403
+    )
+    assert client.delete(f"{SERVERS}/{body['id']}").status_code == 204
+
+
+def test_a_name_is_unique_among_what_its_creator_sees(env):
+    client, _ = env
+    name = _name()
+    assert _create(client, name=name).status_code == 201
+    # The organization has it: a member cannot take it for a personal one.
+    taken = client.post(
+        SERVERS,
+        json={"name": name, "url": URL, "scope": "personal"},
+        headers=ALICE,
+    )
+    assert taken.status_code == 409
+    assert _create(client, name=name, scope="platform").status_code == 409
+    assert _create(client, name=name, scope="everyone").status_code == 422
+
+
+def test_a_personal_name_blocks_nobody_and_the_nearer_server_wins(
+    env, monkeypatch
+):
+    client, litellm = env
+    name = _name()
+
+    def personal(headers):
+        return client.post(
+            SERVERS,
+            json={"name": name, "url": URL, "scope": "personal"},
+            headers=headers,
+        )
+
+    own = personal(ALICE)
+    assert own.status_code == 201, own.text
+    # Another member has the same name for theirs, and the admin for the
+    # organization's: nobody is blocked, and nobody learns of alice's.
+    assert personal(BOB).status_code == 201
+    shared = _create(client, name=name)
+    assert shared.status_code == 201, shared.text
+    # A second one of a kind is still refused.
+    assert personal(ALICE).status_code == 409
+    assert _create(client, name=name).status_code == 409
+
+    seen = {}
+
+    def handler(request):
+        seen["servers"] = request.headers["x-mcp-servers"]
+        return httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": 1, "result": {}}
+        )
+
+    monkeypatch.setattr("api.mcp.litellm_client", lambda: _proxy(handler))
+    # The name means alice's own for alice, the organization's for dev.
+    client.post(ENDPOINT, json=RPC, headers={**ALICE, "X-Mcp-Servers": name})
+    assert seen["servers"] == own.json()["tool_prefix"].rstrip("-")
+    client.post(ENDPOINT, json=RPC, headers={"X-Mcp-Servers": name})
+    assert seen["servers"] == shared.json()["tool_prefix"].rstrip("-")
+
+
+def test_a_personal_servers_credential_never_reaches_the_proxy(env):
+    """The server is in the organization's team, so a credential the
+    proxy held would go out with any call of that team's keys."""
+    client, litellm = env
+    created = client.post(
+        SERVERS,
+        json={
+            "name": _name(),
+            "url": URL,
+            "scope": "personal",
+            "credential": {"auth_type": "bearer", "value": "alice-pat"},
+        },
+        headers=ALICE,
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["credential_mode"] == "per_user"
+    assert body["my_credential"] == "set"
+    sent = litellm.register_mcp_server.call_args.args[0]
+    assert sent["static_headers"] == {}
+
+    def kept_by_the_proxy():
+        # A connection test sends the value once; only a registration
+        # or an update makes the proxy keep one.
+        return str(
+            litellm.register_mcp_server.mock_calls
+            + litellm.update_mcp_server.mock_calls
+        )
+
+    assert "alice-pat" not in kept_by_the_proxy()
+
+    url = f"{SERVERS}/{body['id']}"
+    for change in (
+        {
+            "credential": {
+                "auth_type": "header",
+                "auth_header": "X-Key",
+                "value": "v2",
+            }
+        },
+        {
+            "credential_mode": "shared",
+            "credential": {"auth_type": "bearer", "value": "v3"},
+        },
+    ):
+        changed = client.patch(url, json=change, headers=ALICE)
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["credential_mode"] == "per_user"
+    assert "v2" not in kept_by_the_proxy()
+    assert "v3" not in kept_by_the_proxy()
+
+
 # --- a member's own credential (per_user) ------------------------------
-
-
-BOB = {"X-Dev-User": "bob"}
 
 
 def _create_per_user(client, **overrides):
@@ -863,8 +1065,24 @@ def test_remove_member_deletes_their_credentials_last_and_fails_closed(
     assert refused.status_code == 502
     assert "secret store down" not in refused.text
 
+    # Bob also has a server of his own, with a credential: it goes too.
+    own = client.post(
+        SERVERS,
+        json={
+            "name": _name(),
+            "url": URL,
+            "scope": "personal",
+            "credential": {"value": "bob-own"},
+        },
+        headers=BOB,
+    )
+    assert own.status_code == 201, own.text
+    assert len(_secret_names()) == before + 1
+
     assert client.delete(member).status_code == 204
     assert len(_secret_names()) == before - 1
+    # The dev seed puts bob back on the next request; his server is gone.
+    assert own.json()["name"] not in _names(client, BOB)
 
 
 # --- mock mode ---------------------------------------------------------

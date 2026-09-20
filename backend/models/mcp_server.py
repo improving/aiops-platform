@@ -8,7 +8,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -31,8 +30,15 @@ class McpServer(Base):
     id = Column(
         UUID(as_uuid=True), primary_key=True, default=genid.uuid4_gen()
     )
+    # Who can see and use the server (``utils/mcp_scope.py``):
+    # organization = org_id set, owner_id NULL (every member);
+    # personal     = org_id and owner_id set (the owner, in that org);
+    # platform     = org_id NULL (every organization).
     org_id = Column(
-        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
+    )
+    owner_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     # A slug, [a-z0-9_]: with the organization it makes the LiteLLM
     # alias, which prefixes every tool name the model sees.
@@ -49,6 +55,12 @@ class McpServer(Base):
     user_auth_header = Column(String, nullable=True)
     # Where a member gets a credential ("Create a token on GitHub").
     credential_help_url = Column(String, nullable=True)
+    # user_auth_type "oauth": each member signs in. What discovery and
+    # client registration found (``utils/mcp_oauth.py``): issuer,
+    # authorization_endpoint, token_endpoint, client_id, scopes,
+    # token_auth ("none" | "client_secret_post" | "client_secret_basic").
+    # A client secret is in a Secret, never here.
+    oauth = Column(JSON, nullable=True)
     # Tool names the organization allows; NULL allows all, new ones too.
     allowed_tools = Column(JSON, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
@@ -76,8 +88,34 @@ class McpServer(Base):
         cascade="all, delete-orphan",
     )
 
+    # One name for each place a server is shared in (NULLs are distinct
+    # in a plain constraint, and a member's personal server must not
+    # block the name for the organization): see ``api.mcp._name_taken``.
     __table_args__ = (
-        UniqueConstraint("org_id", "name", name="uq_mcp_servers_org_name"),
+        Index(
+            "uq_mcp_servers_org_name",
+            "org_id",
+            "name",
+            unique=True,
+            sqlite_where=text("org_id IS NOT NULL AND owner_id IS NULL"),
+            postgresql_where=text("org_id IS NOT NULL AND owner_id IS NULL"),
+        ),
+        Index(
+            "uq_mcp_servers_owner_name",
+            "org_id",
+            "owner_id",
+            "name",
+            unique=True,
+            sqlite_where=text("owner_id IS NOT NULL"),
+            postgresql_where=text("owner_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_mcp_servers_platform_name",
+            "name",
+            unique=True,
+            sqlite_where=text("org_id IS NULL"),
+            postgresql_where=text("org_id IS NULL"),
+        ),
     )
 
 
@@ -133,3 +171,23 @@ class McpCredential(Base):
             postgresql_where=text("user_id IS NOT NULL"),
         ),
     )
+
+
+class McpOAuthState(Base):
+    """One started sign-in: the ``state`` the authorization server
+    sends back (stored as a hash), bound to the member and the server
+    that started it, with the PKCE verifier. Single use, ten minutes."""
+
+    __tablename__ = "mcp_oauth_states"
+
+    state_hash = Column(String, primary_key=True)
+    server_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("mcp_servers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    code_verifier = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)

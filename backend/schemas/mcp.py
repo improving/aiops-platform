@@ -51,6 +51,10 @@ class McpServerSchema(BaseModel):
     # ("Authorization" for a bearer), and where to get a value.
     credential_header: str | None = None
     credential_help_url: str | None = None
+    # per_user by sign-in (OAuth) and not by a pasted value.
+    oauth: bool = False
+    # The host a member signs in at, so the dialog can say it first.
+    sign_in_host: str | None = None
     allowed_tools: list[str] | None = None
     # never | writes | always: when Chat asks before a tool runs.
     approval: str = "never"
@@ -60,12 +64,38 @@ class McpServerSchema(BaseModel):
     tools: list[McpToolSchema] = []
     # The prefix of this server's tool names as a model sees them.
     tool_prefix: str
+    # organization | personal | platform, and whether the caller may
+    # change the server (an admin, its owner, a platform admin).
+    scope: str = "organization"
+    can_change: bool = False
 
 
 class McpCredentialInput(BaseModel):
     auth_type: str = "bearer"
     auth_header: str | None = None
     value: str = Field(min_length=1)
+
+
+class McpOAuthInput(BaseModel):
+    """Each member signs in (OAuth). Empty is enough when the server's
+    authorization server registers clients by itself; else the client
+    of an OAuth application made there, with the platform's redirect
+    URI."""
+
+    client_id: str | None = None
+    client_secret: str | None = None
+    scopes: list[str] | None = None
+    # Hosts, other than the issuer's, that may carry the authorization
+    # or the token endpoint (an issuer on accounts.example.com with a
+    # token endpoint on oauth2.example.com).
+    allow_hosts: list[str] | None = None
+
+
+class McpOAuthCallbackRequest(BaseModel):
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+    # RFC 9207, when the authorization server sent it.
+    iss: str | None = None
 
 
 class McpDiscoverRequest(BaseModel):
@@ -86,9 +116,23 @@ class McpServerCreateRequest(McpDiscoverRequest):
     credential_mode: str | None = None
     credential_help_url: str | None = None
     approval: str = "never"
+    # Each member signs in with OAuth (then ``credential`` is not used).
+    oauth: McpOAuthInput | None = None
+    # organization (an admin), personal (any writer, for themselves) or
+    # platform (a platform admin, for every organization).
+    scope: str = "organization"
 
     _help_url = field_validator("credential_help_url")(_web_url)
     _approval = field_validator("approval")(_approval_mode)
+
+    @field_validator("scope")
+    @classmethod
+    def _known_scope(cls, value: str) -> str:
+        if value not in ("organization", "personal", "platform"):
+            raise ValueError(
+                "scope must be one of organization, personal, platform"
+            )
+        return value
 
 
 class McpOwnCredentialRequest(BaseModel):

@@ -61,7 +61,10 @@ export function McpServerSheet({
                   <p>No credential</p>
                 ) : server.credential_mode === "per_user" ? (
                   <p>
-                    Each member brings their own credential ·{" "}
+                    {server.oauth
+                      ? "Each member signs in (OAuth)"
+                      : "Each member brings their own credential"}{" "}
+                    ·{" "}
                     {server.my_credential === "set"
                       ? "yours is connected"
                       : "yours is not connected"}

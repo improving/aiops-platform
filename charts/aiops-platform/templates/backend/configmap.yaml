@@ -25,6 +25,10 @@ data:
   AIOPS_PARENT_DOMAIN: {{ .Values.global.parentDomain | quote }}
   AIOPS_GATEWAY_NAME: {{ include "aiops-platform.gatewayName" . | quote }}
   AIOPS_GATEWAY_NAMESPACE: {{ include "aiops-platform.gatewayNamespace" . | quote }}
+  # The UI's public address: an MCP server's OAuth sign-in sends the
+  # browser back to <this>/mcp-servers/oauth/callback. Without it (no
+  # gateway) OAuth servers cannot be added; everything else works.
+  AIOPS_UI_URL: "https://{{ include "aiops-platform.host" (dict "root" . "label" .Values.gateway.hosts.ui) }}"
   {{- end }}
   LITELLM_URL: {{ include "aiops-platform.litellmUrl" . | quote }}
   GRAFANA_URL: {{ .Values.ui.grafanaUrl | quote }}

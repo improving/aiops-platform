@@ -4,11 +4,14 @@ import {
   type ToolUIPart,
 } from "ai";
 import { CodeSnippet } from "@/components/CodeSnippet";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export type ToolPart = ToolUIPart | DynamicToolUIPart;
 
-type ToolState = "asking" | "running" | "done" | "failed";
+type ToolState = "asking" | "yours" | "running" | "done" | "failed";
 
 function toolState(part: ToolPart): ToolState {
   if (part.state === "approval-requested") return "asking";
@@ -68,6 +71,7 @@ export function toolLabel(name: string): { server?: string; tool: string } {
 
 const STATE_LABEL: Record<ToolState, string> = {
   asking: "waiting for your approval",
+  yours: "waiting for your result",
   running: "running…",
   done: "done",
   failed: "failed",
@@ -85,15 +89,21 @@ const STATE_LABEL: Record<ToolState, string> = {
 export function ToolCallBlock({
   part,
   onApproval,
+  onResult,
 }: {
   part: ToolPart;
+  /** The call of a function the user typed: nothing runs it, the user
+      gives the result. Absent for every other tool. */
+  onResult?: (result: { output: string } | { errorText: string }) => void;
   /** Answer a call that waits for the user ("Ask before each call").
       Absent on an older turn: its moment has passed. */
   onApproval?: (id: string, approved: boolean) => void;
 }) {
   const name = getToolOrDynamicToolName(part);
   const label = toolLabel(name);
-  const state = toolState(part);
+  const [result, setResult] = useState("");
+  const awaitsResult = part.state === "input-available" && !!onResult;
+  const state = awaitsResult ? "yours" : toolState(part);
   const input = show(part.input);
   const output =
     part.state === "output-available" ? outputText(part.output) : "";
@@ -108,7 +118,11 @@ export function ToolCallBlock({
     <details
       data-testid="chat-tool-call"
       data-state={state}
-      open={state === "running" || state === "asking" ? true : undefined}
+      open={
+        state === "running" || state === "asking" || state === "yours"
+          ? true
+          : undefined
+      }
       className="my-1 rounded-md border text-xs"
     >
       <summary className="flex cursor-pointer items-center gap-2 px-3 py-2">
@@ -144,6 +158,40 @@ export function ToolCallBlock({
         {error && (
           <div role="alert" className="text-destructive">
             {error}
+          </div>
+        )}
+        {awaitsResult && (
+          <div className="space-y-2">
+            <Label htmlFor={`result-${part.toolCallId}`}>
+              Result of {name}
+            </Label>
+            <Textarea
+              id={`result-${part.toolCallId}`}
+              className="font-mono text-xs"
+              rows={3}
+              value={result}
+              onChange={(e) => setResult(e.target.value)}
+              placeholder='What your function would return, for example {"temperature": 21}'
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={result.trim() === ""}
+                onClick={() => onResult({ output: result })}
+              >
+                Send result
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={result.trim() === ""}
+                onClick={() => onResult({ errorText: result })}
+              >
+                Send as an error
+              </Button>
+            </div>
           </div>
         )}
         {part.state === "approval-requested" && onApproval && (

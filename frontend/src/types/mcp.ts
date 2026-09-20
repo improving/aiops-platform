@@ -11,6 +11,10 @@ export interface McpTool {
 
 export type McpTransport = "http" | "sse";
 
+/** Who can use a server: the organization, its owner alone, or every
+    organization of the platform. */
+export type McpScope = "organization" | "personal" | "platform";
+
 /** When Chat asks the member before a tool of the server runs. */
 export type McpApproval = "never" | "writes" | "always";
 
@@ -32,6 +36,10 @@ export interface McpServer {
       a value. */
   credential_header: string | null;
   credential_help_url: string | null;
+  /** per_user by sign-in (OAuth), not by a pasted value. */
+  oauth?: boolean;
+  /** The host a member signs in at (an OAuth server). */
+  sign_in_host?: string | null;
   /** What the caller must do about a credential of their own:
       "not_needed" today; "set" or "missing" where a server asks each
       member for one. */
@@ -48,6 +56,10 @@ export interface McpServer {
   tools: McpTool[];
   /** A model sees each tool as `<tool_prefix><tool>`. */
   tool_prefix: string;
+  /** Absent on an older backend: an organization's server. */
+  scope?: McpScope;
+  /** The caller may change it (an admin, its owner, a platform admin). */
+  can_change?: boolean;
 }
 
 /** The tools of a server the organization allows. */

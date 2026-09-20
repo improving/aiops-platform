@@ -6,7 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
+  getToolOrDynamicToolName,
+  isToolUIPart,
   lastAssistantMessageIsCompleteWithApprovalResponses,
+  lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,6 +29,8 @@ import { ChatTools } from "@/components/chat/ChatTools";
 import { ConnectCredentialDialog } from "@/components/mcp/ConnectCredentialDialog";
 import type { McpServer } from "@/types/mcp";
 import { useToolServers } from "@/components/chat/useToolServers";
+import { usePlaygroundFunctions } from "@/components/chat/usePlaygroundFunctions";
+import { FunctionDialog } from "@/components/chat/FunctionDialog";
 import { useOrg } from "@/hooks/useOrg";
 import { modelService } from "@/services/modelService";
 import { loadMessages, saveMessages } from "@/lib/chatStorage";
@@ -93,10 +98,25 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   // this role can use them.
   const { role, isAdmin } = useOrg();
   const isViewer = role === "viewer";
+  // `connected` is set by the OAuth callback page after a sign-in that
+  // started here: the server the member just signed in to turns on, like
+  // one connected with a pasted credential.
+  const connected = searchParams.get("connected");
   const preselect = useMemo(
-    () => (searchParams.get("tools") ?? "").split(",").filter(Boolean),
-    [searchParams]
+    () =>
+      [...(searchParams.get("tools") ?? "").split(","), connected ?? ""].filter(
+        Boolean
+      ),
+    [searchParams, connected]
   );
+  useEffect(() => {
+    if (!connected) return;
+    toast({ title: `Signed in to ${connected}` });
+    const rest = new URLSearchParams(searchParams.toString());
+    rest.delete("connected");
+    const query = rest.toString();
+    router.replace(query ? `/chat?${query}` : "/chat");
+  }, [connected, searchParams, router, toast]);
   const toolServers = useToolServers(userKey, preselect);
   const [connecting, setConnecting] = useState<McpServer | null>(null);
   const toolsBlocked = isViewer || selected?.tools === false;
@@ -104,6 +124,24 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     () => (toolsBlocked ? [] : toolServers.active),
     [toolsBlocked, toolServers.active]
   );
+  // Functions typed in the playground; `editing` is the name in the
+  // dialog, "" for a new one, undefined when it is closed.
+  const typed = usePlaygroundFunctions(userKey);
+  const [editing, setEditing] = useState<string | undefined>(undefined);
+  const typedSources = useMemo(
+    () => (toolsBlocked ? [] : typed.sources),
+    [toolsBlocked, typed.sources]
+  );
+  const typedNames = useMemo(
+    () => new Set(typed.functions.map((f) => f.name)),
+    [typed.functions]
+  );
+  // `useChat` keeps the first `sendAutomaticallyWhen` it gets, so that
+  // callback reads the names through a ref, kept current by an effect.
+  const typedNamesRef = useRef<ReadonlySet<string>>(typedNames);
+  useEffect(() => {
+    typedNamesRef.current = typedNames;
+  }, [typedNames]);
   const temperatureValue = temperature === "" ? undefined : Number(temperature);
   const maxOutputTokens =
     Number(maxTokens) >= 1 ? Math.floor(Number(maxTokens)) : undefined;
@@ -119,7 +157,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
             system,
             temperature: temperatureValue,
             maxOutputTokens,
-            toolSources: activeTools.map((server) => ({ type: "mcp", server })),
+            toolSources: [
+              ...activeTools.map((server) => ({ type: "mcp", server })),
+              ...typedSources,
+            ],
             approveTools: toolServers.askFirst,
             // One request's own fields last: "Send without tools" sends
             // an empty `toolSources` through `regenerate({ body })`.
@@ -133,6 +174,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
       temperatureValue,
       maxOutputTokens,
       activeTools,
+      typedSources,
       toolServers.askFirst,
     ]
   );
@@ -147,13 +189,18 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     regenerate,
     clearError,
     addToolApprovalResponse,
+    addToolOutput,
   } = useChat<ChatUIMessage>({
     id: `${userKey}:${target || "no-target"}`,
     transport,
-    // Once every waiting tool call has its yes or no, the answer goes
-    // back by itself: approved calls run, denied ones are told to the
-    // model.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    // The conversation goes back by itself in two cases: every waiting
+    // tool call has its yes or no, or the user gave the result of a
+    // function they typed. Not for every finished tool step: a loop the
+    // route cut at its step limit would go on without end.
+    sendAutomaticallyWhen: (options) =>
+      lastAssistantMessageIsCompleteWithApprovalResponses(options) ||
+      (lastStepCallsATypedFunction(options.messages, typedNamesRef.current) &&
+        lastAssistantMessageIsCompleteWithToolCalls(options)),
     // The log is not a live region (it would read every token aloud);
     // a finished answer is announced once instead.
     onFinish: () => setAnnouncement(`Answer received at ${timeNow()}`),
@@ -219,6 +266,30 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
       regenerate({ messageId });
     },
     [clearError, regenerate]
+  );
+
+  const onToolResult = useCallback(
+    (
+      tool: string,
+      toolCallId: string,
+      result: { output: string } | { errorText: string }
+    ) => {
+      if ("output" in result) {
+        addToolOutput({
+          tool: tool as never,
+          toolCallId,
+          output: result.output as never,
+        });
+      } else {
+        addToolOutput({
+          state: "output-error",
+          tool: tool as never,
+          toolCallId,
+          errorText: result.errorText,
+        });
+      }
+    },
+    [addToolOutput]
   );
 
   const onToolApproval = useCallback(
@@ -307,6 +378,18 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
+      {editing !== undefined && (
+        <FunctionDialog
+          key={editing || "new"}
+          initial={typed.functions.find((f) => f.name === editing) ?? null}
+          otherNames={typed.functions
+            .map((f) => f.name)
+            .filter((n) => n !== editing)}
+          onOpenChange={(open) => !open && setEditing(undefined)}
+          onSave={typed.save}
+          onDelete={typed.remove}
+        />
+      )}
       <ConnectCredentialDialog
         server={connecting}
         onOpenChange={(open) => !open && setConnecting(null)}
@@ -353,6 +436,9 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
               onConnect={setConnecting}
               askFirst={toolServers.askFirst}
               onAskFirstChange={toolServers.setAskFirst}
+              functions={typed.functions}
+              onFunctionToggle={typed.toggle}
+              onFunctionEdit={(name) => setEditing(name ?? "")}
             />
           }
           examples={examples}
@@ -405,6 +491,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
                 }
                 onToolApproval={
                   !busy && message === last ? onToolApproval : undefined
+                }
+                typedFunctions={typedNames}
+                onToolResult={
+                  !busy && message === last ? onToolResult : undefined
                 }
               />
             ))}
@@ -497,6 +587,21 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
       </section>
     </div>
   );
+}
+
+/** The last step of the last answer holds a call of a function the user
+    typed: only then does a complete set of tool results go back by
+    itself (see `sendAutomaticallyWhen`). */
+function lastStepCallsATypedFunction(
+  messages: ChatUIMessage[],
+  typed: ReadonlySet<string>
+): boolean {
+  const last = messages.at(-1);
+  if (!last || last.role !== "assistant") return false;
+  const from = last.parts.findLastIndex((p) => p.type === "step-start");
+  return last.parts
+    .slice(from + 1)
+    .some((p) => isToolUIPart(p) && typed.has(getToolOrDynamicToolName(p)));
 }
 
 function timeNow(): string {

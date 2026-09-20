@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { isToolUIPart } from "ai";
+import { getToolOrDynamicToolName, isToolUIPart } from "ai";
 import { Pencil1Icon, ReloadIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/CopyButton";
@@ -50,7 +50,17 @@ export const ChatMessage = memo(function ChatMessage({
   onEdit,
   onContinue,
   onToolApproval,
+  typedFunctions,
+  onToolResult,
 }: {
+  /** Names of the functions the user typed; their calls wait for the
+      user's result. The last turn only. */
+  typedFunctions?: ReadonlySet<string>;
+  onToolResult?: (
+    tool: string,
+    toolCallId: string,
+    result: { output: string } | { errorText: string }
+  ) => void;
   /** Answer a tool call that waits for approval; the last turn only. */
   onToolApproval?: (id: string, approved: boolean) => void;
   message: ChatUIMessage;
@@ -88,6 +98,17 @@ export const ChatMessage = memo(function ChatMessage({
                     key={part.toolCallId}
                     part={part}
                     onApproval={onToolApproval}
+                    onResult={
+                      onToolResult &&
+                      typedFunctions?.has(getToolOrDynamicToolName(part))
+                        ? (result) =>
+                            onToolResult(
+                              getToolOrDynamicToolName(part),
+                              part.toolCallId,
+                              result
+                            )
+                        : undefined
+                    }
                   />
                 );
               }

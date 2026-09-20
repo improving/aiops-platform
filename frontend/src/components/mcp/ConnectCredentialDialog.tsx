@@ -17,6 +17,9 @@ import { parseApiError } from "@/lib/utils";
 import { mcpService } from "@/services/mcpService";
 import type { McpServer } from "@/types/mcp";
 
+/** Where the callback page returns to after a sign-in. */
+export const OAUTH_RETURN_KEY = "aiops.mcp.oauth.return";
+
 /**
  * A member's own credential for a server where each member brings
  * theirs. The backend tries the value against the server before it
@@ -69,12 +72,35 @@ export function ConnectCredentialDialog({
     }
   };
 
+  // Sign in at the server itself: the browser leaves, and comes back to
+  // the callback page, which returns to where it started.
+  const signIn = async () => {
+    if (!server) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const url = await mcpService.startSignIn(server.id);
+      try {
+        sessionStorage.setItem(
+          OAUTH_RETURN_KEY,
+          window.location.pathname + window.location.search
+        );
+      } catch {
+        // Without it the callback page returns to the MCP servers page.
+      }
+      window.location.assign(url);
+    } catch (e) {
+      setError(String(parseApiError(e).description));
+      setSaving(false);
+    }
+  };
+
   const bearer =
     (server?.credential_header ?? "Authorization") === "Authorization";
   const label = bearer ? "Personal access token" : server?.credential_header;
   return (
     <Dialog open={server !== null} onOpenChange={close}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Connect {server?.name}</DialogTitle>
           <DialogDescription>
@@ -82,47 +108,71 @@ export function ConnectCredentialDialog({
             your credential can do.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="mcp-own-credential">{label}</Label>
-          <Input
-            id="mcp-own-credential"
-            type="password"
-            autoComplete="off"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-          {server?.credential_help_url && (
-            <a
-              href={server.credential_help_url}
-              target="_blank"
-              rel="noreferrer"
-              className="block text-xs underline"
-            >
-              Where to get one
-            </a>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Stored as a Kubernetes Secret. Only your requests use it, and you
-            can remove it at any time.
-          </p>
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
+        {server?.oauth ? (
+          <div className="space-y-2">
+            <p className="text-sm">
+              You sign in at{" "}
+              <span className="font-medium">
+                {server.sign_in_host ?? server.name}
+              </span>
+              : check that address on the page that opens. The platform keeps
+              the token it gets for you, and never sees your password.
             </p>
-          )}
-        </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="mcp-own-credential">{label}</Label>
+            <Input
+              id="mcp-own-credential"
+              type="password"
+              autoComplete="off"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+            {server?.credential_help_url && (
+              <a
+                href={server.credential_help_url}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-xs underline"
+              >
+                Where to get one
+              </a>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Stored as a Kubernetes Secret. Only your requests use it, and you
+              can remove it at any time.
+            </p>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => close(false)}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={save}
-            disabled={value.trim() === "" || saving}
-            loading={saving}
-          >
-            Test and save
-          </Button>
+          {server?.oauth ? (
+            <Button type="button" onClick={signIn} loading={saving}>
+              Sign in to {server.name}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={save}
+              disabled={value.trim() === "" || saving}
+              loading={saving}
+            >
+              Test and save
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

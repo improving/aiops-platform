@@ -29,6 +29,7 @@ from models.organization import Organization
 from models.user import User
 from utils import mcp_credentials
 from utils.litellm import LiteLLMError, delete_user_key, rotate_org_key
+from utils.litellm import get_client as get_litellm_client
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -280,6 +281,9 @@ async def remove_member(
     # rolled back, so nothing that can still fail comes after it.
     try:
         mcp_credentials.delete_for_user(db, org.id, user_id)
+        mcp_credentials.delete_personal_servers(
+            db, org.id, user_id, get_litellm_client()
+        )
     except Exception as exc:
         db.rollback()
         logger.exception("Could not delete MCP credentials of %s", user_id)

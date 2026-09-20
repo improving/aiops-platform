@@ -190,14 +190,24 @@ An organization admin registers remote MCP servers; every member with a writer r
 | Route | Who | What |
 | --- | --- | --- |
 | `GET /v1alpha1/mcp/servers` | member | The organization's servers, with their tools from the last refresh. Never a credential. |
-| `POST /v1alpha1/mcp/servers/discover` | admin | `{url, transport?, credential?}`: connect once, answer the tools (`name`, `description`, `read_only`). Nothing is stored. |
-| `POST /v1alpha1/mcp/servers` | admin | `{name, url, transport?, description?, credential?, allowed_tools?}`. 409 on a name the organization already has, 400 on a refused URL, 502 when the server or the proxy cannot be reached (nothing is left behind). |
-| `PATCH /v1alpha1/mcp/servers/{id}` | admin | Any of `description`, `url`, `transport`, `enabled`, `allowed_tools` (or `allow_all_tools: true`), `credential`, `remove_credential: true`. |
-| `POST /v1alpha1/mcp/servers/{id}/refresh` | admin | Connect again. A server that is down answers 200 with `status: "unreachable"` and keeps its last tool list. |
+| `POST /v1alpha1/mcp/servers/discover` | writer | `{url, transport?, credential?}`: connect once, answer the tools (`name`, `description`, `read_only`). Nothing is stored. |
+| `POST /v1alpha1/mcp/servers` | by `scope` | `{name, url, transport?, description?, credential?, allowed_tools?}`. 409 on a name the organization already has, 400 on a refused URL, 502 when the server or the proxy cannot be reached (nothing is left behind). |
+| `PATCH /v1alpha1/mcp/servers/{id}` | who can change it | Any of `description`, `url`, `transport`, `enabled`, `allowed_tools` (or `allow_all_tools: true`), `credential`, `remove_credential: true`. |
+| `POST /v1alpha1/mcp/servers/{id}/refresh` | who can change it | Connect again. A server that is down answers 200 with `status: "unreachable"` and keeps its last tool list. |
 | `PUT /v1alpha1/mcp/servers/{id}/credential` | writer | `{value}`: the caller's own credential for a server of mode `per_user`. It is tried against the server first (400 when refused), stored in a Secret of the caller's own, and never returned. 409 on a server of another mode. |
-| `DELETE /v1alpha1/mcp/servers/{id}/credential` | member | Removes the caller's own credential. |
-| `DELETE /v1alpha1/mcp/servers/{id}` | admin | The proxy's registration first (it holds a copy of a shared credential): when the proxy refuses, 502 and everything stays. Then every Secret and the row. |
+| `DELETE /v1alpha1/mcp/servers/{id}/credential` | member | Removes the caller's own credential, or their OAuth tokens. |
+| `POST /v1alpha1/mcp/servers/{id}/oauth/start` | writer, a browser session | Starts a sign-in at an OAuth server: answers `{authorization_url}` for the browser to open. 409 on a server of another kind. |
+| `POST /v1alpha1/mcp/oauth/callback` | writer, a browser session | `{code, state}` from the UI's callback page. The state is the caller's own, not older than ten minutes and good for one use (400 otherwise); the code becomes the caller's tokens. Answers the server. |
+| `DELETE /v1alpha1/mcp/servers/{id}` | who can change it | The proxy's registration first (it holds a copy of a shared credential): when the proxy refuses, 502 and everything stays. Then every Secret and the row. |
 
+`scope` on create says who can use the server: `organization` (the default; an organization admin adds it, every member uses it),
+`personal` (any member with a writer role adds it for themselves; nobody else sees it, an admin included; it goes when the member is removed)
+or `platform` (a platform admin adds it; every organization uses it, none of them can change it).
+A server answers with its `scope` and with `can_change` for the caller. A server the caller cannot see answers 404.
+A name is unique among the shared servers a caller sees (the organization's and the platform's) and among one member's own;
+a member's personal server neither blocks a name for an admin nor shows that it exists, and where a caller sees two servers of one name, `X-Mcp-Servers` means the nearer one (their own, then the organization's, then the platform's).
+A personal server never has a shared credential: a `credential` on it is stored as its owner's own (`credential_mode: "per_user"`), so it travels with the owner's calls only and the proxy never holds it
+(the server is in the organization's LiteLLM team, and a credential the proxy held would go out with any key of that team).
 `name` is lower case letters, digits and `_` (it starts with a letter, 32 characters at most).
 `approval` (`never`, the default; `writes`; `always`) is when the chat playground asks the member before a tool of the server runs:
 `writes` means every tool that does not say it only reads (`read_only: true`). It is the admin's floor; a member's own "Ask before each call" adds to it.
@@ -212,9 +222,22 @@ A `PATCH` with `credential_mode` and a `credential` changes the mode and leaves 
 On a `per_user` server a credential change must name `credential_mode` (400 otherwise), because `shared` and `none` delete every member's credential;
 `per_user` with the admin's own credential in the same header shape replaces only theirs. The proxy is updated first, so a failure (502) leaves every credential as it was.
 `credential_help_url` must be an `http(s)` URL (422).
+With `oauth` on the create (`{client_id?, client_secret?, scopes?, allow_hosts?}`, and no `credential`) each member signs in at the server itself (the MCP authorization specification: OAuth 2.1 with PKCE,
+the server's protected-resource and authorization-server metadata, dynamic client registration when `client_id` is absent, the `resource` parameter).
+The create reads the metadata and registers the client (400 with the reason when the server publishes none or registers no clients); it cannot list tools, because nobody has a token yet:
+the first member's sign-in fills the list. Such a server is `credential_mode: "per_user"` with `oauth: true`; the platform keeps each member's access and refresh token in that member's Secret,
+renews the access token before it ends, and drops the tokens (`my_credential` goes back to `missing`) when the authorization server refuses the refresh token.
+The authorization and the token endpoint must be on the issuer's origin, or on a host named in `allow_hosts` (400 otherwise, with the host):
+metadata could else show a member the consent page of an honest authorization server and send the code to a token endpoint of somebody else.
+The callback takes an optional `iss` (RFC 9207) and refuses one that is not the issuer, or a missing one where the metadata promised it. The server answers with `sign_in_host`, which the sign-in dialog shows.
+Every answer of those hosts is read as a stream, at most 256 KiB and 15 s in all.
+The redirect URI is `<AIOPS_UI_URL>/mcp-servers/oauth/callback`, a page of the UI: register it when you create the OAuth application by hand. Without `AIOPS_UI_URL` the create answers 400.
+A `PUT .../credential` on such a server answers 409, and so does a `PATCH` of its `url`, `credential`, `credential_mode` or `remove_credential`:
+the client and every member's tokens belong to that URL, so delete the server and add it again.
+`refresh` on a `per_user` server uses the caller's own credential and answers 409 when they have none (an OAuth server: "Sign in to this server first"), so such a check never marks the server unreachable.
 The URL must be `https` and public: loopback, private, link-local, metadata and cluster-internal addresses are refused.
 A server answers with `credential_mode` (`none`, `shared` or `per_user`), `my_credential` (`not_needed`, or `set` or `missing` on a `per_user` server), `credential_header`, `credential_help_url`,
-`status` (`connected` or `unreachable`), `checked_at`, `tools`, and `tool_prefix`: a model sees each tool as `<tool_prefix><tool>`.
+`oauth`, `status` (`connected` or `unreachable`), `checked_at`, `tools`, and `tool_prefix`: a model sees each tool as `<tool_prefix><tool>`.
 
 `/v1alpha1/mcp` is one MCP server (streamable HTTP; `POST` and `DELETE`) with the tools of every enabled server of the caller's organization.
 `GET` answers 405, which the protocol allows: there is no server-to-client stream, because each open one would hold a worker thread of the API for as long as an IDE stays connected.

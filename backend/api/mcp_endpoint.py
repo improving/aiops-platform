@@ -20,11 +20,11 @@ from sqlalchemy.orm import Session
 from api import mcp as registry
 from api.chat import chat_mock_enabled, user_key
 from auth.current_user import CurrentUser, require_writer
-from auth.policy import org_scope
 from db.database import get_db
 from logger import setup_logger
 from models.mcp_server import McpServer
 from utils import mcp_credentials as creds
+from utils import mcp_scope as scopes
 from utils.litellm import LiteLLMError
 from utils.mcp import litellm_alias
 from utils.mcp_mock import mock_endpoint
@@ -45,12 +45,12 @@ def _selected(
     name is a 400, so a typo is not a silent empty tool list."""
     enabled = (
         db.query(McpServer)
-        .filter(org_scope(McpServer, user), McpServer.enabled.is_(True))
+        .filter(scopes.visible(user), McpServer.enabled.is_(True))
         .all()
     )
     if not requested or not requested.strip():
         return enabled
-    by_name = {s.name: s for s in enabled}
+    by_name = scopes.by_name(enabled)
     names = [n.strip() for n in requested.split(",") if n.strip()]
     unknown = [n for n in names if n not in by_name]
     if unknown:
@@ -108,7 +108,9 @@ async def mcp_endpoint(
     extra: dict[str, str] = {}
     for server in servers:
         alias = litellm_alias(server.id, server.name)
-        resolved = await asyncio.to_thread(creds.resolve, server, user, alias)
+        resolved = await asyncio.to_thread(
+            creds.resolve, server, user, alias, db
+        )
         if resolved.state == creds.MISSING:
             # Asked for by name: say what is missing. Among "all the
             # servers" it is left out, and the others still work.

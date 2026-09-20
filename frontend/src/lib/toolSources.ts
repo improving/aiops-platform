@@ -1,5 +1,5 @@
 import { createMCPClient } from "@ai-sdk/mcp";
-import type { ToolSet } from "ai";
+import { jsonSchema, tool, type ToolSet } from "ai";
 import { backendUrl } from "@/lib/backend";
 
 /**
@@ -9,7 +9,25 @@ import { backendUrl } from "@/lib/backend";
  * built-in one is a new member of the union and a new resolver, not a
  * change to the route or to the page's request.
  */
-export type ToolSource = { type: "mcp"; server: string };
+export type McpToolSource = { type: "mcp"; server: string };
+
+/** A function the user typed in the playground: the model may call it,
+    nothing runs, and the user types the result (what a developer does
+    to try a function-calling prompt before the function exists). */
+export type FunctionToolSource = {
+  type: "function";
+  name: string;
+  description: string;
+  /** A JSON Schema of type "object". */
+  parameters: Record<string, unknown>;
+};
+
+export type ToolSource = McpToolSource | FunctionToolSource;
+
+/** No "-": that is what ends the server alias in an MCP tool's name, so
+    a typed function can never take the name of a platform tool. */
+export const FUNCTION_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+const MAX_FUNCTIONS = 16;
 
 /** The platform's MCP endpoint header that names the servers. */
 const SERVERS_HEADER = "X-Mcp-Servers";
@@ -106,19 +124,52 @@ export type ResolvedTools = {
 
 export class ToolSourceError extends Error {}
 
-function isToolSource(value: unknown): value is ToolSource {
+function isMcpSource(value: unknown): value is McpToolSource {
+  const v = value as McpToolSource;
   return (
-    !!value &&
-    typeof value === "object" &&
-    (value as ToolSource).type === "mcp" &&
-    typeof (value as ToolSource).server === "string" &&
-    /^[a-z][a-z0-9_]*$/.test((value as ToolSource).server)
+    !!v &&
+    typeof v === "object" &&
+    v.type === "mcp" &&
+    typeof v.server === "string" &&
+    /^[a-z][a-z0-9_]*$/.test(v.server)
+  );
+}
+
+function isFunctionSource(value: unknown): value is FunctionToolSource {
+  const v = value as FunctionToolSource;
+  return (
+    !!v &&
+    typeof v === "object" &&
+    v.type === "function" &&
+    typeof v.name === "string" &&
+    FUNCTION_NAME.test(v.name) &&
+    typeof v.description === "string" &&
+    !!v.parameters &&
+    typeof v.parameters === "object" &&
+    !Array.isArray(v.parameters) &&
+    (v.parameters as { type?: unknown }).type === "object"
   );
 }
 
 /** Only what this file knows how to resolve; the rest is dropped. */
 export function parseToolSources(value: unknown): ToolSource[] {
-  return Array.isArray(value) ? value.filter(isToolSource) : [];
+  if (!Array.isArray(value)) return [];
+  const functions = value.filter(isFunctionSource).slice(0, MAX_FUNCTIONS);
+  return [...value.filter(isMcpSource), ...functions];
+}
+
+/** Tools with no executor: the loop stops at the call, and the page
+    asks the user for the result. */
+function resolveFunctions(sources: FunctionToolSource[]): ToolSet {
+  return Object.fromEntries(
+    sources.map((f) => [
+      f.name,
+      tool({
+        description: f.description,
+        inputSchema: jsonSchema(f.parameters),
+      }),
+    ])
+  ) as ToolSet;
 }
 
 /**
@@ -212,14 +263,28 @@ export async function resolveToolSources(
   headers: Record<string, string>
 ): Promise<ResolvedTools> {
   const servers = [
-    ...new Set(sources.filter((s) => s.type === "mcp").map((s) => s.server)),
+    ...new Set(
+      sources
+        .filter((s): s is McpToolSource => s.type === "mcp")
+        .map((s) => s.server)
+    ),
   ];
+  const functions = resolveFunctions(
+    sources.filter((s): s is FunctionToolSource => s.type === "function")
+  );
+  const typed = new Set(Object.keys(functions));
   if (servers.length === 0) {
     return {
-      tools: {},
+      tools: functions,
       needsApproval: () => false,
       close: async () => undefined,
     };
   }
-  return resolveMcp(servers, headers);
+  const mcp = await resolveMcp(servers, headers);
+  return {
+    ...mcp,
+    tools: { ...mcp.tools, ...functions },
+    // A typed function runs nowhere, so there is nothing to approve.
+    needsApproval: (name) => !typed.has(name) && mcp.needsApproval(name),
+  };
 }

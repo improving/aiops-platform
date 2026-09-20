@@ -26,12 +26,12 @@ from api.chat import (
 )
 from api.organizations import _current_org, _org_budget
 from auth.current_user import CurrentUser, get_current_user, require_admin
-from auth.policy import org_scope
 from auth.roles import ROLE_ADMIN
 from db.database import get_db
 from models.mcp_server import McpServer
 from models.organization import Organization
 from models.user import User
+from utils import mcp_scope
 from utils.litellm import LiteLLMError, ensure_org_key, get_client
 from utils.mcp import TOOL_SEPARATOR, litellm_alias
 
@@ -272,7 +272,7 @@ def _is_mcp_row(row: dict) -> bool:
 
 def _mcp_server_names(db: Session, user: CurrentUser) -> dict[str, str]:
     """LiteLLM alias -> the server's name, for the caller's organization."""
-    servers = db.query(McpServer).filter(org_scope(McpServer, user)).all()
+    servers = db.query(McpServer).filter(mcp_scope.visible(user)).all()
     return {litellm_alias(s.id, s.name): s.name for s in servers}
 
 

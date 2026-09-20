@@ -19,7 +19,8 @@ function blocked(
 function serverNote(server: McpServer): string {
   if (!server.enabled) return "disabled";
   if (server.status !== "connected") return "unreachable";
-  if (server.my_credential === "missing") return "needs your credential";
+  if (server.my_credential === "missing")
+    return server.oauth ? "needs your sign-in" : "needs your credential";
   const count = allowedTools(server).length;
   const asks =
     server.approval === "always"
@@ -48,7 +49,16 @@ export function ChatTools({
   onConnect,
   askFirst,
   onAskFirstChange,
+  functions,
+  onFunctionToggle,
+  onFunctionEdit,
 }: {
+  /** Functions typed in the playground (nothing runs; the user types
+      the result). */
+  functions: { name: string; enabled: boolean }[];
+  onFunctionToggle: (name: string, on: boolean) => void;
+  /** null: add a new one. */
+  onFunctionEdit: (name: string | null) => void;
   /** Ask before each tool call. */
   askFirst: boolean;
   onAskFirstChange: (on: boolean) => void;
@@ -167,6 +177,48 @@ export function ChatTools({
           Manage MCP servers
         </Link>
       )}
+      <div className="space-y-1 pt-2" role="group" aria-label="Functions">
+        <div className="flex items-center justify-between">
+          <span className="text-sm leading-none font-medium">Functions</span>
+          <button
+            type="button"
+            className="text-xs font-medium underline"
+            onClick={() => onFunctionEdit(null)}
+          >
+            Add function
+          </button>
+        </div>
+        {functions.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Try a function-calling prompt: the model calls your function, you
+            type the result.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {functions.map((fn) => (
+              <li
+                key={fn.name}
+                className="flex items-center justify-between gap-2 text-sm"
+              >
+                <button
+                  type="button"
+                  className="min-w-0 truncate font-mono text-xs underline"
+                  aria-label={`Edit ${fn.name}`}
+                  onClick={() => onFunctionEdit(fn.name)}
+                >
+                  {fn.name}
+                </button>
+                <Switch
+                  aria-label={`Use function ${fn.name}`}
+                  checked={fn.enabled}
+                  disabled={!!reason}
+                  onCheckedChange={(on) => onFunctionToggle(fn.name, on)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

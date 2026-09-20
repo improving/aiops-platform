@@ -81,3 +81,22 @@ def mock_endpoint(
             "error": {"code": -32601, "message": f"Method not found: {rpc}"},
         }
     )
+
+
+# --- OAuth sign-in -----------------------------------------------------
+# No authorization server in the fast tier: the "authorization URL"
+# points straight back at the UI's callback page with a fixed code, so
+# the browser still makes the round trip the real flow makes.
+MOCK_OAUTH_CODE = "mock"
+
+
+def mock_oauth_metadata() -> dict:
+    return {
+        "issuer": "https://auth.mock.example",
+        "authorization_endpoint": "https://auth.mock.example/authorize",
+        "token_endpoint": "https://auth.mock.example/token",
+        "registration_endpoint": None,
+        "client_id": "mock-client",
+        "scopes": [],
+        "token_auth": "none",
+    }
