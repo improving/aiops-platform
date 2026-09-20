@@ -28,10 +28,11 @@ export function ToolCallingSwitch({
       <div className="space-y-1">
         <Label htmlFor="tool-calling">Tool calling</Label>
         <p className="text-sm text-muted-foreground">
-          Langflow agents and function calling need it. Adds{" "}
-          <code>--enable-auto-tool-choice</code> and{" "}
+          Langflow agents, function calling and the tools of MCP servers in Chat
+          need it. Adds <code>--enable-auto-tool-choice</code> and{" "}
           <code>--tool-call-parser {parser}</code>, the parser for this model
-          family.
+          family. Not every model writes tool calls the parser can read: a
+          general instruct model does, a code model often does not.
         </p>
       </div>
       <Switch

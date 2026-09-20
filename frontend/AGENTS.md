@@ -90,6 +90,10 @@ pnpm e2e:ui                               # Playwright UI mode
   A resolver failure answers 502 `Could not reach the tools: ...` before anything goes to the model, never a silent answer without tools;
   the page maps it and offers "Send without tools", which is `regenerate({ body: { toolSources: [] } })` (`prepareSendMessagesRequest` spreads the request's own `body` last).
   One tool result gives the model at most `MAX_TOOL_RESULT_CHARS` (16,000, about 4,000 tokens) of text: `capToolResult` wraps each tool's `execute`, cuts the text parts in order and appends a note that says how much was left out, so the model and the reader both know (a documentation tool can fill a 16k window with one answer).
+  "Ask before each call" (a switch in the Tools section, kept per user like the server choice): the body carries `approveTools`, the route gives `streamText` `toolApproval: () => "user-approval"`,
+  the step then ends with the tool part in state `approval-requested`, `ToolCallBlock` shows it open as `data-state="asking"` with the input and Approve / Deny (last turn only),
+  `addToolApprovalResponse` records the answer, and `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses` sends the conversation back: an approved call runs, a denied one (`output-denied`, shown as failed, "not approved") is told to the model.
+  The approver is the user whose session sends the request, so the approval is not signed (`experimental_toolApprovalSecret` is for a server that must not trust its client).
   An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.
   `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),
   and `ChatTools.tsx` is the Tools section (`role="group"` "Tools", a switch `Use <name>` per server): blocked with the reason when `ChatTarget.tools` is false

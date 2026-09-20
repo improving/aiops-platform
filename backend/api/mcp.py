@@ -36,7 +36,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.chat import chat_mock_enabled
+from api.chat import chat_mock_enabled, user_key
 from auth.current_user import (
     CurrentUser,
     get_current_user,
@@ -879,7 +879,9 @@ async def mcp_endpoint(
         key = await asyncio.to_thread(org_key, db, user)
     except LiteLLMError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
-    upstream = LiteLLMUpstream(litellm, key, usable or [NO_SERVERS], extra)
+    upstream = LiteLLMUpstream(
+        litellm, key, usable or [NO_SERVERS], extra, end_user=user_key(user)
+    )
     return await asyncio.to_thread(
         relay, upstream, request.method, request.headers, body
     )

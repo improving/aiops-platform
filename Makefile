@@ -463,7 +463,7 @@ mcp-test-down: ## Remove the local MCP test server
 ui-e2e: ## Run the fast UI e2e tier; starts a TEST_MODE backend on :8001 and a built frontend on :3001
 	cd frontend && E2E_START_SERVERS=1 pnpm e2e $(ARGS)
 
-ui-e2e-cluster: ## Run the cluster UI e2e tier against the running stack (FRONTEND_URL, BACKEND_URL)
+ui-e2e-cluster: ## Run the cluster UI e2e tier against the running stack (FRONTEND_URL, BACKEND_URL); the MCP spec needs litellm-up and mcp-test-up
 	cd frontend && E2E_BASE_URL=$(FRONTEND_URL) E2E_BACKEND_URL=$(BACKEND_URL) pnpm e2e:cluster $(ARGS)
 
 # --- dev convenience ------------------------------------------------------------

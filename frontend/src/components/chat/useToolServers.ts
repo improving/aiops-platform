@@ -8,6 +8,18 @@ function storageKey(userKey: string): string {
   return `${KEY_PREFIX}${encodeURIComponent(userKey)}`;
 }
 
+function askFirstKey(userKey: string): string {
+  return `${KEY_PREFIX}ask.${encodeURIComponent(userKey)}`;
+}
+
+function loadAskFirst(userKey: string): boolean {
+  try {
+    return localStorage.getItem(askFirstKey(userKey)) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function load(userKey: string): string[] {
   try {
     const raw = localStorage.getItem(storageKey(userKey));
@@ -38,6 +50,7 @@ function save(userKey: string, names: string[]): void {
 export function useToolServers(userKey: string, preselect: string[]) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [askFirst, setAskFirstState] = useState(false);
   const wanted = preselect.join(",");
 
   useEffect(() => {
@@ -54,6 +67,7 @@ export function useToolServers(userKey: string, preselect: string[]) {
       const merged = [...new Set([...load(userKey), ...added])];
       setSelected(merged);
       if (added.length > 0) save(userKey, merged);
+      setAskFirstState(loadAskFirst(userKey));
     })();
   }, [userKey, wanted]);
 
@@ -86,5 +100,17 @@ export function useToolServers(userKey: string, preselect: string[]) {
     );
   }, []);
 
-  return { servers, selected, active, toggle, replace };
+  const setAskFirst = useCallback(
+    (on: boolean) => {
+      setAskFirstState(on);
+      try {
+        localStorage.setItem(askFirstKey(userKey), on ? "1" : "0");
+      } catch {
+        // Only the convenience is lost.
+      }
+    },
+    [userKey]
+  );
+
+  return { servers, selected, active, toggle, replace, askFirst, setAskFirst };
 }

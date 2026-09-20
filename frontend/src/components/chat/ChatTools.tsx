@@ -40,7 +40,12 @@ export function ChatTools({
   isViewer,
   isAdmin,
   onConnect,
+  askFirst,
+  onAskFirstChange,
 }: {
+  /** Ask before each tool call. */
+  askFirst: boolean;
+  onAskFirstChange: (on: boolean) => void;
   /** Open the dialog for the caller's own credential. */
   onConnect?: (server: McpServer) => void;
   servers: McpServer[];
@@ -131,6 +136,22 @@ export function ChatTools({
             </li>
           ))}
         </ul>
+      )}
+      {servers.length > 0 && (
+        <div className="flex items-center justify-between gap-2 pt-1 text-sm">
+          <span>
+            Ask before each call{" "}
+            <span className="block text-xs text-muted-foreground">
+              A tool can change data. You see the call and its input first.
+            </span>
+          </span>
+          <Switch
+            aria-label="Ask before each tool call"
+            checked={askFirst}
+            disabled={!!reason}
+            onCheckedChange={onAskFirstChange}
+          />
+        </div>
       )}
       {servers.length > 0 && (
         <Link

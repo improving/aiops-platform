@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ToastAction } from "@/components/ui/toast";
@@ -117,13 +120,21 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
             temperature: temperatureValue,
             maxOutputTokens,
             toolSources: activeTools.map((server) => ({ type: "mcp", server })),
+            approveTools: toolServers.askFirst,
             // One request's own fields last: "Send without tools" sends
             // an empty `toolSources` through `regenerate({ body })`.
             ...body,
           },
         }),
       }),
-    [target, system, temperatureValue, maxOutputTokens, activeTools]
+    [
+      target,
+      system,
+      temperatureValue,
+      maxOutputTokens,
+      activeTools,
+      toolServers.askFirst,
+    ]
   );
 
   const {
@@ -135,9 +146,14 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     stop,
     regenerate,
     clearError,
+    addToolApprovalResponse,
   } = useChat<ChatUIMessage>({
     id: `${userKey}:${target || "no-target"}`,
     transport,
+    // Once every waiting tool call has its yes or no, the answer goes
+    // back by itself: approved calls run, denied ones are told to the
+    // model.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     // The log is not a live region (it would read every token aloud);
     // a finished answer is announced once instead.
     onFinish: () => setAnnouncement(`Answer received at ${timeNow()}`),
@@ -203,6 +219,13 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
       regenerate({ messageId });
     },
     [clearError, regenerate]
+  );
+
+  const onToolApproval = useCallback(
+    (id: string, approved: boolean) => {
+      addToolApprovalResponse({ id, approved });
+    },
+    [addToolApprovalResponse]
   );
 
   const continueAnswer = useCallback(() => {
@@ -328,6 +351,8 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
               isViewer={isViewer}
               isAdmin={isAdmin}
               onConnect={setConnecting}
+              askFirst={toolServers.askFirst}
+              onAskFirstChange={toolServers.setAskFirst}
             />
           }
           examples={examples}
@@ -377,6 +402,9 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
                 onEdit={!busy && message.id === lastUserId ? onEdit : undefined}
                 onContinue={
                   !busy && message === last ? continueAnswer : undefined
+                }
+                onToolApproval={
+                  !busy && message === last ? onToolApproval : undefined
                 }
               />
             ))}

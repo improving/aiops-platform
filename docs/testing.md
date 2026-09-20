@@ -74,6 +74,10 @@ Otherwise the TEST_MODE backend uses your kind cluster and the tests create real
 
 Bring the stack up as described in `docs/local-dev.md`
 (`make kind-up`, `make gateway-up`, `make auth-up`, `make db-up`, `make backend`, `make frontend`), then:
+(`e2e/cluster/mcp-servers.spec.ts` also needs `make litellm-up` and `make mcp-test-up`:
+it registers the MCP test server of `infra/local/mcp/test-server.yaml` with a credential for each member
+and proves with its `whoami` tool, through the backend and the LiteLLM MCP gateway, that a member's credential travels with that member's calls only.
+It needs no model; the one page test stubs a chat target.)
 
 ```bash
 make ui-e2e-cluster

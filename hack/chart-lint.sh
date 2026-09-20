@@ -60,6 +60,13 @@ expect "default realm reads the gateway secret from the environment" '\$\{KEYCLO
 expect "default KC_HOSTNAME is the auth host" 'KC_HOSTNAME: "https://auth\.aiops\.example\.com"' "$default"
 expect "default ui route has a stream timeout" 'streamIdleTimeout: 10m' "$default"
 expect "the backend tells flows where the MCP endpoint is" 'AIOPS_BACKEND_CLUSTER_URL: "http://aiops-platform-backend:8000"' "$(helm template aiops-platform "$CHART" -n aiops-platform --set langflow.enabled=true -s templates/backend/configmap.yaml)"
+reject "default renders no egress policy for the proxy" 'name: aiops-litellm-egress$' "$default"
+egress=$(helm template aiops-platform "$CHART" -n aiops-platform --set litellm.egressPolicy.enabled=true \
+  --set 'litellm.egressPolicy.allowCIDRs={10.0.5.12/32}' -s templates/litellm/networkpolicy.yaml)
+expect "the proxy's egress policy selects the proxy pods" 'app.kubernetes.io/name: litellm$' "$egress"
+expect "the proxy's egress policy leaves private addresses out of the public rule" '- "169\.254\.0\.0/16"$' "$egress"
+expect "the proxy's egress policy allows a named private address" 'cidr: "10\.0\.5\.12/32"$' "$egress"
+expect "the proxy's egress policy allows https only by default" 'port: 443$' "$egress"
 traffic=$(helm template aiops-platform "$CHART" -n aiops-platform -s templates/gateway/backendtrafficpolicy.yaml)
 expect "the api route has the stream timeout too (MCP sessions)" 'name: aiops-platform-api$' "$traffic"
 expect "default fails the release when a policy is not accepted" 'until accepted "\$policy"' "$default"

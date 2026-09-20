@@ -269,6 +269,51 @@ def test_mcp_calls_are_tools_not_model_requests():
     ]
 
 
+def test_a_member_sees_their_own_tool_calls_and_an_admin_all(
+    client, monkeypatch
+):
+    """The relay names the caller on every MCP request, so a tool call
+    is visible like a model request."""
+
+    def tool_row(end_user):
+        return {
+            "model": "MCP: deepwiki87aa1a35-ask_question",
+            "end_user": end_user,
+            "startTime": "2026-09-20T01:00:00Z",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "spend": 0,
+        }
+
+    rows = [
+        tool_row(BOB_ID),
+        tool_row(ALICE_ID),
+        tool_row(ALICE_ID),
+        tool_row(""),
+    ]
+    litellm = _mock_litellm(rows)
+    monkeypatch.setattr(usage, "get_client", lambda: litellm)
+    monkeypatch.setattr(usage, "ensure_org_key", _fake_ensure)
+    _add_user(BOB_ID, "bob@example.com")
+    bob = _member("bob@example.com", _default_org().id, BOB_ID)
+
+    admin = client.get("/v1alpha1/organizations/current/usage").json()
+    assert admin["tools"] == [
+        {"server": "deepwiki87aa1a35", "tool": "ask_question", "calls": 4}
+    ]
+    assert admin["totals"]["requests"] == 0
+
+    app = client.app
+    app.dependency_overrides[get_current_user] = lambda: bob
+    try:
+        member = client.get("/v1alpha1/organizations/current/usage").json()
+    finally:
+        del app.dependency_overrides[get_current_user]
+    assert member["tools"] == [
+        {"server": "deepwiki87aa1a35", "tool": "ask_question", "calls": 1}
+    ]
+
+
 def test_usage_mock_mode_serves_canned_rows(client, monkeypatch):
     monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
     response = client.get("/v1alpha1/organizations/current/usage")

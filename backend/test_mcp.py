@@ -358,10 +358,13 @@ def test_update_replaces_and_removes_the_credential(env):
         get_default_namespace(),
         f"mcp-{id8(uuid.UUID(created['id']))}-credentials",
     )
-    client.patch(
+    replaced = client.patch(
         f"{SERVERS}/{created['id']}", json={"credential": {"value": "new"}}
     )
     assert ss._memory[key] == {"credential": "new"}
+    # A new value in the same header shape changes no column of the row;
+    # the "set" date must move all the same.
+    assert replaced.json()["credential_set_at"] != created["credential_set_at"]
     removed = client.patch(
         f"{SERVERS}/{created['id']}", json={"remove_credential": True}
     )
@@ -527,6 +530,9 @@ def test_endpoint_relays_with_the_org_key_and_an_allow_list_of_headers(
     # it as a LiteLLM key; and the master key does not travel on a
     # member's request either.
     assert request.headers["authorization"] == "Bearer sk-org"
+    # The caller, as the opaque id chat requests carry, for the spend log.
+    assert request.headers["x-litellm-end-user-id"]
+    assert "@" not in request.headers["x-litellm-end-user-id"]
     assert request.headers["mcp-session-id"] == "sess-0"
     assert request.headers["mcp-protocol-version"] == "2025-06-18"
     assert "cookie" not in request.headers

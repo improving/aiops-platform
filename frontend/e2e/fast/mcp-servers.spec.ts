@@ -166,6 +166,70 @@ test.describe("MCP servers page, writes that provoke a 4xx", () => {
   });
 });
 
+test.describe("MCP servers page, day-two actions of an admin", () => {
+  test("limits the tools, refreshes them, and changes the shared credential", async ({
+    page,
+  }) => {
+    test.slow();
+    const name = `ops_${Math.random().toString(36).slice(2, 10)}`;
+    const created = await page.request.post("/api/v1alpha1/mcp/servers", {
+      data: {
+        name,
+        url: "https://mcp.example.com/mcp",
+        credential: { auth_type: "bearer", value: "first" },
+      },
+    });
+    expect(created.status()).toBe(201);
+    const id = (await created.json()).id;
+    const read = async () =>
+      (await (await page.request.get("/api/v1alpha1/mcp/servers")).json()).find(
+        (s: { id: string }) => s.id === id
+      );
+
+    const mcp = new McpServersPage(page);
+    await mcp.open();
+    await mcp.waitForLoaded();
+    await expect(mcp.serverRow(name)).toContainText("Connected");
+
+    // Edit tools, the save path: from "all tools" to a selection.
+    await mcp.runAction(name, "Edit tools");
+    const edit = page.getByRole("dialog", { name: "Edit tools" });
+    await edit.getByRole("radio", { name: "Only the selected tools" }).check();
+    await expect(edit.getByRole("checkbox", { name: "echo" })).toBeChecked();
+    await edit.getByRole("button", { name: "Save" }).click();
+    await expect(edit).toBeHidden();
+    expect((await read()).allowed_tools).toEqual(["echo"]);
+    await expect(mcp.serverRow(name)).toContainText("1 / 1");
+
+    // Refresh tools keeps the row and says so.
+    await mcp.runAction(name, "Refresh tools");
+    await expect(page.getByText("Tools refreshed").first()).toBeVisible();
+    await expect(mcp.serverRow(name)).toContainText("Connected");
+
+    // Change credential on a shared server: no warning, the mode stays.
+    const before = (await read()).credential_set_at;
+    await mcp.runAction(name, "Change credential");
+    const change = page.getByRole("dialog", { name: "Change credential" });
+    await expect(change.getByRole("alert")).toHaveCount(0);
+    await change.getByRole("radio", { name: "Bearer token" }).check();
+    await change.getByLabel("Token", { exact: true }).fill("second");
+    await change.getByRole("button", { name: "Save" }).click();
+    await expect(change).toBeHidden();
+    const after = await read();
+    expect(after.credential_mode).toBe("shared");
+    expect(after.credential_set_at).not.toBe(before);
+
+    // Remove credential: the server has none afterwards.
+    await mcp.runAction(name, "Change credential");
+    await change.getByRole("radio", { name: /Remove credential/ }).check();
+    await change.getByRole("button", { name: "Save" }).click();
+    await expect(change).toBeHidden();
+    expect((await read()).credential_mode).toBe("none");
+
+    await mcp.deleteServer(name);
+  });
+});
+
 test.describe("an MCP server where each member brings their own credential", () => {
   test("the admin sets it up, and a member connects and disconnects theirs", async ({
     page,

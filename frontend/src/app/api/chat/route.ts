@@ -42,6 +42,8 @@ type ChatBody = {
   maxOutputTokens?: number;
   /** Where this request's tools come from (`src/lib/toolSources.ts`). */
   toolSources?: unknown;
+  /** The user wants to say yes before a tool runs. */
+  approveTools?: boolean;
 };
 
 function authDisabled(): boolean {
@@ -123,6 +125,13 @@ export async function POST(req: Request) {
     maxOutputTokens: body.maxOutputTokens,
     // With tools the answer is a loop: call, read the result, go on.
     ...(hasTools ? { tools, stopWhen: stepCountIs(MAX_TOOL_STEPS) } : {}),
+    // Ask first: the step ends with the call waiting, the page shows it
+    // with Approve and Deny, and the answer comes back as the next
+    // request, where an approved call runs and a denied one is told to
+    // the model.
+    ...(hasTools && body.approveTools
+      ? { toolApproval: () => "user-approval" as const }
+      : {}),
     // The MCP client lives as long as the loop, however it ends.
     onFinish: close,
     onError: close,

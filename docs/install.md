@@ -191,6 +191,30 @@ so a post-install and post-upgrade hook Job (`<release>-policy-check`) waits unt
 on the workloads policy and on Langflow's, and fails the release otherwise;
 `kubectl -n <namespace> get securitypolicy -o jsonpath='{.items[*].status.ancestors[0].conditions}'` shows the reason.
 
+## MCP servers and the proxy's outgoing connections
+
+Organization admins register remote MCP servers by URL (`/mcp-servers`).
+The platform checks a URL when it is registered: `https` only, and no loopback, private, link-local, metadata or cluster-internal address.
+The LiteLLM proxy connects later, on every tool call, and resolves the name again then,
+so a DNS answer that changed after registration, or a redirect, is outside that check.
+The control at call time is a NetworkPolicy for the proxy, which the chart renders when you set:
+
+```yaml
+litellm:
+  egressPolicy:
+    enabled: true
+```
+
+With it the proxy reaches the release namespace (deployed models, the bundled Postgres), DNS, and public addresses on port 443, and nothing else:
+not another namespace, not the Kubernetes API, not the network around the cluster, not a metadata address.
+It is off by default for two reasons.
+Your CNI must enforce NetworkPolicy (k3s, Calico and Cilium do; a recent kind does).
+And every private address the proxy needs must be listed first:
+an external Postgres or a provider on a private address in `litellm.egressPolicy.allowCIDRs`,
+another namespace (a model gateway, the local MCP test server) in `litellm.egressPolicy.allowNamespaces`.
+Measured on kind: with the policy a public MCP server and the listed database host stayed reachable,
+and a Service in another namespace, the Kubernetes API and `169.254.169.254` timed out.
+
 ## Backup and restore
 
 ```bash

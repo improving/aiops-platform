@@ -272,7 +272,7 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   tier's dev admin sees three rows and two users. 503 without a LiteLLM client, 502 on `LiteLLMError`.
   LiteLLM also logs every MCP call as a spend row named like a model (`MCP: list_tools`, `MCP: <alias>-<tool>`, no user, no tokens). They are not model requests:
   `_is_mcp_row` keeps them out of `totals`, `by_target` and `rows`, and `tools` lists them by server and tool (`_aggregate_tools`; the alias becomes the server's name, a deleted server keeps its alias, `list_tools` is left out).
-  They carry no end user, so only the organization scope (an admin) gets them. The mock has three such rows.
+  `utils/mcp_relay.py` sends `x-litellm-end-user-id: <user_key>` with every MCP request, which LiteLLM writes into the row's `end_user` (measured), so a tool call is visible like a model request: a member's own, an admin's all, and the rows from before that (no user) only to an admin. The mock has three such rows.
 - `api/authz.py` `GET /v1alpha1/authz/route` is the gateway's ext-authz check.
   The `langflow` host is a member rule (`_authorize_langflow`): any browser session is allowed, service
   accounts and personal tokens answer 403 with `NOT_A_PERSON`, because that policy passes a bearer straight

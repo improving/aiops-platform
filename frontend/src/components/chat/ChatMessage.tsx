@@ -49,7 +49,10 @@ export const ChatMessage = memo(function ChatMessage({
   onRegenerate,
   onEdit,
   onContinue,
+  onToolApproval,
 }: {
+  /** Answer a tool call that waits for approval; the last turn only. */
+  onToolApproval?: (id: string, approved: boolean) => void;
   message: ChatUIMessage;
   /** This answer is still arriving: no actions, no speed line yet. */
   streaming: boolean;
@@ -80,7 +83,13 @@ export const ChatMessage = memo(function ChatMessage({
           ? text
           : message.parts.map((part, index) => {
               if (isToolUIPart(part)) {
-                return <ToolCallBlock key={part.toolCallId} part={part} />;
+                return (
+                  <ToolCallBlock
+                    key={part.toolCallId}
+                    part={part}
+                    onApproval={onToolApproval}
+                  />
+                );
               }
               if (part.type === "reasoning" && part.text) {
                 return (

@@ -296,6 +296,29 @@ keycloak:
 
 litellm:
   enabled: true
+  # A NetworkPolicy for the proxy's outgoing connections: the release
+  # namespace, DNS and public addresses only. It is what keeps a
+  # registered MCP server URL from reaching a private address at call
+  # time (the platform checks the URL at registration only). Off by
+  # default: it needs a CNI that enforces NetworkPolicy, and an external
+  # database or provider on a private address must be listed first.
+  egressPolicy:
+    enabled: false
+    # Public ports the proxy may use.
+    publicPorts: [443]
+    # Other namespaces the proxy must reach (by name).
+    allowNamespaces: []
+    # Private addresses the proxy must reach, for example "10.0.5.12/32"
+    # for an external Postgres.
+    allowCIDRs: []
+    # What "private" means: left out of the public rule.
+    privateCIDRs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 100.64.0.0/10
+      - 169.254.0.0/16
+      - 127.0.0.0/8
   # Used when enabled is false: the proxy URL, and a Secret holding
   # LITELLM_MASTER_KEY; empty means the platform Secret carries it.
   external:

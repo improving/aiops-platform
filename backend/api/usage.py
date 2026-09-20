@@ -476,11 +476,10 @@ async def current_org_usage(
     )
     model_rows = [r for r in visible if not _is_mcp_row(r)]
     totals, by_target, entries = _aggregate_usage(model_rows, labels, names)
-    # Tool calls carry no end user in LiteLLM's log, so they are the
-    # organization's: an admin sees them, a member does not (yet).
-    tool_rows = (
-        [r for r in rows if _is_mcp_row(r)] if scope == "organization" else []
-    )
+    # The relay names the caller on every MCP request, so a tool call is
+    # visible like a model request: a member's own, an admin's all (the
+    # ones from before that, with no user, only to an admin).
+    tool_rows = [r for r in visible if _is_mcp_row(r)]
     servers = await asyncio.to_thread(_mcp_server_names, db, user)
     return {
         "tools": _aggregate_tools(tool_rows, servers),

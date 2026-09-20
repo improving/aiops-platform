@@ -112,6 +112,52 @@ test.describe("chat with tools", () => {
     await use.click();
   });
 
+  test("with Ask before each call nothing runs until the user approves, and a denial is told to the model", async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    const ask = chat.tools.getByRole("switch", {
+      name: "Ask before each tool call",
+    });
+    await use.click();
+    await ask.click();
+
+    await chat.send("call hi there");
+    const first = chat.toolCalls.first();
+    await expect(first).toHaveAttribute("data-state", "asking");
+    await expect(first).toContainText("waiting for your approval");
+    // The input is on screen before anything runs.
+    await expect(first.getByRole("group", { name: /^Input of/ })).toContainText(
+      "hi there"
+    );
+    await expect(chat.stopButton).toBeHidden();
+
+    await first.getByRole("button", { name: "Approve" }).click();
+    await expect(first).toHaveAttribute("data-state", "done");
+    await expect(chat.assistantMessages.last()).toContainText(
+      "Tool said: hi there"
+    );
+
+    // The choice outlives a reload; a denied call does not run.
+    await page.reload();
+    await expect(ask).toBeChecked();
+    await chat.send("call again");
+    const second = chat.toolCalls.last();
+    await expect(second).toHaveAttribute("data-state", "asking");
+    await second.getByRole("button", { name: "Deny" }).click();
+    await expect(second).toHaveAttribute("data-state", "failed");
+    await expect(second).toContainText("not approved");
+    await expect(chat.assistantMessages.last()).toContainText("Tool said:");
+    await expect(chat.assistantMessages.last()).not.toContainText(
+      "Tool said: again"
+    );
+
+    await ask.click();
+    await use.click();
+  });
+
   test("a Try in chat link turns the server on", async ({ page }) => {
     const chat = new ChatPage(page);
     await page.goto(`/chat?target=inst-mock&tools=${serverName}`);

@@ -36,6 +36,10 @@ REQUEST_HEADERS = (
 RESPONSE_HEADERS = ("content-type", "mcp-session-id", "allow")
 SERVERS_HEADER = "x-mcp-servers"
 LITELLM_KEY_HEADER = "x-litellm-api-key"
+# The proxy writes this into the spend-log row of an MCP call as its
+# ``end_user`` (measured on v1.99.1), the same field a chat request's
+# ``user`` fills, so a tool call is attributed like a model request.
+END_USER_HEADER = "x-litellm-end-user-id"
 EVENT_STREAM = "text/event-stream"
 STREAM_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -59,7 +63,9 @@ class LiteLLMUpstream:
         org_key: str,
         aliases: list[str],
         extra_headers: dict[str, str] | None = None,
+        end_user: str | None = None,
     ):
+        self._end_user = end_user
         self._client = client
         self._org_key = org_key
         self._aliases = aliases
@@ -80,6 +86,9 @@ class LiteLLMUpstream:
             headers={
                 **headers,
                 **self._extra,
+                **(
+                    {END_USER_HEADER: self._end_user} if self._end_user else {}
+                ),
                 LITELLM_KEY_HEADER: f"Bearer {self._org_key}",
                 SERVERS_HEADER: ",".join(self._aliases),
             },

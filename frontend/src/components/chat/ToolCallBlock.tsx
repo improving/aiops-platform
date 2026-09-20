@@ -4,12 +4,14 @@ import {
   type ToolUIPart,
 } from "ai";
 import { CodeSnippet } from "@/components/CodeSnippet";
+import { Button } from "@/components/ui/button";
 
 export type ToolPart = ToolUIPart | DynamicToolUIPart;
 
-type ToolState = "running" | "done" | "failed";
+type ToolState = "asking" | "running" | "done" | "failed";
 
 function toolState(part: ToolPart): ToolState {
+  if (part.state === "approval-requested") return "asking";
   if (part.state === "output-available") return "done";
   if (part.state === "output-error" || part.state === "output-denied") {
     return "failed";
@@ -65,6 +67,7 @@ export function toolLabel(name: string): { server?: string; tool: string } {
 }
 
 const STATE_LABEL: Record<ToolState, string> = {
+  asking: "waiting for your approval",
   running: "running…",
   done: "done",
   failed: "failed",
@@ -79,7 +82,15 @@ const STATE_LABEL: Record<ToolState, string> = {
  * The values are shown as plain text, never highlighted: a tool's
  * result comes from outside the platform.
  */
-export function ToolCallBlock({ part }: { part: ToolPart }) {
+export function ToolCallBlock({
+  part,
+  onApproval,
+}: {
+  part: ToolPart;
+  /** Answer a call that waits for the user ("Ask before each call").
+      Absent on an older turn: its moment has passed. */
+  onApproval?: (id: string, approved: boolean) => void;
+}) {
   const name = getToolOrDynamicToolName(part);
   const label = toolLabel(name);
   const state = toolState(part);
@@ -97,7 +108,7 @@ export function ToolCallBlock({ part }: { part: ToolPart }) {
     <details
       data-testid="chat-tool-call"
       data-state={state}
-      open={state === "running" ? true : undefined}
+      open={state === "running" || state === "asking" ? true : undefined}
       className="my-1 rounded-md border text-xs"
     >
       <summary className="flex cursor-pointer items-center gap-2 px-3 py-2">
@@ -133,6 +144,28 @@ export function ToolCallBlock({ part }: { part: ToolPart }) {
         {error && (
           <div role="alert" className="text-destructive">
             {error}
+          </div>
+        )}
+        {part.state === "approval-requested" && onApproval && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onApproval(part.approval.id, true)}
+            >
+              Approve
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onApproval(part.approval.id, false)}
+            >
+              Deny
+            </Button>
+            <span className="text-muted-foreground">
+              Nothing runs until you say so.
+            </span>
           </div>
         )}
       </div>

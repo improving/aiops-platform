@@ -15,6 +15,7 @@ truth in every mode.
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -92,6 +93,9 @@ def store_shared(
     row.secret_name = name
     row.auth_type = auth_type
     row.auth_header = auth_header if auth_type == AUTH_HEADER else None
+    # Said explicitly: a new value in the same header shape changes no
+    # column, so ``onupdate`` would leave the "set" date of the old one.
+    row.updated_at = datetime.now()
     db.flush()
     return row
 
@@ -141,6 +145,7 @@ def store_for_user(
     row.secret_name = name
     row.auth_type = server.user_auth_type or AUTH_BEARER
     row.auth_header = server.user_auth_header
+    row.updated_at = datetime.now()
     db.flush()
     return row
 
