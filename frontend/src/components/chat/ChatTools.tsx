@@ -21,7 +21,13 @@ function serverNote(server: McpServer): string {
   if (server.status !== "connected") return "unreachable";
   if (server.my_credential === "missing") return "needs your credential";
   const count = allowedTools(server).length;
-  return `${count} ${count === 1 ? "tool" : "tools"}`;
+  const asks =
+    server.approval === "always"
+      ? " · asks first"
+      : server.approval === "writes"
+        ? " · asks before changes"
+        : "";
+  return `${count} ${count === 1 ? "tool" : "tools"}${asks}`;
 }
 
 /**

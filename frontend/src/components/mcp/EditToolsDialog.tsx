@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { mcpService } from "@/services/mcpService";
-import type { McpServer } from "@/types/mcp";
+import type { McpApproval, McpServer } from "@/types/mcp";
+import { ApprovalField } from "@/components/mcp/ApprovalField";
 import { ToolPicker } from "@/components/mcp/ToolPicker";
 
 /** "Edit tools" (W4/W5): the same allow-all-or-selected picker as the add
@@ -32,10 +33,12 @@ export function EditToolsDialog({
   const { toast } = useToast();
   const [allowAll, setAllowAll] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [approval, setApproval] = useState<McpApproval>("never");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open && server) {
+      setApproval(server.approval ?? "never");
       setAllowAll(server.allowed_tools === null);
       setSelected(
         new Set(server.allowed_tools ?? server.tools.map((t) => t.name))
@@ -59,8 +62,8 @@ export function EditToolsDialog({
       const updated = await mcpService.updateServer(
         server.id,
         allowAll
-          ? { allow_all_tools: true }
-          : { allowed_tools: Array.from(selected) }
+          ? { allow_all_tools: true, approval }
+          : { allowed_tools: Array.from(selected), approval }
       );
       toast({
         title: "Success",
@@ -93,6 +96,13 @@ export function EditToolsDialog({
             onAllowAllChange={setAllowAll}
             selected={selected}
             onToggle={toggleTool}
+          />
+        )}
+        {server && (
+          <ApprovalField
+            idPrefix="mcp-edit"
+            value={approval}
+            onChange={setApproval}
           />
         )}
         <DialogFooter>

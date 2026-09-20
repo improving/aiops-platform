@@ -1,5 +1,6 @@
 import api from "./api";
 import type {
+  McpApproval,
   McpCredentialInput,
   McpServer,
   McpTool,
@@ -15,6 +16,7 @@ export interface McpServerInput {
   description?: string;
   credential?: McpCredentialInput;
   allowed_tools?: string[] | null;
+  approval?: McpApproval;
   /** "per_user": `credential` is the admin's own, and every other
       member brings theirs. */
   credential_mode?: "shared" | "per_user";
@@ -33,6 +35,7 @@ export interface McpServerUpdate {
   credential_mode?: "none" | "shared" | "per_user";
   allowed_tools?: string[];
   allow_all_tools?: boolean;
+  approval?: McpApproval;
   enabled?: boolean;
 }
 

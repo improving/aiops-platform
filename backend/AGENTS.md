@@ -303,7 +303,7 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   so the caller says whether Langflow still has the variable; a new one is minted only when it does not or the token has under 30 days left,
   and the old rows are deleted, not revoked, because this runs on every Develop page load. Langflow keeps one variable for the user whatever the organization, so "the holder has it" also needs the newest `langflow` token of the user to be this organization's; after a provision in another organization a new one is minted here. `mint_token` is the one mint path, shared with `api/tokens.py`.
 
-- MCP servers (`api/mcp.py`, routes in docs/api.md, design in `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`, ADR 0010):
+- MCP servers (`api/mcp.py` is the registry, `api/mcp_endpoint.py` the `/v1alpha1/mcp` endpoint, `utils/mcp_mock.py` the test doubles of `AIOPS_CHAT_MOCK`; the endpoint takes `litellm_client` and `org_key` through `api.mcp`, so tests patch them there for both; routes in docs/api.md, design in `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`, ADR 0010):
   an admin registers a remote MCP server, the hosted-provider way (row, Secret, LiteLLM, commit; a failure undoes the earlier steps, 502).
   `models/mcp_server.py` has `McpServer` and `McpCredential`; the credential is a table of its own (`user_id` NULL = the organization's shared one,
   two partial unique indexes because NULLs are distinct), so a member's own credential is a new row and not a new column.
@@ -326,6 +326,8 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   (measured: `x-litellm-api-key` has priority when both are present).
   Order of side effects, from the review of #58: a Secret that is deleted or written over cannot be rolled back, so `update_server` calls the proxy first and changes Secrets after it (`_target_mode` makes the mode explicit and refuses a change on a `per_user` server that does not name it; `_apply_credential_change`),
   `delete_server` fails closed (502, everything stays) when the proxy refuses, and `remove_member` deletes the leaver's MCP credentials after the LiteLLM steps.
+  `McpServer.approval` (`never`, `writes`, `always`; migration `0011`) is the admin's floor for approval in the chat playground; the backend only stores and serves it, the UI's chat route applies it.
+  The mock endpoint names its tools `<alias>-echo` for each selected server, as the proxy does, because that route tells the servers apart by the prefix.
   `McpUpstream` is the seam for a direct connection later. The path is excluded from the audit log by exact match (`audit/events.py` `EXCLUDED_PATHS`); each `tools/call` is an info log line.
   Token scope `mcp` (`auth/tokens.py`) is valid on that path only, with the member's role (`get_current_user` answers 403 elsewhere).
   `checked_at` and `credential_set_at` go out with the server's offset (`_aware`): the rows hold naive `datetime.now()` values, and a browser read a naive one in its own zone ("6 h" in IST for a minute-old check).

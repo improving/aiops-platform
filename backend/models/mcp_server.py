@@ -52,6 +52,10 @@ class McpServer(Base):
     # Tool names the organization allows; NULL allows all, new ones too.
     allowed_tools = Column(JSON, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
+    # When the chat playground asks the member before a tool of this
+    # server runs: never | writes (every tool that does not say it only
+    # reads) | always. The admin's floor; a member can ask for more.
+    approval = Column(String, nullable=False, default="never")
     litellm_server_id = Column(String, nullable=True)
     # [{name, description, read_only}] from the last successful refresh.
     tools_cache = Column(JSON, nullable=True)

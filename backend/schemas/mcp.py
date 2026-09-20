@@ -14,6 +14,17 @@ def _web_url(value: str | None) -> str | None:
     return value
 
 
+APPROVAL_MODES = ("never", "writes", "always")
+
+
+def _approval_mode(value: str | None) -> str | None:
+    if value is not None and value not in APPROVAL_MODES:
+        raise ValueError(
+            f"approval must be one of {', '.join(APPROVAL_MODES)}"
+        )
+    return value
+
+
 class McpToolSchema(BaseModel):
     name: str
     description: str = ""
@@ -41,6 +52,8 @@ class McpServerSchema(BaseModel):
     credential_header: str | None = None
     credential_help_url: str | None = None
     allowed_tools: list[str] | None = None
+    # never | writes | always: when Chat asks before a tool runs.
+    approval: str = "never"
     enabled: bool
     status: str
     checked_at: datetime | None = None
@@ -72,8 +85,10 @@ class McpServerCreateRequest(McpDiscoverRequest):
     allowed_tools: list[str] | None = None
     credential_mode: str | None = None
     credential_help_url: str | None = None
+    approval: str = "never"
 
     _help_url = field_validator("credential_help_url")(_web_url)
+    _approval = field_validator("approval")(_approval_mode)
 
 
 class McpOwnCredentialRequest(BaseModel):
@@ -97,5 +112,7 @@ class McpServerUpdateRequest(BaseModel):
     # (per_user) the admin's own, which also sets the header shape.
     credential_mode: str | None = None
     credential_help_url: str | None = None
+    approval: str | None = None
 
     _help_url = field_validator("credential_help_url")(_web_url)
+    _approval = field_validator("approval")(_approval_mode)

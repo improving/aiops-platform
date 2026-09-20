@@ -233,7 +233,8 @@ def test_mcp_token_is_valid_on_the_mcp_endpoint_only(
         headers=bearer(token),
     )
     assert listed.status_code == 200, listed.text
-    assert listed.json()["result"]["tools"][0]["name"] == "echo"
+    tools = listed.json()["result"]["tools"]
+    assert all(t["name"].endswith("echo") for t in tools)
 
 
 def test_a_managed_token_is_kept_renewed_and_never_piles_up(

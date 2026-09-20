@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     }
     throw error;
   }
-  const { tools, close } = resolved;
+  const { tools, close, needsApproval } = resolved;
   const hasTools = Object.keys(tools).length > 0;
 
   const result = streamText({
@@ -128,9 +128,15 @@ export async function POST(req: Request) {
     // Ask first: the step ends with the call waiting, the page shows it
     // with Approve and Deny, and the answer comes back as the next
     // request, where an approved call runs and a denied one is told to
-    // the model.
-    ...(hasTools && body.approveTools
-      ? { toolApproval: () => "user-approval" as const }
+    // the model. The member's switch asks for every call; without it
+    // the admin's setting of each server decides (never, writes, always).
+    ...(hasTools
+      ? {
+          toolApproval: ({ toolCall }: { toolCall: { toolName: string } }) =>
+            body.approveTools || needsApproval(toolCall.toolName)
+              ? ("user-approval" as const)
+              : ("not-applicable" as const),
+        }
       : {}),
     // The MCP client lives as long as the loop, however it ends.
     onFinish: close,

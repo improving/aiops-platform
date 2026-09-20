@@ -11,6 +11,9 @@ export interface McpTool {
 
 export type McpTransport = "http" | "sse";
 
+/** When Chat asks the member before a tool of the server runs. */
+export type McpApproval = "never" | "writes" | "always";
+
 export type McpCredentialInput =
   | { auth_type: "bearer"; value: string }
   | { auth_type: "header"; auth_header: string; value: string };
@@ -37,6 +40,8 @@ export interface McpServer {
   credential_set_at: string | null;
   /** null allows every tool, new ones too. */
   allowed_tools: string[] | null;
+  /** The admin's floor for approval in Chat. Absent on an older backend. */
+  approval?: McpApproval;
   enabled: boolean;
   status: "connected" | "unreachable";
   checked_at: string | null;

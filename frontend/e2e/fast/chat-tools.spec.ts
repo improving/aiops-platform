@@ -158,6 +158,41 @@ test.describe("chat with tools", () => {
     await use.click();
   });
 
+  test("the admin's setting makes Chat ask although the member's switch is off", async ({
+    page,
+  }) => {
+    // Set in the Edit tools dialog; "echo" says it only reads, so
+    // "writes" lets it run and "always" asks.
+    const setApproval = async (approval: string) => {
+      const patched = await page.request.patch(`${SERVERS}/${serverId}`, {
+        data: { approval },
+      });
+      expect(patched.status()).toBe(200);
+    };
+    const chat = new ChatPage(page);
+
+    await setApproval("writes");
+    await chat.open("inst-mock");
+    await expect(chat.tools).toContainText("asks before changes");
+    const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    await use.click();
+    await chat.send("call one");
+    await expect(chat.toolCalls.last()).toHaveAttribute("data-state", "done");
+
+    await setApproval("always");
+    await page.reload();
+    await expect(chat.tools).toContainText("asks first");
+    await expect(
+      chat.tools.getByRole("switch", { name: "Ask before each tool call" })
+    ).not.toBeChecked();
+    await chat.send("call two");
+    const waiting = chat.toolCalls.last();
+    await expect(waiting).toHaveAttribute("data-state", "asking");
+    await waiting.getByRole("button", { name: "Deny" }).click();
+    await expect(waiting).toContainText("not approved");
+    await use.click();
+  });
+
   test("a Try in chat link turns the server on", async ({ page }) => {
     const chat = new ChatPage(page);
     await page.goto(`/chat?target=inst-mock&tools=${serverName}`);

@@ -158,7 +158,7 @@ def test_upgrade_fresh_database(tmp_path):
     )
     assert current_revision(engine) == head_revision()
     # A mis-numbered file would still satisfy the dynamic check above.
-    assert head_revision() == "0010"
+    assert head_revision() == "0011"
     assert {"organizations", "users", "memberships"} <= table_names(engine)
     assert "model_serving_options" in table_names(engine)
     assert "reference" in column_names(engine, "inference_instances")
@@ -263,7 +263,7 @@ def test_registry_migration_seeds_serving_options_from_category_and_model_id(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0010"
+    assert current_revision(engine) == head_revision() == "0011"
     with engine.connect() as conn:
         rows = conn.execute(
             sa.select(
@@ -368,7 +368,7 @@ def test_enterprise_migration_adds_tables_and_columns_and_downgrades(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0010"
+    assert current_revision(engine) == head_revision() == "0011"
     assert set(ENTERPRISE_TABLES) <= table_names(engine)
     assert column_names(engine, "invitations") == {
         "id",

@@ -15,28 +15,24 @@ team's permission for it), then the commit; a failure undoes the
 earlier steps and answers 502. Members read servers without secrets;
 only admins write.
 
-``/v1alpha1/mcp`` is the one door for the chat playground, IDEs, SDKs
-and Langflow. It authenticates the caller (session or personal token),
-refuses viewers (a tool can change data), picks the servers, resolves
-the caller's credentials (``utils/mcp_credentials.py``) and relays to
-LiteLLM ``/mcp`` with the organization's key (``utils/mcp_relay.py``).
-LiteLLM's own endpoint stays inside the cluster.
+The endpoint that serves the tools, ``/v1alpha1/mcp``, is
+``api/mcp_endpoint.py``; it takes the LiteLLM client and the organization
+key through this module (``litellm_client``, ``org_key``), so a test
+patches them here for both.
 
-``AIOPS_CHAT_MOCK=true`` mocks discovery, registration and the endpoint
-(one tool, ``echo``) for the Playwright fast tier.
+``AIOPS_CHAT_MOCK=true`` mocks discovery and registration
+(``utils/mcp_mock.py``) for the Playwright fast tier.
 """
 
-import asyncio
-import json
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.chat import chat_mock_enabled, user_key
+from api.chat import chat_mock_enabled
 from auth.current_user import (
     CurrentUser,
     get_current_user,
@@ -71,28 +67,13 @@ from utils.mcp import (
     valid_name,
     validate_server_url,
 )
-from utils.mcp_relay import SERVERS_HEADER, LiteLLMUpstream, relay
+from utils.mcp_mock import MOCK_LITELLM_SERVER_ID, MOCK_TOOLS
 
 router = APIRouter()
 logger = setup_logger(__name__)
 
 STATUS_CONNECTED = "connected"
 STATUS_UNREACHABLE = "unreachable"
-MOCK_LITELLM_SERVER_ID = "mock"
-MOCK_TOOLS = [
-    {
-        "name": "echo",
-        "description": "Say it again",
-        "inputSchema": {
-            "type": "object",
-            "properties": {"message": {"type": "string"}},
-            "required": ["message"],
-        },
-        "annotations": {"readOnlyHint": True},
-    }
-]
-# An alias that names no server: LiteLLM answers an empty tool list.
-NO_SERVERS = "none"
 
 
 def litellm_client():
@@ -156,6 +137,7 @@ def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
         credential_header=_user_header(server),
         credential_help_url=server.credential_help_url,
         allowed_tools=server.allowed_tools,
+        approval=server.approval,
         enabled=server.enabled,
         status=server.status,
         checked_at=_aware(server.checked_at),
@@ -398,6 +380,7 @@ def create_server(
         user_auth_header=body.credential.auth_header if per_user else None,
         credential_help_url=body.credential_help_url,
         allowed_tools=body.allowed_tools,
+        approval=body.approval,
         enabled=True,
     )
     db.add(server)
@@ -577,6 +560,8 @@ def update_server(
         server.allowed_tools = body.allowed_tools
     if body.enabled is not None:
         server.enabled = body.enabled
+    if body.approval is not None:
+        server.approval = body.approval
 
     if body.credential_help_url is not None:
         server.credential_help_url = body.credential_help_url or None
@@ -738,150 +723,3 @@ def delete_server(
         logger.exception("Could not sync the team after deleting %s", id)
     db.commit()
     return Response(status_code=204)
-
-
-# --- the endpoint -------------------------------------------------------
-
-
-def _selected(
-    db: Session, user: CurrentUser, requested: str | None
-) -> list[McpServer]:
-    """The servers of this request: every enabled one of the caller's
-    organization, or the ``X-Mcp-Servers`` names among them. An unknown
-    name is a 400, so a typo is not a silent empty tool list."""
-    enabled = (
-        db.query(McpServer)
-        .filter(org_scope(McpServer, user), McpServer.enabled.is_(True))
-        .all()
-    )
-    if not requested or not requested.strip():
-        return enabled
-    by_name = {s.name: s for s in enabled}
-    names = [n.strip() for n in requested.split(",") if n.strip()]
-    unknown = [n for n in names if n not in by_name]
-    if unknown:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown or disabled MCP server: {', '.join(unknown)}",
-        )
-    return [by_name[n] for n in names]
-
-
-def _log_tool_call(user: CurrentUser, body: bytes | None) -> None:
-    """Who called which tool, never with what: the audit log skips this
-    path (one event per protocol message would drown it)."""
-    if not body or b"tools/call" not in body:
-        return
-    try:
-        message = json.loads(body)
-    except ValueError:
-        return
-    if isinstance(message, dict) and message.get("method") == "tools/call":
-        name = (message.get("params") or {}).get("name")
-        logger.info("MCP tool call by %s: %s", user.email or user.sub, name)
-
-
-def _jsonrpc(id, result) -> JSONResponse:
-    return JSONResponse({"jsonrpc": "2.0", "id": id, "result": result})
-
-
-def _mock_endpoint(method: str, body: bytes | None) -> Response:
-    """A stateless MCP server with one tool, for the fast tier: the
-    chat route's MCP client connects to it as to the real endpoint."""
-    if method != "POST":
-        return Response(status_code=405, headers={"Allow": "POST"})
-    try:
-        message = json.loads(body or b"")
-    except ValueError:
-        return JSONResponse(
-            {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32700, "message": "Parse error"},
-            },
-            status_code=400,
-        )
-    rpc = message.get("method", "")
-    if "id" not in message:
-        return Response(status_code=202)
-    params = message.get("params") or {}
-    if rpc == "initialize":
-        return _jsonrpc(
-            message["id"],
-            {
-                "protocolVersion": params.get("protocolVersion", "2025-06-18"),
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "aiops-mock-mcp", "version": "1"},
-            },
-        )
-    if rpc == "ping":
-        return _jsonrpc(message["id"], {})
-    if rpc == "tools/list":
-        return _jsonrpc(message["id"], {"tools": MOCK_TOOLS})
-    if rpc == "tools/call":
-        text = str((params.get("arguments") or {}).get("message", ""))
-        return _jsonrpc(
-            message["id"],
-            {"content": [{"type": "text", "text": text}], "isError": False},
-        )
-    return JSONResponse(
-        {
-            "jsonrpc": "2.0",
-            "id": message["id"],
-            "error": {"code": -32601, "message": f"Method not found: {rpc}"},
-        }
-    )
-
-
-@router.api_route("/v1alpha1/mcp", methods=["GET", "POST", "DELETE"])
-async def mcp_endpoint(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_writer),
-):
-    # No server-to-client stream: the proxy would hold a GET open for as
-    # long as the client stays, each one on a worker thread of the pool
-    # that also runs every sync route, so some tens of idle IDE sessions
-    # would stop the API. The protocol allows 405 here, and clients then
-    # work with POST alone (the tools of a registry do not push events).
-    if request.method == "GET":
-        return Response(status_code=405, headers={"Allow": "POST, DELETE"})
-    body = await request.body() if request.method == "POST" else None
-    servers = _selected(db, user, request.headers.get(SERVERS_HEADER))
-    _log_tool_call(user, body)
-    if chat_mock_enabled():
-        return _mock_endpoint(request.method, body)
-    litellm = litellm_client()
-    if litellm is None:
-        raise HTTPException(
-            status_code=503,
-            detail="MCP servers need the LiteLLM proxy, which is not configured",
-        )
-    explicit = bool((request.headers.get(SERVERS_HEADER) or "").strip())
-    usable = []
-    extra: dict[str, str] = {}
-    for server in servers:
-        alias = litellm_alias(server.id, server.name)
-        resolved = await asyncio.to_thread(creds.resolve, server, user, alias)
-        if resolved.state == creds.MISSING:
-            # Asked for by name: say what is missing. Among "all the
-            # servers" it is left out, and the others still work.
-            if explicit:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Connect your own credential for {server.name} "
-                    "first (MCP servers page, or the Tools section of Chat)",
-                )
-            continue
-        usable.append(alias)
-        extra.update(resolved.headers)
-    try:
-        key = await asyncio.to_thread(org_key, db, user)
-    except LiteLLMError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
-    upstream = LiteLLMUpstream(
-        litellm, key, usable or [NO_SERVERS], extra, end_user=user_key(user)
-    )
-    return await asyncio.to_thread(
-        relay, upstream, request.method, request.headers, body
-    )

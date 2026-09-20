@@ -199,6 +199,9 @@ An organization admin registers remote MCP servers; every member with a writer r
 | `DELETE /v1alpha1/mcp/servers/{id}` | admin | The proxy's registration first (it holds a copy of a shared credential): when the proxy refuses, 502 and everything stays. Then every Secret and the row. |
 
 `name` is lower case letters, digits and `_` (it starts with a letter, 32 characters at most).
+`approval` (`never`, the default; `writes`; `always`) is when the chat playground asks the member before a tool of the server runs:
+`writes` means every tool that does not say it only reads (`read_only: true`). It is the admin's floor; a member's own "Ask before each call" adds to it.
+It binds the playground, which the platform runs; a client of `/v1alpha1/mcp` (an IDE, an SDK) decides about approval itself.
 `transport` is `http` (streamable HTTP, the default) or `sse`.
 `credential` is `{auth_type: "bearer", value}` or `{auth_type: "header", auth_header, value}`; it lives in a Kubernetes Secret and is shared by the organization.
 With `credential_mode: "per_user"` each member brings their own instead (a GitHub token, say, so the model works in that member's repositories):

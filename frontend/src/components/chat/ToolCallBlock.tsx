@@ -125,7 +125,7 @@ export function ToolCallBlock({
             state === "failed" ? "text-destructive" : "text-muted-foreground"
           }
         >
-          {STATE_LABEL[state]}
+          {part.state === "output-denied" ? "not approved" : STATE_LABEL[state]}
         </span>
       </summary>
       <div className="flex flex-col gap-2 border-t px-3 py-2">

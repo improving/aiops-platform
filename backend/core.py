@@ -20,6 +20,7 @@ from api.inference_operations import router as inference_operations_router
 from api.inference_status import update_all_inference_instance_endpoints
 from api.langflow import router as langflow_router
 from api.mcp import router as mcp_router
+from api.mcp_endpoint import router as mcp_endpoint_router
 from api.model_adapters import router as model_adapters_router
 from api.models import router as models_router
 from api.notebooks import router as notebooks_router
@@ -175,6 +176,7 @@ def create_app(setup_db: bool = True):
     _app.include_router(usage_router, tags=["organizations"])
     _app.include_router(providers_router, tags=["providers"])
     _app.include_router(mcp_router, tags=["mcp"])
+    _app.include_router(mcp_endpoint_router, tags=["mcp"])
     _app.include_router(registry_router, tags=["registry"])
     _app.include_router(audit_router, tags=["audit"])
     _app.include_router(tokens_router, tags=["tokens"])

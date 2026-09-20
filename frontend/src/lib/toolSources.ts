@@ -97,6 +97,9 @@ function withCappedResults(tools: ToolSet): ToolSet {
 
 export type ResolvedTools = {
   tools: ToolSet;
+  /** The admin's floor: does this tool call wait for the member's yes?
+      (`McpServer.approval`: never, writes, always.) */
+  needsApproval: (toolName: string) => boolean;
   /** Release what the resolvers opened; safe to call more than once. */
   close: () => Promise<void>;
 };
@@ -124,6 +127,49 @@ export function parseToolSources(value: unknown): ToolSource[] {
  * is asked for. `headers` are the caller's (the session bearer, the
  * organization): the backend holds the credentials, this process none.
  */
+type ServerPolicy = {
+  tool_prefix: string;
+  approval?: "never" | "writes" | "always";
+  tools: { name: string; read_only: boolean | null }[];
+};
+
+/**
+ * The approval policy of the named servers, read from the backend with
+ * the caller's own headers: the route decides with what the platform
+ * says, never with what the browser sent. A failure to read it asks for
+ * every call (the safe side), since the tools themselves did load.
+ */
+async function approvalPolicy(
+  servers: string[],
+  headers: Record<string, string>
+): Promise<(toolName: string) => boolean> {
+  let listed: (ServerPolicy & { name: string })[];
+  try {
+    const response = await fetch(`${backendUrl()}/v1alpha1/mcp/servers`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) return () => true;
+    listed = await response.json();
+  } catch {
+    return () => true;
+  }
+  const policies = listed.filter((s) => servers.includes(s.name));
+  return (toolName: string) => {
+    const server = policies.find((s) => toolName.startsWith(s.tool_prefix));
+    // A tool of no known server: do not run it unasked.
+    if (!server) return true;
+    const mode = server.approval ?? "never";
+    if (mode === "always") return true;
+    if (mode === "never") return false;
+    const tool = server.tools.find(
+      (t) => `${server.tool_prefix}${t.name}` === toolName
+    );
+    // "writes": everything that does not say it only reads.
+    return tool?.read_only !== true;
+  };
+}
+
 async function resolveMcp(
   servers: string[],
   headers: Record<string, string>
@@ -137,11 +183,15 @@ async function resolveMcp(
         headers: { ...headers, [SERVERS_HEADER]: servers.join(",") },
       },
     });
-    const tools = await client.tools();
+    const [tools, needsApproval] = await Promise.all([
+      client.tools(),
+      approvalPolicy(servers, headers),
+    ]);
     const opened = client;
     let closed = false;
     return {
       tools: withCappedResults(tools as ToolSet),
+      needsApproval,
       close: async () => {
         if (closed) return;
         closed = true;
@@ -165,7 +215,11 @@ export async function resolveToolSources(
     ...new Set(sources.filter((s) => s.type === "mcp").map((s) => s.server)),
   ];
   if (servers.length === 0) {
-    return { tools: {}, close: async () => undefined };
+    return {
+      tools: {},
+      needsApproval: () => false,
+      close: async () => undefined,
+    };
   }
   return resolveMcp(servers, headers);
 }

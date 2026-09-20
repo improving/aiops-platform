@@ -223,6 +223,27 @@ def test_create_stores_the_secret_registers_and_scopes_the_team(env):
     assert all(i.startswith("srv-") for i in team_ids)
 
 
+def test_the_admin_sets_when_chat_asks_before_a_tool_runs(env):
+    client, _ = env
+    created = _create(client).json()
+    assert created["approval"] == "never"
+    url = f"{SERVERS}/{created['id']}"
+    assert client.patch(url, json={"approval": "writes"}).json()[
+        "approval"
+    ] == ("writes")
+    assert _create(client, approval="always").json()["approval"] == "always"
+    assert client.patch(url, json={"approval": "sometimes"}).status_code == 422
+    assert (
+        client.patch(
+            url, json={"approval": "always"}, headers=ALICE
+        ).status_code
+        == 403
+    )
+    # A member reads it: the chat route decides with it.
+    listed = {s["id"]: s for s in client.get(SERVERS, headers=ALICE).json()}
+    assert listed[created["id"]]["approval"] == "writes"
+
+
 def test_custom_header_credential(env):
     client, litellm = env
     response = _create(
@@ -874,7 +895,9 @@ def test_mock_mode_serves_a_registry_and_an_mcp_server(client, monkeypatch):
         json={"jsonrpc": "2.0", "method": "notifications/initialized"},
     )
     assert note.status_code == 202
-    assert rpc("tools/list").json()["result"]["tools"][0]["name"] == "echo"
+    # Named like the proxy names them: <alias>-<tool>.
+    names = [t["name"] for t in rpc("tools/list").json()["result"]["tools"]]
+    assert created.json()["tool_prefix"] + "echo" in names
     called = rpc(
         "tools/call", {"name": "echo", "arguments": {"message": "hi"}}
     )

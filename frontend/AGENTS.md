@@ -93,6 +93,9 @@ pnpm e2e:ui                               # Playwright UI mode
   "Ask before each call" (a switch in the Tools section, kept per user like the server choice): the body carries `approveTools`, the route gives `streamText` `toolApproval: () => "user-approval"`,
   the step then ends with the tool part in state `approval-requested`, `ToolCallBlock` shows it open as `data-state="asking"` with the input and Approve / Deny (last turn only),
   `addToolApprovalResponse` records the answer, and `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses` sends the conversation back: an approved call runs, a denied one (`output-denied`, shown as failed, "not approved") is told to the model.
+  The admin's floor is `McpServer.approval` (`never`, `writes`, `always`; `ApprovalField.tsx` in the Edit tools dialog): `resolveMcp` reads `/v1alpha1/mcp/servers` from the backend with the caller's headers (never from the browser's request)
+  and `needsApproval(toolName)` finds the server by `tool_prefix`; `writes` asks for every tool that does not say `read_only: true`; a tool of no known server, or a policy that cannot be read, asks. The member's switch can only add to it.
+  The Tools section says "asks first" or "asks before changes" next to such a server, and a denied call reads "not approved".
   The approver is the user whose session sends the request, so the approval is not signed (`experimental_toolApprovalSecret` is for a server that must not trust its client).
   An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.
   `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),

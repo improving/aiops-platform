@@ -196,9 +196,13 @@ test.describe("MCP servers page, day-two actions of an admin", () => {
     const edit = page.getByRole("dialog", { name: "Edit tools" });
     await edit.getByRole("radio", { name: "Only the selected tools" }).check();
     await expect(edit.getByRole("checkbox", { name: "echo" })).toBeChecked();
+    await edit
+      .getByRole("radio", { name: "For tools that can change data" })
+      .check();
     await edit.getByRole("button", { name: "Save" }).click();
     await expect(edit).toBeHidden();
     expect((await read()).allowed_tools).toEqual(["echo"]);
+    expect((await read()).approval).toBe("writes");
     await expect(mcp.serverRow(name)).toContainText("1 / 1");
 
     // Refresh tools keeps the row and says so.

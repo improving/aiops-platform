@@ -128,6 +128,7 @@ expect "lab mounts the model cache read-only" 'claimName: hf-cache' "$lab_render
 reject "default API pod has no model cache mount" 'model-cache' "$default"
 expect "lab sets the short vLLM liveness delay" 'VLLM_LIVENESS_INITIAL_DELAY_SECONDS: "60"' "$lab_render"
 reject "lab realm has no dev users" '"username": "alice"' "$lab_render"
+expect "lab limits the proxy's outgoing connections" 'name: aiops-litellm-egress$' "$lab_render"
 
 # --- Langflow ------------------------------------------------------------------
 reject "the default render has no Langflow" 'aiops-platform-langflow' "$default"
