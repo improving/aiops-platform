@@ -1,0 +1,33 @@
+fullnameOverride: {{ release_name | string | tojson }}
+image:
+  repository: {{ image | string | tojson }}
+  tag: {{ tag | string | tojson }}
+command:
+{%- for item in command %}
+  - {{ item | string | tojson }}
+{%- else %} []
+{%- endfor %}
+args:
+{%- for item in args %}
+  - {{ item | string | tojson }}
+{%- else %} []
+{%- endfor %}
+service:
+  port: {{ port | int }}
+env:
+{%- for name, value in env.items() %}
+  - name: {{ name | string | tojson }}
+    value: {{ value | string | tojson }}
+{%- else %} []
+{%- endfor %}
+envFromSecret: {{ env_from_secret | string | tojson }}
+settingsChecksum: {{ settings_checksum | string | tojson }}
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    namespace: {{ proxy_namespace | string | tojson }}
+    podLabels:
+{%- for key, value in proxy_labels.items() %}
+      {{ key | string | tojson }}: {{ value | string | tojson }}
+{%- endfor %}
+  egress: {{ egress | string | tojson }}

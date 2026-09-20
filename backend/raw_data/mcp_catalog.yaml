@@ -1,0 +1,50 @@
+# The MCP servers the platform can deploy (docs/superpowers/specs/
+# 2026-09-20-deployed-mcp-servers-design.md). An entry is here only after
+# its image was measured: it speaks streamable HTTP by itself, it runs
+# under the hardened pod of charts/mcp-server, and the proxy lists its
+# tools through the chart's network policy.
+#
+# args may hold {host} (the Service host), {port} and {path}.
+# A setting is an environment variable an admin fills; `flag` makes it a
+# switch that adds one argument instead.
+entries:
+  - name: grafana
+    title: Grafana
+    description: >-
+      Dashboards, Prometheus and Loki queries, alerts and incidents of a
+      Grafana, as tools.
+    docs_url: https://github.com/grafana/mcp-grafana
+    image: docker.io/mcp/grafana
+    # Measured on 2026-09-20 (65 tools, runs as non-root with a read-only
+    # root file system). A digest, so what was measured is what runs.
+    tag: "@sha256:9362bcf6aa0e44e61f645b905cec03fb346a946a34a4dafecd7f3e28d3724014"
+    command: []
+    # -allowed-hosts: the server checks the Host header and admits only
+    # loopback names by default, so the Service name must be listed.
+    args:
+      - "-t"
+      - streamable-http
+      - "-address"
+      - "0.0.0.0:{port}"
+      - "-endpoint-path"
+      - "{path}"
+      - "-allowed-hosts"
+      - "{host},{host}:{port}"
+    port: 8000
+    path: /mcp
+    egress: cluster
+    settings:
+      - name: GRAFANA_URL
+        label: Grafana URL
+        help: Where the server reaches Grafana, for example http://grafana.monitoring.svc:3000
+        required: true
+      - name: GRAFANA_SERVICE_ACCOUNT_TOKEN
+        label: Service account token
+        help: A Grafana service account token. Every member's model acts with it.
+        secret: true
+      - name: READ_ONLY
+        label: Read only (the server offers no tools that change data)
+        flag: "-disable-write"
+        default: "true"
+    chart_repo: https://infracloudio.github.io/charts
+    chart_name: mcp-server

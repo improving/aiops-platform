@@ -11,11 +11,19 @@ from logger import setup_logger
 from models.engine_chart_dashboards import DBEngineChartDashboards
 from models.engine_charts import DBEngineCharts
 from models.engines import DBEngine, DBEngineDefaultArgs, DBEngineDefaultConfig
+from models.mcp_catalog import (
+    EGRESS_PUBLIC,
+    SOURCE_BUILTIN,
+    McpCatalogEntry,
+    builtin_id,
+)
+from models.mcp_catalog import STATUS_PUBLISHED as CATALOG_PUBLISHED
 from models.models import STATUS_PUBLISHED, DBModel
 from models.serving_option import ServingOption
 from models.vectordb import DBVectorDB
 from paths import RAW_DATA_DIR
 from utils import genid
+from utils.mcp_catalog_settings import normal_setting
 
 logger = setup_logger(__name__)
 
@@ -49,6 +57,7 @@ def load_initial_data(db: Session):
 
         # Load vector dbs
         load_vector_dbs(db)
+        load_mcp_catalog(db)
     except Exception as e:
         logger.error(
             f"An error occurred while loading initial data: {e}", exc_info=True
@@ -56,6 +65,67 @@ def load_initial_data(db: Session):
         db.rollback()
     finally:
         db.close()
+
+
+def load_mcp_catalog(db, path=None):
+    """Seed the deploy catalog from ``raw_data/mcp_catalog.yaml``.
+    A builtin row is found by ``(source, source_id)``, as ``load_models``
+    finds its rows, and an entry somebody imported is never touched. A
+    seed name that another row holds is skipped with a warning: ``name``
+    is unique, and a taken name must not stop the startup. A builtin
+    entry is the repository's: what a platform admin changed on one
+    (all but its ``status``) is written over at the next start."""
+    logger.info("Loading the MCP catalog")
+    with open(
+        path or RAW_DATA_DIR / "mcp_catalog.yaml", encoding="utf-8"
+    ) as f:
+        document = yaml.safe_load(f) or {}
+    for item in document.get("entries") or []:
+        name = item["name"]
+        row = (
+            db.query(McpCatalogEntry)
+            .filter(
+                McpCatalogEntry.source == SOURCE_BUILTIN,
+                McpCatalogEntry.source_id == name,
+            )
+            .first()
+        )
+        if row is None:
+            taken = (
+                db.query(McpCatalogEntry.id)
+                .filter(McpCatalogEntry.name == name)
+                .first()
+            )
+            if taken is not None:
+                logger.warning(
+                    "MCP catalog: the name %s is taken by an imported "
+                    "entry; the builtin one is skipped",
+                    name,
+                )
+                continue
+            row = McpCatalogEntry(
+                id=builtin_id(name),
+                name=name,
+                source=SOURCE_BUILTIN,
+                source_id=name,
+                status=CATALOG_PUBLISHED,
+            )
+            db.add(row)
+        row.title = item["title"]
+        row.description = item.get("description")
+        row.docs_url = item.get("docs_url")
+        row.image = item["image"]
+        row.tag = item["tag"]
+        row.command = item.get("command") or []
+        row.args = item.get("args") or []
+        row.port = int(item["port"])
+        row.path = item.get("path") or "/mcp"
+        row.settings = [normal_setting(s) for s in item.get("settings") or []]
+        row.egress = item.get("egress") or EGRESS_PUBLIC
+        row.chart_repo = item["chart_repo"]
+        row.chart_name = item["chart_name"]
+        row.notes = []
+    db.commit()
 
 
 def load_vector_dbs(db):

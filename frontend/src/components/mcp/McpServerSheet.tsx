@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { allowedTools, type McpServer } from "@/types/mcp";
+import { McpInstancePanels } from "@/components/mcp/McpInstancePanels";
 import { formatDate } from "@/lib/utils";
 
 const TRANSPORT_LABEL: Record<string, string> = {
@@ -20,6 +21,8 @@ const TRANSPORT_LABEL: Record<string, string> = {
 
 function statusLabel(server: McpServer): string {
   if (!server.enabled) return "Disabled";
+  if (server.deploy && !server.deploy.usable)
+    return server.deploy.status === "Failed" ? "Failed" : "Starting";
   return server.status === "connected" ? "Connected" : "Unreachable";
 }
 
@@ -35,13 +38,39 @@ export function McpServerSheet({
   onOpenChange,
   admin,
   onRequestDelete,
+  initialTab,
+  onChanged,
 }: {
   server: McpServer | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   admin: boolean;
   onRequestDelete: (server: McpServer) => void;
+  /** For a deployed server: the tab to open ("settings", "logs"). */
+  initialTab?: string;
+  /** A deployed server changed (settings, restart): load the list again. */
+  onChanged: () => void | Promise<void>;
 }) {
+  const toolList = server ? (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">
+        Tools ({allowedTools(server).length} of {server.tools.length} allowed)
+      </h3>
+      <div className="space-y-2">
+        {allowedTools(server).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No tools allowed.</p>
+        ) : (
+          allowedTools(server).map((tool) => (
+            <div key={tool.name} className="text-sm">
+              <span className="font-medium">{tool.name}</span>{" "}
+              <span className="text-muted-foreground">{tool.description}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
@@ -53,7 +82,9 @@ export function McpServerSheet({
             </SheetHeader>
             <div className="space-y-4 px-4">
               <p className="text-sm text-muted-foreground">
-                {server.url} · {TRANSPORT_LABEL[server.transport]}
+                {server.deploy
+                  ? "deployed"
+                  : `${server.url} · ${TRANSPORT_LABEL[server.transport]}`}
               </p>
 
               <div className="text-sm">
@@ -79,28 +110,18 @@ export function McpServerSheet({
                 )}
               </div>
 
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">
-                  Tools ({allowedTools(server).length} of {server.tools.length}{" "}
-                  allowed)
-                </h3>
-                <div className="space-y-2">
-                  {allowedTools(server).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No tools allowed.
-                    </p>
-                  ) : (
-                    allowedTools(server).map((tool) => (
-                      <div key={tool.name} className="text-sm">
-                        <span className="font-medium">{tool.name}</span>{" "}
-                        <span className="text-muted-foreground">
-                          {tool.description}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              {server.deploy ? (
+                <McpInstancePanels
+                  key={server.deploy.instance_id}
+                  server={server}
+                  admin={admin}
+                  initialTab={initialTab}
+                  onChanged={onChanged}
+                  tools={toolList}
+                />
+              ) : (
+                toolList
+              )}
             </div>
             <SheetFooter className="flex-row justify-between">
               <Button asChild variant="outline">

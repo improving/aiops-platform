@@ -5,7 +5,7 @@ description: |
   optionally, Postgres, Keycloak and LiteLLM. Every dependency can be turned
   off and replaced by an external system (docs/install.md).
 type: application
-version: 0.3.7
+version: 0.3.8
 appVersion: "main"
 keywords:
   - aiops

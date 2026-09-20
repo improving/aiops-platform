@@ -55,7 +55,16 @@ _ROUTES: dict[tuple[str, str], tuple[str, str, str]] = {
 
 
 class LiteLLMError(Exception):
-    """The proxy answered with an error or was unreachable."""
+    """The proxy answered with an error or was unreachable. ``status``
+    and ``text`` are the proxy's own answer, None when there was none:
+    a caller that treats one refusal as success reads them."""
+
+    def __init__(
+        self, message: str, status: int | None = None, text: str | None = None
+    ):
+        super().__init__(message)
+        self.status = status
+        self.text = text
 
 
 @dataclass(frozen=True)
@@ -205,7 +214,9 @@ class LiteLLMClient:
         if raise_for_status and response.status_code >= 400:
             raise LiteLLMError(
                 f"LiteLLM {method} {path} answered "
-                f"{response.status_code}: {response.text[:300]}"
+                f"{response.status_code}: {response.text[:300]}",
+                status=response.status_code,
+                text=response.text,
             )
         return response
 

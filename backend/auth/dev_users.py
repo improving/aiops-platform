@@ -75,6 +75,11 @@ DEV_USERS: dict[str, DevUser] = {
     "viewer": DevUser(
         _person("viewer", ROLE_VIEWER), ((DEFAULT_ORG_SLUG, ROLE_VIEWER),)
     ),
+    # An organization admin who is no platform admin: what an imported
+    # catalog draft must stay invisible to.
+    "orgadmin": DevUser(
+        _person("orgadmin", ROLE_ADMIN), ((DEFAULT_ORG_SLUG, ROLE_ADMIN),)
+    ),
     "outsider": DevUser(
         _person("outsider", ROLE_MEMBER), ((OTHER_ORG_SLUG, ROLE_MEMBER),)
     ),

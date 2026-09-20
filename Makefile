@@ -423,6 +423,8 @@ backend: $(CA_BUNDLE) ## Run the backend API with uv (needs helm on PATH and a k
 		AIOPS_BACKEND_CLUSTER_URL=http://aiops-backend.ai-stack.svc:8000 \
 		AIOPS_MCP_ALLOW_INSECURE_HOSTS=$(MCP_TEST_HOST) \
 		AIOPS_UI_URL=http://localhost:3000 \
+		AIOPS_LITELLM_NAMESPACE=litellm \
+		AIOPS_LITELLM_POD_LABELS=app.kubernetes.io/name=litellm \
 		SSL_CERT_FILE=$(PWD)/$(CA_BUNDLE) \
 		REQUESTS_CA_BUNDLE=$(PWD)/$(CA_BUNDLE) \
 		uv run uvicorn app:app --reload --port 8000

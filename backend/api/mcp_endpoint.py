@@ -15,7 +15,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from api import mcp as registry
 from api.chat import chat_mock_enabled, user_key
@@ -24,6 +24,7 @@ from db.database import get_db
 from logger import setup_logger
 from models.mcp_server import McpServer
 from utils import mcp_credentials as creds
+from utils import mcp_instances
 from utils import mcp_scope as scopes
 from utils.litellm import LiteLLMError
 from utils.mcp import litellm_alias
@@ -45,11 +46,15 @@ def _selected(
     name is a 400, so a typo is not a silent empty tool list."""
     enabled = (
         db.query(McpServer)
+        .options(joinedload(McpServer.instance))
         .filter(scopes.visible(user), McpServer.enabled.is_(True))
         .all()
     )
     if not requested or not requested.strip():
-        return enabled
+        # A deployed server whose pod does not serve is left out
+        # (measured: one registered server that is down adds nine
+        # seconds to every tools/list of the proxy).
+        return [s for s in enabled if mcp_instances.usable(s, s.instance)]
     by_name = scopes.by_name(enabled)
     names = [n.strip() for n in requested.split(",") if n.strip()]
     unknown = [n for n in names if n not in by_name]
@@ -57,6 +62,16 @@ def _selected(
         raise HTTPException(
             status_code=400,
             detail=f"Unknown or disabled MCP server: {', '.join(unknown)}",
+        )
+    down = [
+        n
+        for n in names
+        if not mcp_instances.usable(by_name[n], by_name[n].instance)
+    ]
+    if down:
+        raise HTTPException(
+            status_code=409,
+            detail=f"MCP server {', '.join(down)} is not running",
         )
     return [by_name[n] for n in names]
 

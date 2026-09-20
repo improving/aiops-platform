@@ -45,6 +45,15 @@ backend:
     tag: ""
     pullPolicy: IfNotPresent
   replicas: 1
+  mcp:
+    # Where "Add MCP server" searches for servers to import. Empty turns
+    # import off (a site with no internet), and the UI hides it.
+    registryUrl: https://registry.modelcontextprotocol.io
+    # Only with an external LiteLLM (litellm.enabled: false): where its
+    # pods run and their labels ("k=v,k=v"), for the policy that lets
+    # them, and only them, call a deployed MCP server.
+    proxyNamespace: ""
+    proxyPodLabels: ""
   # Extra plain environment for the API, as a map. Credentials never go
   # here; they are read from the Secret (templates/backend/deployment.yaml).
   env: {}

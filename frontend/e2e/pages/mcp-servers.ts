@@ -33,8 +33,37 @@ export class McpServersPage extends AppShell {
       await this.emptyStateAddButton.click();
     } else {
       await this.headerAddButton.click();
+      await this.chooseFromAddMenu("Connect a remote server");
     }
     await this.page.getByRole("dialog", { name: "Add MCP server" }).waitFor();
+  }
+
+  /** For an organization admin the header button is a menu (connect or
+      deploy); for every other writer it opens the add dialog at once. */
+  private async chooseFromAddMenu(item: string) {
+    const entry = this.page.getByRole("menuitem", { name: item });
+    const dialog = this.page.getByRole("dialog");
+    await entry.or(dialog).first().waitFor();
+    if (await entry.isVisible()) await entry.click();
+  }
+
+  async openDeployDialog() {
+    const emptyDeploy = this.page.getByRole("button", {
+      name: "Deploy from the catalog",
+    });
+    if (await emptyDeploy.isVisible().catch(() => false)) {
+      await emptyDeploy.click();
+    } else {
+      await this.headerAddButton.click();
+      await this.page
+        .getByRole("menuitem", { name: "Deploy from the catalog" })
+        .click();
+    }
+    const dialog = this.page.getByRole("dialog", {
+      name: "Deploy an MCP server",
+    });
+    await dialog.waitFor();
+    return dialog;
   }
 
   async openTryOne(label: "DeepWiki" | "Context7") {
@@ -73,7 +102,9 @@ export class McpServersPage extends AppShell {
    */
   async fillConnection(options: { name: string; url: string }) {
     const dialog = this.page.getByRole("dialog", { name: "Add MCP server" });
-    await dialog.getByRole("textbox", { name: "Name" }).fill(options.name);
+    await dialog
+      .getByRole("textbox", { name: "Name", exact: true })
+      .fill(options.name);
     const urlBox = dialog.getByRole("textbox", { name: "Server URL" });
     await urlBox.fill("");
     await urlBox.fill(options.url);

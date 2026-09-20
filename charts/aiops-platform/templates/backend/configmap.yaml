@@ -47,6 +47,20 @@ data:
   LANGFLOW_API_URL: {{ .Values.ui.langflowUrl | quote }}
   {{- end }}
   JAEGER_URL: {{ .Values.ui.jaegerUrl | quote }}
+  # Always rendered: for the backend, unset means the public registry
+  # and empty means that import is off.
+  {{- if .Values.litellm.enabled }}
+  # Who may call a deployed MCP server: the proxy's pods and nobody
+  # else (the network policy of charts/mcp-server). With an external
+  # LiteLLM, set backend.mcp.proxyNamespace and proxyPodLabels; without
+  # both, the backend refuses to deploy.
+  AIOPS_LITELLM_NAMESPACE: {{ .Release.Namespace | quote }}
+  AIOPS_LITELLM_POD_LABELS: "app.kubernetes.io/name=litellm,app.kubernetes.io/instance={{ .Release.Name }}"
+  {{- else if .Values.backend.mcp.proxyNamespace }}
+  AIOPS_LITELLM_NAMESPACE: {{ .Values.backend.mcp.proxyNamespace | quote }}
+  AIOPS_LITELLM_POD_LABELS: {{ .Values.backend.mcp.proxyPodLabels | quote }}
+  {{- end }}
+  AIOPS_MCP_REGISTRY_URL: {{ .Values.backend.mcp.registryUrl | quote }}
   {{- range $key, $value := .Values.backend.env }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}

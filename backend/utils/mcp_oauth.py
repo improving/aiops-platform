@@ -222,6 +222,52 @@ def discover(
     }
 
 
+PROBE_DEADLINE_SECONDS = 5.0
+
+
+def probe(server_url: str, client: httpx.Client | None = None) -> bool:
+    """Does this server offer an OAuth sign-in? For the hint of the add
+    dialog after a connection test that was refused. It reads the same
+    documents as ``discover``, but under ONE deadline for the whole
+    probe (``discover`` can make six requests of fifteen seconds each,
+    on a thread of the pool that runs every sync route), and it never
+    raises: no answer in time is "no"."""
+    deadline = time.monotonic() + PROBE_DEADLINE_SECONDS
+    own = client is None
+    try:
+        client = client or httpx.Client(
+            timeout=httpx.Timeout(PROBE_DEADLINE_SECONDS / 2),
+            follow_redirects=False,
+            verify=certifi.where(),
+        )
+        issuer = _origin(server_url)
+        for url in _well_known(server_url, "oauth-protected-resource"):
+            if time.monotonic() > deadline:
+                return False
+            servers = (_get_json(client, url) or {}).get(
+                "authorization_servers"
+            )
+            if isinstance(servers, list) and servers:
+                issuer = str(servers[0])
+                break
+        for name in ("oauth-authorization-server", "openid-configuration"):
+            for url in _well_known(issuer, name):
+                if time.monotonic() > deadline:
+                    return False
+                metadata = _get_json(client, url)
+                if metadata and isinstance(
+                    metadata.get("authorization_endpoint"), str
+                ):
+                    return True
+        return False
+    except (OAuthError, httpx.HTTPError, ValueError, TypeError):
+        # Never an error: a hostile metadata document is a "no" too.
+        return False
+    finally:
+        if own and client is not None:
+            client.close()
+
+
 def register_client(
     metadata: dict, client: httpx.Client | None = None
 ) -> tuple[str, str | None]:

@@ -29,6 +29,8 @@ export type RuntimeConfig = {
   langflowUrl: string;
   jaegerUrl: string;
   authMode: AuthMode;
+  /** Import from the MCP registry is on; false until the backend says so. */
+  mcpRegistry: boolean;
   /** False until the endpoint answered (or failed); consumers wait for it. */
   loaded: boolean;
 };
@@ -40,11 +42,15 @@ export const BUILD_TIME_CONFIG: RuntimeConfig = {
   langflowUrl: LANGFLOW_URL,
   jaegerUrl: JAEGER_URL,
   authMode: AUTH_DISABLED ? "disabled" : "oidc",
+  mcpRegistry: false,
   loaded: false,
 };
 
 type UIConfigResponse = Partial<
-  Record<"grafanaUrl" | "langflowUrl" | "jaegerUrl" | "authMode", unknown>
+  Record<
+    "grafanaUrl" | "langflowUrl" | "jaegerUrl" | "authMode" | "mcpRegistry",
+    unknown
+  >
 >;
 
 function text(value: unknown): string {
@@ -64,6 +70,7 @@ export function mergeRuntimeConfig(
       authMode === "oidc" || authMode === "disabled"
         ? authMode
         : BUILD_TIME_CONFIG.authMode,
+    mcpRegistry: response?.mcpRegistry === true,
     loaded: true,
   };
 }

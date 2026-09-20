@@ -87,6 +87,14 @@ class McpServer(Base):
         back_populates="server",
         cascade="all, delete-orphan",
     )
+    # The workload of a deployed server. An ORM cascade next to the
+    # foreign key's: SQLite enforces no foreign keys.
+    instance = relationship(
+        "McpInstance",
+        uselist=False,
+        back_populates="server",
+        cascade="all, delete-orphan",
+    )
 
     # One name for each place a server is shared in (NULLs are distinct
     # in a plain constraint, and a member's personal server must not

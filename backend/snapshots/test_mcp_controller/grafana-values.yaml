@@ -1,0 +1,30 @@
+args:
+- -t
+- streamable-http
+- -address
+- 0.0.0.0:8000
+- -endpoint-path
+- /mcp
+- -allowed-hosts
+- mcpi-abcd1234.ai-stack.svc,mcpi-abcd1234.ai-stack.svc:8000
+- -disable-write
+command: []
+env:
+- name: GRAFANA_URL
+  value: http://grafana.monitoring.svc:3000
+envFromSecret: mcpi-abcd1234-env
+fullnameOverride: mcpi-abcd1234
+image:
+  repository: docker.io/mcp/grafana
+  tag: '@sha256:9362bcf6aa0e44e61f645b905cec03fb346a946a34a4dafecd7f3e28d3724014'
+networkPolicy:
+  egress: cluster
+  enabled: true
+  ingressFrom:
+    namespace: litellm
+    podLabels:
+      app.kubernetes.io/instance: litellm
+      app.kubernetes.io/name: litellm
+service:
+  port: 8000
+settingsChecksum: c0ffee

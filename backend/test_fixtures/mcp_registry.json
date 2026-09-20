@@ -1,0 +1,639 @@
+{
+ "servers": [
+  {
+   "server": {
+    "name": "ac.inference.sh/mcp",
+    "title": "inference.sh",
+    "description": "run any ai model. compose agents, stack knowledge, connect tools. one api, pay per run.",
+    "version": "2.0.1",
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://api.inference.sh/mcp"
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_plain"
+   }
+  },
+  {
+   "server": {
+    "name": "ae.propick/propick",
+    "title": "Propick Integration MCP",
+    "description": "Manage your real-estate stock on Propick (Dubai): bulk listing sync, lookups and run reports.",
+    "version": "1.0.0",
+    "websiteUrl": "https://propick.ae",
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://propick.ae/mcp",
+      "headers": [
+       {
+        "description": "Bearer <integration key> (ppk_live_...) issued in the Propick cabinet when creating an import channel",
+        "isRequired": true,
+        "isSecret": true,
+        "name": "Authorization"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_bearer"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.afmr/discovery",
+    "title": "AFMR Discovery",
+    "description": "Read AFMR failure modes and discover scoped attestation and lift-evidence contracts.",
+    "version": "1.0.1",
+    "websiteUrl": "https://afmr.ai/",
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://afmr.ai/mcp"
+     },
+     {
+      "type": "streamable-http",
+      "url": "https://afmr.ai/api/rpc"
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_several"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.agentrapay/agentra",
+    "description": "Identity oracle and trust layer for autonomous AI agents. Bidirectional KYA and trust scoring.",
+    "version": "1.0.0",
+    "repository": {},
+    "remotes": [
+     {
+      "type": "sse",
+      "url": "https://api.agentrapay.ai/mcp"
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_sse_only"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.audiopod/audiopod",
+    "title": "AudioPod AI",
+    "description": "Audio AI tools: text-to-speech, voice cloning, music generation, stem separation, transcription.",
+    "version": "2026.9.19",
+    "websiteUrl": "https://docs.audiopod.ai/sdks/mcp",
+    "repository": {
+     "url": "https://github.com/AudiopodAI/audiopod-mcp",
+     "source": "github"
+    },
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://mcp.audiopod.ai",
+      "headers": [
+       {
+        "description": "AudioPod API key (ap_...) from https://www.audiopod.ai/dashboard/account/api-keys",
+        "isRequired": true,
+        "isSecret": true,
+        "name": "X-API-Key"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_header"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.autorfp/mcp",
+    "title": "AutoRFP.ai",
+    "description": "Search AutoRFP.ai projects, requirements, content library, and tags for Q&A and analytics.",
+    "version": "1.0.0",
+    "websiteUrl": "https://autorfp.ai",
+    "repository": {
+     "url": "https://github.com/AutoRFP/mcp",
+     "source": "github"
+    },
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://{api_host}/mcp",
+      "variables": {
+       "api_host": {
+        "description": "AutoRFP.ai API host for your data-residency region.",
+        "isRequired": true,
+        "choices": [
+         "api.autorfp.ai",
+         "api.eu.autorfp.ai",
+         "api.us.autorfp.ai"
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_placeholders"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.com.mcp/hapi-mcp",
+    "title": "HAPI MCP Server",
+    "description": "HAPI MCP server: Dynamically exposes OpenAPI REST APIs as MCP tools for AI assistants",
+    "version": "0.6.0",
+    "websiteUrl": "https://docs.mcp.com.ai/components/hapi-server/hapi-cli",
+    "repository": {
+     "url": "https://github.com/larebelion/hapimcp",
+     "source": "github"
+    },
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://{HAPI_FQDN}:{HAPI_PORT}/mcp",
+      "variables": {
+       "HAPI_FQDN": {
+        "description": "Fully Qualified Domain Name for the HAPI server",
+        "format": "string",
+        "default": "localhost"
+       },
+       "HAPI_PORT": {
+        "description": "Port for the HAPI server",
+        "format": "number",
+        "default": "3030"
+       }
+      }
+     }
+    ],
+    "packages": [
+     {
+      "registryType": "oci",
+      "identifier": "docker.io/hapimcp/hapi-cli:0.6.0",
+      "runtimeHint": "docker",
+      "transport": {
+       "type": "streamable-http",
+       "url": "https://{HAPI_FQDN}:{HAPI_PORT}/mcp",
+       "headers": [
+        {
+         "description": "Authorization token for accessing the MCP server",
+         "format": "string",
+         "isSecret": true,
+         "name": "Authorization"
+        }
+       ]
+      },
+      "runtimeArguments": [
+       {
+        "description": "Port mapping for the host to container (e.g., '3030:3030'). Adjust second port if changing internal container port (HAPI_PORT)",
+        "isRequired": true,
+        "format": "string",
+        "default": "3030:3030",
+        "type": "named",
+        "name": "-p",
+        "valueHint": "port"
+       },
+       {
+        "description": "Volume mapping for HAPI configuration directory",
+        "format": "string",
+        "default": "~/.hapi:/app/.hapi",
+        "type": "named",
+        "name": "-v",
+        "valueHint": "volume",
+        "isRepeated": true
+       }
+      ],
+      "packageArguments": [
+       {
+        "description": "Command to start the HAPI MCP server",
+        "isRequired": true,
+        "format": "string",
+        "default": "serve",
+        "type": "positional",
+        "name": "serve",
+        "valueHint": "serve"
+       },
+       {
+        "description": "The name of the project/API to serve (e.g., 'petstore'). Optional when using HAPI_OPENAPI environment variable",
+        "format": "string",
+        "type": "positional",
+        "name": "projectName",
+        "valueHint": "petstore"
+       },
+       {
+        "description": "The port to listen on inside the container",
+        "format": "number",
+        "default": "3030",
+        "type": "named",
+        "name": "--port",
+        "valueHint": "port"
+       },
+       {
+        "description": "Run in headless mode (serve MCP-only, no business logic)",
+        "format": "boolean",
+        "default": "true",
+        "type": "named",
+        "name": "--headless"
+       },
+       {
+        "description": "The server provides REST API's business logic AND also exposes them as MCP tools",
+        "format": "boolean",
+        "default": "true",
+        "type": "named",
+        "name": "--mcp"
+       },
+       {
+        "description": "Enable development mode with verbose logging",
+        "format": "boolean",
+        "type": "named",
+        "name": "--dev"
+       },
+       {
+        "description": "The full URL for the backend API server (overrides OpenAPI spec servers). Uses OAS server URL if not provided",
+        "format": "string",
+        "type": "named",
+        "name": "--url",
+        "valueHint": "url"
+       },
+       {
+        "description": "OpenAPI spec file path or URL to use instead of loading from HAPI_HOME",
+        "format": "string",
+        "type": "named",
+        "name": "--openapi",
+        "valueHint": "openapi"
+       },
+       {
+        "description": "Comma-separated list of allowed origins for CORS (e.g., 'http://localhost:3000,https://example.com')",
+        "format": "string",
+        "type": "named",
+        "name": "--cors",
+        "valueHint": "origins"
+       },
+       {
+        "description": "Comma-separated list of OAS configuration files to apply (can be URLs)",
+        "format": "string",
+        "type": "named",
+        "name": "--filename",
+        "valueHint": "files"
+       },
+       {
+        "description": "Path to SSL certificate file for HTTPS. Volume mount required if using Docker. https://docs.mcp.com.ai/components/hapi-server/hapi-cli#running-with-tls-https",
+        "format": "string",
+        "type": "named",
+        "name": "--cert",
+        "valueHint": "path"
+       },
+       {
+        "description": "Path to SSL key file for HTTPS. Volume mount required if using Docker",
+        "format": "string",
+        "type": "named",
+        "name": "--key",
+        "valueHint": "path"
+       }
+      ],
+      "environmentVariables": [
+       {
+        "description": "Fully Qualified Domain Name for the HAPI server (used in MCP tool URLs)",
+        "format": "string",
+        "default": "localhost",
+        "name": "HAPI_FQDN"
+       },
+       {
+        "description": "Directory path for HAPI configuration and specs. Should be mounted as a volume in Docker",
+        "format": "string",
+        "default": "/app/.hapi",
+        "name": "HAPI_HOME"
+       },
+       {
+        "description": "The name of the project/API (alternative to positional argument)",
+        "format": "string",
+        "name": "PROJECT_NAME"
+       },
+       {
+        "description": "OpenAPI spec URL or path (alternative to --openapi flag)",
+        "format": "string",
+        "name": "HAPI_OPENAPI"
+       },
+       {
+        "description": "Backend API base URL (alternative to --url flag)",
+        "format": "string",
+        "name": "HAPI_URL"
+       },
+       {
+        "description": "Server port (alternative to --port flag) - this is the internal container port",
+        "format": "number",
+        "default": "3030",
+        "name": "HAPI_PORT"
+       },
+       {
+        "description": "Enable headless mode (alternative to --headless flag)",
+        "format": "boolean",
+        "default": "true",
+        "name": "HAPI_HEADLESS"
+       },
+       {
+        "description": "Enable MCP mode (alternative to --mcp flag)",
+        "format": "boolean",
+        "default": "true",
+        "name": "HAPI_MCP"
+       },
+       {
+        "description": "Enable development mode (alternative to --dev flag)",
+        "format": "boolean",
+        "name": "HAPI_DEV"
+       },
+       {
+        "description": "Comma-separated allowed CORS origins (alternative to --cors flag)",
+        "format": "string",
+        "name": "HAPI_CORS"
+       },
+       {
+        "description": "Comma-separated configuration files (alternative to --filename flag)",
+        "format": "string",
+        "name": "HAPI_CONFIG_FILES"
+       },
+       {
+        "description": "Node environment (development, production). 'development' enables verbose logging and debugging features.",
+        "format": "string",
+        "default": "production",
+        "name": "NODE_ENV"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "ai.com.mcp/hapi-mcp"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.compeller/compel",
+    "title": "Compeller",
+    "description": "Create and track AI music videos and audio-reactive visuals from songs.",
+    "version": "0.5.1",
+    "repository": {
+     "url": "https://github.com/Compellerai/compeller-mcp",
+     "source": "github"
+    },
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://compeller.ai/api/mcp",
+      "headers": [
+       {
+        "description": "Bearer token from Compeller Account \u2192 API Access, POST /api/login, or POST /api/v1/auth/token. Discovery tools work without this header; generation/account tools require it.",
+        "isSecret": true,
+        "name": "Authorization"
+       },
+       {
+        "description": "Alternative Compeller API token header. Use this instead of Authorization if your MCP client stores token values without the Bearer prefix.",
+        "isSecret": true,
+        "name": "X-API-Token"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "remote_two_secrets"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.haymon/database",
+    "description": "Database MCP server for MySQL, MariaDB, PostgreSQL & SQLite",
+    "version": "0.7.0",
+    "websiteUrl": "https://database.haymon.ai",
+    "repository": {
+     "url": "https://github.com/haymon-ai/database",
+     "source": "github"
+    },
+    "packages": [
+     {
+      "registryType": "oci",
+      "identifier": "ghcr.io/haymon-ai/database:0.7.0",
+      "runtimeHint": "docker",
+      "transport": {
+       "type": "stdio"
+      },
+      "packageArguments": [
+       {
+        "description": "Start in stdio transport mode",
+        "isRequired": true,
+        "value": "stdio",
+        "type": "positional"
+       }
+      ]
+     },
+     {
+      "registryType": "oci",
+      "identifier": "ghcr.io/haymon-ai/database:0.7.0",
+      "runtimeHint": "docker",
+      "transport": {
+       "type": "streamable-http",
+       "url": "http://{--host}:{--port}/mcp"
+      },
+      "packageArguments": [
+       {
+        "description": "Start in HTTP transport mode",
+        "isRequired": true,
+        "value": "http",
+        "type": "positional"
+       },
+       {
+        "description": "HTTP bind host",
+        "default": "127.0.0.1",
+        "type": "named",
+        "name": "--host"
+       },
+       {
+        "description": "HTTP bind port",
+        "default": "9001",
+        "type": "named",
+        "name": "--port"
+       },
+       {
+        "description": "Allowed CORS origins (comma-separated)",
+        "type": "named",
+        "name": "--allowed-origins",
+        "isRepeated": true
+       },
+       {
+        "description": "Allowed host names (comma-separated)",
+        "type": "named",
+        "name": "--allowed-hosts",
+        "isRepeated": true
+       }
+      ],
+      "environmentVariables": [
+       {
+        "description": "HTTP bind host",
+        "default": "127.0.0.1",
+        "name": "HTTP_HOST"
+       },
+       {
+        "description": "HTTP bind port",
+        "format": "number",
+        "default": "9001",
+        "name": "HTTP_PORT"
+       },
+       {
+        "description": "Allowed CORS origins (comma-separated)",
+        "name": "HTTP_ALLOWED_ORIGINS"
+       },
+       {
+        "description": "Allowed host names (comma-separated)",
+        "name": "HTTP_ALLOWED_HOSTS"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "ai.haymon/database"
+   }
+  },
+  {
+   "server": {
+    "name": "ai.midplane/midplane",
+    "title": "Midplane",
+    "description": "Safe-by-default SQL guardrails for AI agents: AST-checked queries, per-table policy, audit log.",
+    "version": "0.20.0",
+    "websiteUrl": "https://midplane.ai/docs",
+    "repository": {
+     "url": "https://github.com/midplaneai/midplane",
+     "source": "github",
+     "subfolder": "engine/packages/mcp-server"
+    },
+    "packages": [
+     {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "midplane",
+      "version": "0.20.0",
+      "runtimeHint": "npx",
+      "transport": {
+       "type": "stdio"
+      },
+      "packageArguments": [
+       {
+        "value": "server",
+        "type": "positional",
+        "valueHint": "subcommand"
+       },
+       {
+        "type": "named",
+        "name": "--stdio"
+       }
+      ],
+      "environmentVariables": [
+       {
+        "description": "Postgres connection string the agent's queries run against. Give it a least-privilege role: Midplane constrains what SQL is allowed, it does not widen or narrow what the role itself can reach.",
+        "isRequired": true,
+        "format": "string",
+        "isSecret": true,
+        "name": "DATABASE_URL"
+       },
+       {
+        "description": "Path to a policy YAML granting per-table read/read_write access, tenant scoping, and column masking. Omit for the safe default: reads allowed, writes and DDL denied. Generate one with `npx midplane init`.",
+        "format": "filepath",
+        "name": "MIDPLANE_POLICY_FILE"
+       },
+       {
+        "description": "Where the local SQLite audit log is written. Defaults to ~/.midplane/audit.db; read it back with `midplane audit denies`.",
+        "format": "filepath",
+        "name": "DB_PATH"
+       },
+       {
+        "description": "Set to 0 to disable anonymous usage telemetry (DO_NOT_TRACK=1 also works). Never includes SQL, table or column names, or identifiers.",
+        "default": "1",
+        "choices": [
+         "1",
+         "0",
+         "debug"
+        ],
+        "name": "MIDPLANE_TELEMETRY"
+       }
+      ]
+     },
+     {
+      "registryType": "oci",
+      "identifier": "docker.io/midplane/midplane:0.20.0",
+      "runtimeHint": "docker",
+      "transport": {
+       "type": "streamable-http",
+       "url": "http://localhost:8080/mcp"
+      },
+      "environmentVariables": [
+       {
+        "description": "Postgres connection string the agent's queries run against. Pass it with --env-file, never with an inline -e: a DSN on the docker command line leaks the password to `ps aux` and your shell history.",
+        "isRequired": true,
+        "format": "string",
+        "isSecret": true,
+        "name": "DATABASE_URL"
+       },
+       {
+        "description": "Path (inside the container) to a policy YAML granting per-table read/read_write access, tenant scoping, and column masking. Omit for the safe default: reads allowed, writes and DDL denied.",
+        "format": "filepath",
+        "name": "MIDPLANE_POLICY_FILE"
+       },
+       {
+        "description": "Port the Streamable HTTP transport binds. Must match the url above if changed.",
+        "default": "8080",
+        "name": "PORT"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "ai.midplane/midplane"
+   }
+  },
+  {
+   "server": {
+    "name": "com.mcparmory/grafana",
+    "description": "Manage dashboards, users, teams, alerts, data sources, and access control",
+    "version": "1.0.3",
+    "repository": {
+     "url": "https://github.com/mcparmory/registry",
+     "source": "github"
+    },
+    "packages": [
+     {
+      "registryType": "pypi",
+      "identifier": "mcparmory-grafana",
+      "version": "1.0.3",
+      "runtimeHint": "uvx",
+      "transport": {
+       "type": "stdio"
+      }
+     },
+     {
+      "registryType": "oci",
+      "identifier": "ghcr.io/mcparmory/grafana:1.0.3",
+      "runtimeHint": "docker",
+      "transport": {
+       "type": "stdio"
+      }
+     }
+    ]
+   },
+   "_meta": {
+    "fixture": "stdio_only"
+   }
+  }
+ ],
+ "metadata": {
+  "count": 11
+ }
+}

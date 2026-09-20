@@ -212,6 +212,11 @@ Your CNI must enforce NetworkPolicy (k3s, Calico and Cilium do; a recent kind do
 And every private address the proxy needs must be listed first:
 an external Postgres or a provider on a private address in `litellm.egressPolicy.allowCIDRs`,
 another namespace (a model gateway, the local MCP test server) in `litellm.egressPolicy.allowNamespaces`.
+An MCP server that the platform deploys runs in the release namespace, which the policy allows; a site that sets another workload namespace adds it to `allowNamespaces`,
+else the server stays "Starting" and says after ten minutes that the proxy cannot reach it.
+With an external LiteLLM (`litellm.enabled: false`), set `backend.mcp.proxyNamespace` and `backend.mcp.proxyPodLabels` (`k=v,k=v`): they are the only pods a deployed MCP server admits, and without them the backend refuses to deploy.
+`backend.mcp.registryUrl` is where "Add MCP server" searches for servers to import; empty turns import off for a site with no internet.
+The deploy catalog pulls `mcp-server` from the chart repository like every other chart.
 Measured on kind: with the policy a public MCP server and the listed database host stayed reachable,
 and a Service in another namespace, the Kubernetes API and `169.254.169.254` timed out.
 

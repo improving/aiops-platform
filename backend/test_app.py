@@ -39,8 +39,9 @@ def test_lifespan_runs_scheduler(monkeypatch):
     with TestClient(app) as client:
         scheduler = app.state.scheduler
         assert scheduler.running
-        # The 3 endpoint-polling jobs plus the daily registry sync.
-        assert len(scheduler.get_jobs()) == 4
+        # The 3 endpoint-polling jobs, the MCP instances poller and the
+        # daily registry sync.
+        assert len(scheduler.get_jobs()) == 5
         assert client.get("/health").status_code == 200
     assert not scheduler.running
     assert app.state.scheduler is None

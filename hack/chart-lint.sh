@@ -61,6 +61,11 @@ expect "default KC_HOSTNAME is the auth host" 'KC_HOSTNAME: "https://auth\.aiops
 expect "default ui route has a stream timeout" 'streamIdleTimeout: 10m' "$default"
 expect "the backend tells flows where the MCP endpoint is" 'AIOPS_BACKEND_CLUSTER_URL: "http://aiops-platform-backend:8000"' "$(helm template aiops-platform "$CHART" -n aiops-platform --set langflow.enabled=true -s templates/backend/configmap.yaml)"
 expect "the backend knows the UI address for OAuth callbacks" 'AIOPS_UI_URL: "https://ui\.aiops\.example\.com"' "$default"
+expect "the backend may create the policy of a deployed MCP server" 'resources: \["networkpolicies"\]' "$default"
+expect "the backend knows the proxy's pods" 'AIOPS_LITELLM_POD_LABELS: "app.kubernetes.io/name=litellm,app.kubernetes.io/instance=aiops-platform"' "$default"
+expect "the backend knows the proxy's namespace" 'AIOPS_LITELLM_NAMESPACE: "aiops-platform"' "$default"
+expect "import from the MCP registry is on by default" 'AIOPS_MCP_REGISTRY_URL: "https://registry\.modelcontextprotocol\.io"' "$default"
+expect "an empty registry URL is rendered, so import is off" 'AIOPS_MCP_REGISTRY_URL: ""' "$(helm template aiops-platform "$CHART" -n aiops-platform --set backend.mcp.registryUrl= -s templates/backend/configmap.yaml)"
 reject "default renders no egress policy for the proxy" 'name: aiops-litellm-egress$' "$default"
 egress=$(helm template aiops-platform "$CHART" -n aiops-platform --set litellm.egressPolicy.enabled=true \
   --set 'litellm.egressPolicy.allowCIDRs={10.0.5.12/32}' -s templates/litellm/networkpolicy.yaml)
@@ -169,6 +174,40 @@ expect "hook script patches missing keys into an existing Secret" 'kubectl.*patc
 
 # --- never a credential in a render -------------------------------------------
 reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render$langflow_render$lab_render"
+
+# --- charts/mcp-server: one MCP server the platform deploys ---------------------
+MCP_CHART=charts/mcp-server
+MCP_VALUES="$MCP_CHART/ci/lint-values.yaml"
+helm lint --strict "$MCP_CHART" -f "$MCP_VALUES"
+mcp=$(helm template mcpi-1234abcd "$MCP_CHART" -n ai-stack -f "$MCP_VALUES")
+mcp_policy=$(helm template mcpi-1234abcd "$MCP_CHART" -n ai-stack -f "$MCP_VALUES" -s templates/networkpolicy.yaml)
+expect "mcp-server mounts no service-account token" 'automountServiceAccountToken: false' "$mcp"
+expect "mcp-server runs as non-root" 'runAsNonRoot: true' "$mcp"
+expect "mcp-server has a read-only root file system" 'readOnlyRootFilesystem: true' "$mcp"
+expect "mcp-server drops every capability" 'drop: \["ALL"\]|- ALL' "$mcp"
+expect "mcp-server forbids privilege escalation" 'allowPrivilegeEscalation: false' "$mcp"
+expect "mcp-server is a ClusterIP Service" 'type: ClusterIP' "$mcp"
+reject "mcp-server has no LoadBalancer or NodePort" 'type: (LoadBalancer|NodePort)' "$mcp"
+expect "mcp-server names the Service after the release" '^  name: mcpi-1234abcd$' "$mcp"
+# ONE ingress element with both selectors (an AND). A second list element
+# would be an OR and admit every pod of the proxy's namespace.
+expect "mcp-server ingress names the proxy's namespace" '^        - namespaceSelector:$' "$mcp_policy"
+expect "mcp-server ingress names the proxy's pods in the same element" '^          podSelector:$' "$mcp_policy"
+reject "mcp-server ingress has no second element for pods" '^        - podSelector:' "$mcp_policy"
+expect "mcp-server ingress is for the proxy's labels" 'app.kubernetes.io/name: litellm' "$mcp_policy"
+expect "mcp-server egress always allows DNS" 'port: 53' "$mcp_policy"
+expect "mcp-server public egress leaves out the private ranges" '- "10.0.0.0/8"' "$mcp_policy"
+expect "mcp-server public egress leaves out the metadata range" '- "169.254.0.0/16"' "$mcp_policy"
+reject "mcp-server public egress opens no private range" 'cidr: "10.0.0.0/8"' "$mcp_policy"
+mcp_cluster=$(helm template mcpi-1234abcd "$MCP_CHART" -f "$MCP_VALUES" --set networkPolicy.egress=cluster -s templates/networkpolicy.yaml)
+expect "mcp-server cluster egress opens the private ranges" 'cidr: "10.0.0.0/8"' "$mcp_cluster"
+reject "mcp-server cluster egress never opens the metadata range" 'cidr: "169.254.0.0/16"' "$mcp_cluster"
+mcp_none=$(helm template mcpi-1234abcd "$MCP_CHART" -f "$MCP_VALUES" --set networkPolicy.egress=none -s templates/networkpolicy.yaml)
+reject "mcp-server egress none opens nothing but DNS" 'ipBlock' "$mcp_none"
+expect "mcp-server refuses to render without the ingress rule" 'ingressFrom.namespace is required' "$(helm template x "$MCP_CHART" --set image.repository=a/b --set image.tag=1 2>&1 || true)"
+expect "mcp-server refuses the tag latest" 'must not be latest' "$(helm template x "$MCP_CHART" -f "$MCP_VALUES" --set image.tag=latest 2>&1 || true)"
+expect "mcp-server takes a digest" 'image: "mcp/grafana@sha256:abc"' "$(helm template x "$MCP_CHART" -f "$MCP_VALUES" --set image.tag=@sha256:abc)"
+expect "mcp-server rolls the pod on a settings change" 'checksum/settings: "abc123"' "$(helm template x "$MCP_CHART" -f "$MCP_VALUES" --set settingsChecksum=abc123)"
 
 if (( FAILURES > 0 )); then
   echo "$FAILURES check(s) failed" >&2

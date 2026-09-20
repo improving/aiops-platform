@@ -29,6 +29,12 @@ RESERVED_ARGS = frozenset({"api-key"})
 CONFIG_ARGS = {"max-model-len": "max_model_len", "port": "port"}
 
 
+def valid_env_name(name: str) -> bool:
+    """The one rule for a variable's name, also for names that come
+    from outside (an imported MCP catalog entry)."""
+    return bool(_ENV_NAME.match(name))
+
+
 def canonical_arg(name: str) -> str:
     """One spelling per argument: no leading dashes, ``-`` for ``_``,
     lower case -- ``--max_model_len`` and ``max-model-len`` are one."""

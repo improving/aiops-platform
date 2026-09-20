@@ -65,7 +65,13 @@ jobs:
           for dir in charts/*/; do
             [ -f "$dir/Chart.yaml" ] || continue
             helm dependency build "$dir"
-            helm lint --strict "$dir"
+            # A chart with required values (mcp-server refuses to render
+            # without its ingress rule) brings the values to lint with.
+            if [ -f "$dir/ci/lint-values.yaml" ]; then
+              helm lint --strict "$dir" -f "$dir/ci/lint-values.yaml"
+            else
+              helm lint --strict "$dir"
+            fi
           done
 
       - name: Package charts

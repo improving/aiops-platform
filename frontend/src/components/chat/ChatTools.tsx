@@ -18,6 +18,8 @@ function blocked(
 
 function serverNote(server: McpServer): string {
   if (!server.enabled) return "disabled";
+  if (server.deploy && !server.deploy.usable)
+    return server.deploy.status === "Failed" ? "failed" : "starting";
   if (server.status !== "connected") return "unreachable";
   if (server.my_credential === "missing")
     return server.oauth ? "needs your sign-in" : "needs your credential";

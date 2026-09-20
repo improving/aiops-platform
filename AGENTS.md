@@ -95,6 +95,9 @@ It is a monorepo assembled from four former repositories with their history (`MI
     it authenticates the caller, refuses viewers, selects servers (`X-Mcp-Servers`), resolves the caller's credentials and relays to LiteLLM `/mcp`, which stays inside the cluster.
     The chat playground runs the tool loop in its route handler (`frontend/src/lib/toolSources.ts`) as an MCP client of that endpoint;
     an IDE or SDK uses a personal token of scope `mcp`, valid there only; Langflow gets `AIOPS_MCP_URL` and such a token at provision time (`AIOPS_BACKEND_CLUSTER_URL`).
+    An MCP server can also come from the official MCP registry (a search tab in the add dialog, `backend/registry/mcp_registry.py`; an entry only fills the form),
+    or be deployed by the platform from a catalog (`backend/api/mcp_instances.py`, `backend/api/mcp_catalog.py`, `charts/mcp-server`, ADR 0011):
+    a registry row with `source = "deployed"` plus a workload row, no gateway host, a NetworkPolicy that admits only the LiteLLM pods, and a poller that registers the server in the proxy when its pod is first ready.
     A chat target says whether it can call tools (`tools`); with `AIOPS_CHAT_MOCK=true` the backend mocks the registry, the endpoint (one tool, `echo`) and a model that calls it.
 
 ## Local stack and commands
@@ -122,7 +125,7 @@ and why deployed instances no longer need a `LoadBalancer` IP.
 
 ## Packaging
 
-`charts/aiops-platform` (version 0.3.7) is the umbrella chart that installs the platform (`docs/install.md`):
+`charts/aiops-platform` (version 0.3.8) is the umbrella chart that installs the platform (`docs/install.md`):
 the backend and frontend templates live in the chart,
 Postgres, Keycloak and LiteLLM are conditional dependencies (`<name>.enabled`, `<name>.external.*`) with fixed names
 (`aiops-postgresql`, `aiops-keycloak`, `aiops-litellm`) so the subchart values can reference each other literally,

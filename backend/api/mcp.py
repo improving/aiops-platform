@@ -34,7 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from api.chat import chat_mock_enabled
 from auth.current_user import (
@@ -58,6 +58,7 @@ from schemas.mcp import (
 )
 from utils import genid, mcp_oauth
 from utils import mcp_credentials as creds
+from utils import mcp_registration as registration
 from utils import mcp_scope as scopes
 from utils.litellm import LiteLLMError, ensure_org_key
 from utils.litellm import get_client as get_litellm_client
@@ -178,7 +179,22 @@ def _response(server: McpServer, user: CurrentUser) -> McpServerSchema:
         tool_prefix=litellm_alias(server.id, server.name) + TOOL_SEPARATOR,
         scope=scopes.scope_of(server),
         can_change=scopes.can_change(user, server),
+        deploy=_deploy_block(server),
     )
+
+
+def _deployed():
+    """The deployed-server side (``api/mcp_instances.py`` imports this
+    module, so it is taken at call time)."""
+    from api import mcp_instances
+
+    return mcp_instances
+
+
+def _deploy_block(server: McpServer):
+    if server.instance is None:
+        return None
+    return _deployed().deploy_block(server, server.instance)
 
 
 def _user_header(server: McpServer) -> str | None:
@@ -315,37 +331,7 @@ def _validate_credential(credential: McpCredentialInput | None) -> None:
         )
 
 
-def _litellm_server(
-    alias: str,
-    url: str,
-    transport: str,
-    credential: McpCredentialInput | None,
-    allowed_tools: list[str] | None,
-    description: str | None = None,
-    all_keys: bool = False,
-) -> dict:
-    """The proxy's ``NewMCPServerRequest``. ``transport`` is always
-    sent: the proxy's default is ``sse``. The credential goes as static
-    headers, which covers a bearer and a custom header alike."""
-    body = {
-        "server_name": alias,
-        "alias": alias,
-        "url": url,
-        "transport": transport,
-        "description": description,
-        "allowed_tools": allowed_tools or [],
-        "static_headers": {},
-        # A platform server is for every organization's key (measured:
-        # a team with no permission for it lists its tools). The relay
-        # still names the servers of each request, so an organization
-        # reaches only what it may see.
-        "allow_all_keys": all_keys,
-    }
-    if credential is not None:
-        body["static_headers"] = creds.credential_headers(
-            credential.auth_type, credential.auth_header, credential.value
-        )
-    return body
+_litellm_server = registration.server_body
 
 
 def _own_credential(
@@ -415,17 +401,7 @@ def _sync_team(
     litellm, db: Session, user: CurrentUser, team_id: str | None
 ) -> None:
     """The organization team may use exactly its enabled servers."""
-    if litellm is None or team_id is None:
-        return
-    ids = [
-        s.litellm_server_id
-        for s in db.query(McpServer)
-        .filter(McpServer.org_id == user.org_id, McpServer.enabled.is_(True))
-        .all()
-        if s.litellm_server_id
-        and s.litellm_server_id != MOCK_LITELLM_SERVER_ID
-    ]
-    litellm.set_team_mcp_servers(team_id, ids)
+    registration.sync_team_for_org(litellm, db, user.org_id, team_id)
 
 
 @router.post(
@@ -454,10 +430,16 @@ async def list_servers(
 ):
     servers = (
         db.query(McpServer)
+        .options(joinedload(McpServer.instance))
         .filter(scopes.visible(user))
         .order_by(McpServer.name)
         .all()
     )
+    if chat_mock_enabled():
+        # No cluster and no poller: a read moves a deployed server on.
+        for server in servers:
+            if server.instance is not None:
+                _deployed().mock_advance(db, server.instance)
     return [_response(s, user) for s in servers]
 
 
@@ -706,6 +688,18 @@ def update_server(
     server = _find_to_change(db, id, user)
     litellm = _require_litellm()
     _validate_credential(body.credential)
+    if server.instance is not None and (
+        body.credential is not None
+        or body.credential_mode is not None
+        or body.remove_credential
+        or body.transport is not None
+        or (body.url is not None and body.url != server.url)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The platform runs this server: its address and its "
+            "credential are the platform's. Change its settings instead",
+        )
     if creds.is_oauth(server) and (
         body.credential is not None
         or body.credential_mode is not None
@@ -794,6 +788,12 @@ def refresh_server(
     not an error."""
     server = _find_to_change(db, id, user)
     litellm = _require_litellm()
+    if server.instance is not None and not server.instance.ready:
+        # A check of a pod that is starting would only write a wrong
+        # "unreachable"; the poller lists the tools when it is ready.
+        raise HTTPException(
+            status_code=409, detail="This server is not running yet"
+        )
     if server.credential_mode == creds.MODE_PER_USER:
         credential = _own_credential(server, user, db)
         if credential is None:
@@ -1024,10 +1024,16 @@ def delete_server(
     server = _find_to_change(db, id, user)
     litellm = None if chat_mock_enabled() else litellm_client()
     registered = server.litellm_server_id
-    if litellm is not None and registered:
+    deployed = server.instance is not None
+    if litellm is not None and (registered or deployed):
         try:
             team_id = _team_id(litellm, db, user)
-            litellm.delete_mcp_server(registered)
+            if deployed:
+                # Its id in the proxy is the row's own, whether or not
+                # the row knows of a registration yet.
+                registration.unregister(litellm, str(server.id))
+            else:
+                litellm.delete_mcp_server(registered)
         except LiteLLMError as e:
             raise HTTPException(
                 status_code=502,
@@ -1035,6 +1041,17 @@ def delete_server(
             ) from e
     else:
         team_id = None
+    if server.instance is not None:
+        # The true state first: a delete that stops at the uninstall
+        # leaves a disabled server that the proxy does not know (so the
+        # poller does not register it again), and a second Delete
+        # finishes the work.
+        server.litellm_server_id = None
+        server.status = STATUS_UNREACHABLE
+        server.enabled = False
+        server.instance.registered_at = None
+        db.commit()
+        _deployed().remove_workload(db, server)
     creds.delete_all(server)
     db.delete(server)
     db.flush()

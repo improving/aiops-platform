@@ -95,8 +95,8 @@ so they are what the scheduler works with, not the node's real load.
 ## Logs and events
 
 ```
-GET /v1alpha1/{inferenceInstance|vectordb_instances|notebooks}/{id}/logs?container=&tail=200&previous=false
-GET /v1alpha1/{inferenceInstance|vectordb_instances|notebooks}/{id}/events
+GET /v1alpha1/{inferenceInstance|vectordb_instances|notebooks|mcp/instances}/{id}/logs?container=&tail=200&previous=false
+GET /v1alpha1/{inferenceInstance|vectordb_instances|notebooks|mcp/instances}/{id}/events
 ```
 
 `logs` answers `{"pods": [{"name": "...", "containers": [{"name": "...", "log": "..."}]}]}`;
@@ -114,7 +114,7 @@ a notebook is visible to its owner only.
 ## Day-2 actions
 
 ```
-POST /v1alpha1/{inferenceInstance|vectordb_instances}/{id}/restart
+POST /v1alpha1/{inferenceInstance|vectordb_instances|mcp/instances}/{id}/restart
 POST /v1alpha1/inferenceInstance/{id}/stop
 POST /v1alpha1/inferenceInstance/{id}/resume
 POST /v1alpha1/inferenceInstance/{id}/scale   {"replicas": <0-16>}
@@ -251,6 +251,50 @@ curl -N -X POST https://api.<domain>/v1alpha1/mcp \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
+
+### Import from the MCP registry
+
+`GET /v1alpha1/mcp/registry/search?q=&limit=` (every writer; `limit` 1 to 50, `q` at most 100 characters) searches the official MCP registry
+(`AIOPS_MCP_REGISTRY_URL`, by default `https://registry.modelcontextprotocol.io`) through the backend and answers previews:
+`name`, `title`, `publisher`, `version`, `suggested_name` (a valid server name), `remote` (`url`, `transport`, `auth_type`, `auth_header`) or `remote_reason`,
+`deployable` or `deployable_reason`, `already_added` (a server the caller sees has that URL) and, for a platform admin, `already_imported`.
+An entry only fills the add dialog: the URL rule and the connection test come after it, as for a typed URL.
+A remote URL with placeholders, or more than one credential header, is "not usable yet".
+Answers are cached for 60 s; a 429 of the registry is passed on with `retry-after` in the detail; an empty `AIOPS_MCP_REGISTRY_URL` turns import off (404 "Import is turned off", and `mcpRegistry: false` in `GET /v1alpha1/config/ui`).
+`POST /v1alpha1/mcp/servers/oauth-probe {url}` (every writer) answers `{oauth: bool}`: whether the server offers an OAuth sign-in, asked by the add dialog after a connection test that was refused.
+It reads the two metadata documents under one deadline of 5 s and never answers an error.
+
+### Servers the platform deploys
+
+An organization admin deploys an MCP server from a catalog; the platform runs it with Helm (`charts/mcp-server`) and makes it a server of the list above
+(`source: "deployed"`, scope `organization`), so Chat, `/v1alpha1/mcp`, Langflow, the approval setting and the tool allow-list work with no change (ADR 0011).
+There is no gateway host: only the LiteLLM proxy calls the pod, and the chart's NetworkPolicy admits nobody else.
+
+| Route | Who | What |
+| --- | --- | --- |
+| `GET /v1alpha1/mcp/catalog` | member | The published entries: `name`, `title`, `image`, `tag`, `port`, `path`, `settings` (`name`, `label`, `help`, `secret`, `required`, `flag`, `default`), `egress`, `source`, `status`. A platform admin also gets drafts and deprecated entries. |
+| `POST /v1alpha1/mcp/instances` | organization admin | `{catalog, name, description?, settings, allowed_tools?, approval?}`. 404 for an entry that is not published, 422 for a setting the entry does not have, a missing required one or a line break, 409 for a taken name, 503 without the proxy, without a cluster, or when the backend does not know the proxy's pods (`AIOPS_LITELLM_NAMESPACE`, `AIOPS_LITELLM_POD_LABELS`). Answers the server (201), `status: "unreachable"`, no tools yet. |
+| `GET /v1alpha1/mcp/instances/{id}` | member | The `deploy` block, the plain settings, which secret settings have a value (`secret_settings`), and the entry's `schema`. Never a secret value. |
+| `PUT /v1alpha1/mcp/instances/{id}/settings` | organization admin | Replace the settings and roll the pod. A secret that is left out keeps its value. Also the way to repair a `Failed` server. |
+| `POST /v1alpha1/mcp/instances/{id}/upgrade` | organization admin | Move to the catalog entry's current image, arguments and settings (`upgrade_available` says when they differ). A running server keeps a copy of what it was deployed with and never moves by itself; 409 when the entry is not published, or when its port or path changed (delete and deploy again). |
+| `GET .../logs`, `GET .../events`, `POST .../restart` | as the other kinds | See "Logs and events" and "Day-2 actions". |
+| `DELETE /v1alpha1/mcp/servers/{id}` | organization admin | The proxy's registration first (502 and everything stays when it refuses), then the release and the Secret, then the rows. When the uninstall fails (500) the server stays, disabled and unknown to the proxy; a second delete finishes. A `Failed` server is always deletable. |
+
+A deployed server carries `deploy` in the list: `instance_id`, `catalog`, `image`, `tag`, `status` (`Pending`, `Running`, `Failed`), `ready`, `launch`, `last_error`, `upgrade_available` and `usable`.
+`usable` is the one answer to "does it take requests": its pod serves, the proxy knows it, and the last connection test worked.
+The platform registers the server in the proxy when its pod is first ready and lists its tools then; until then, and whenever the pod does not serve,
+the server is left out of `/v1alpha1/mcp` (a request that names it answers 409), because one registered server that is down adds seconds to every `tools/list` of the proxy.
+A `PATCH` of `url`, `transport`, `credential`, `credential_mode` or `remove_credential` answers 409, and `refresh` answers 409 while the pod does not serve.
+A setting is an environment variable of the pod, or, with `flag`, a switch that adds one argument; names come from the catalog entry only.
+The pod gets no service-account token, no root, no capability and a read-only file system. `egress` of the entry says what it may call:
+`none`, `public` (port 443 outside the private ranges) or `cluster` (also every private address, for a Grafana or a database of the cluster or the site); never the link-local range.
+
+The catalog, for a platform admin: `POST /v1alpha1/mcp/catalog/import {name, version?, slug?}` imports an image entry of the MCP registry as a `draft` with `egress: "public"`
+(422 with the reason for a stdio package, an image without a registry host or with the tag `latest`, docker run options, or a header the server checks itself;
+409 "imported already", and another 409 when the catalog name is taken: send `slug`);
+`GET`, `PATCH` (`title`, `description`, `args`, `port`, `path`, `settings`, `egress`, `status`, and `name` while it is a draft) and `DELETE /v1alpha1/mcp/catalog/{id}` (409 while a server uses it);
+`POST .../sync` reads the source again, and when that changes what runs (`image`, `tag`, `args`, `port`, `path`, `settings`) the entry goes back to `draft`: what was reviewed is what runs.
+Only a platform admin sees a draft, unlike the model registry, because a draft is an image nobody has read.
 
 ## Langflow
 

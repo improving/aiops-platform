@@ -15,7 +15,16 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { mcpService } from "@/services/mcpService";
-import type { McpScope, McpServer, McpTool, McpTransport } from "@/types/mcp";
+import type {
+  McpRegistryPreview,
+  McpScope,
+  McpServer,
+  McpTool,
+  McpTransport,
+} from "@/types/mcp";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RegistrySearch } from "@/components/mcp/RegistrySearch";
+import { useRuntimeConfig } from "@/lib/runtimeConfig";
 import {
   CredentialFields,
   OWN_HINT,
@@ -75,6 +84,11 @@ export function AddMcpServerDialog({
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "url" is the form; "registry" is the search that fills it.
+  const [tab, setTab] = useState("url");
+  // After a test that the server refused: it offers an OAuth sign-in.
+  const [oauthHint, setOauthHint] = useState(false);
+  const { mcpRegistry } = useRuntimeConfig();
 
   // A new "Try one" link re-fills the form while the dialog is already
   // mounted (it is rendered once by the page, not per link).
@@ -111,6 +125,25 @@ export function AddMcpServerDialog({
     setAllowAll(true);
     setSelected(new Set());
     setError(null);
+    setTab("url");
+    setOauthHint(false);
+  };
+
+  // "Use" of a registry entry. It fills the form and nothing more: the
+  // URL rule and the connection test are the next step, as always.
+  const applyEntry = (entry: McpRegistryPreview) => {
+    if (!entry.remote) return;
+    setName(entry.suggested_name);
+    setDescription((entry.description ?? "").slice(0, 200));
+    setUrl(entry.remote.url);
+    setTransport(entry.remote.transport);
+    setAuthType(entry.remote.auth_type);
+    setHeaderName(entry.remote.auth_header ?? "");
+    setToken("");
+    setHeaderValue("");
+    setError(null);
+    setOauthHint(false);
+    setTab("url");
   };
 
   const close = (next: boolean) => {
@@ -132,6 +165,7 @@ export function AddMcpServerDialog({
 
   const handleTest = async () => {
     setError(null);
+    setOauthHint(false);
     setTesting(true);
     try {
       const discovered = await mcpService.discover({
@@ -149,7 +183,12 @@ export function AddMcpServerDialog({
       setSelected(new Set(discovered.map((t) => t.name)));
       setStep(2);
     } catch (err) {
-      setError(parseApiError(err).description as string);
+      const message = parseApiError(err).description as string;
+      setError(message);
+      // A refusal can mean "sign in": ask once whether the server
+      // offers OAuth, and offer that option next to the error.
+      if (/\b401\b|unauthori[sz]ed/i.test(message))
+        setOauthHint(await mcpService.offersOAuth(url.trim()));
     } finally {
       setTesting(false);
     }
@@ -220,211 +259,246 @@ export function AddMcpServerDialog({
         </DialogHeader>
 
         {step === 1 ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="mcp-name">Name</Label>
-              <Input
-                id="mcp-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="github"
-              />
-              {name.trim() !== "" && !nameValid && (
-                <p className="text-xs text-destructive">
-                  Lower case letters, digits and _; starts with a letter.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mcp-description">Description</Label>
-              <Input
-                id="mcp-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mcp-url">Server URL</Label>
-              <Input
-                id="mcp-url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://api.example.com/mcp/"
-              />
-            </div>
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">Transport</legend>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="mcp-transport-http"
-                    name="mcp-transport"
-                    checked={transport === "http"}
-                    onChange={() => setTransport("http")}
-                    className="h-4 w-4"
+          <Tabs value={tab} onValueChange={setTab} className="w-full min-w-0">
+            {mcpRegistry && (
+              <TabsList>
+                <TabsTrigger value="url">Enter a URL</TabsTrigger>
+                <TabsTrigger value="registry">
+                  From the MCP registry
+                </TabsTrigger>
+              </TabsList>
+            )}
+            <TabsContent value="registry">
+              <RegistrySearch onUse={applyEntry} />
+            </TabsContent>
+            <TabsContent value="url">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mcp-name">Name</Label>
+                  <Input
+                    id="mcp-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="github"
                   />
-                  <Label htmlFor="mcp-transport-http">Streamable HTTP</Label>
+                  {name.trim() !== "" && !nameValid && (
+                    <p className="text-xs text-destructive">
+                      Lower case letters, digits and _; starts with a letter.
+                    </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="mcp-transport-sse"
-                    name="mcp-transport"
-                    checked={transport === "sse"}
-                    onChange={() => setTransport("sse")}
-                    className="h-4 w-4"
+                <div className="space-y-2">
+                  <Label htmlFor="mcp-description">Description</Label>
+                  <Input
+                    id="mcp-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                   />
-                  <Label htmlFor="mcp-transport-sse">SSE (legacy)</Label>
                 </div>
-              </div>
-            </fieldset>
-
-            {scopes.length > 1 && (
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">Who can use it</legend>
-                {scopes.map((value) => (
-                  <div key={value} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      id={`mcp-add-scope-${value}`}
-                      name="mcp-add-scope"
-                      checked={scope === value}
-                      onChange={() => setScope(value)}
-                    />
-                    <Label htmlFor={`mcp-add-scope-${value}`}>
-                      {SCOPE_LABEL[value]}
-                    </Label>
+                <div className="space-y-2">
+                  <Label htmlFor="mcp-url">Server URL</Label>
+                  <Input
+                    id="mcp-url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://api.example.com/mcp/"
+                  />
+                </div>
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium">Transport</legend>
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id="mcp-transport-http"
+                        name="mcp-transport"
+                        checked={transport === "http"}
+                        onChange={() => setTransport("http")}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="mcp-transport-http">
+                        Streamable HTTP
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id="mcp-transport-sse"
+                        name="mcp-transport"
+                        checked={transport === "sse"}
+                        onChange={() => setTransport("sse")}
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="mcp-transport-sse">SSE (legacy)</Label>
+                    </div>
                   </div>
-                ))}
-              </fieldset>
-            )}
-            {scopes.length === 1 && scope === "personal" && (
-              <p className="text-xs text-muted-foreground">
-                Only you can use this server. An organization admin adds servers
-                for everyone.
-              </p>
-            )}
+                </fieldset>
 
-            <CredentialFields
-              idPrefix="mcp-add"
-              hint={perUser ? OWN_HINT : undefined}
-              authType={authType}
-              onAuthTypeChange={setAuthType}
-              token={token}
-              onTokenChange={setToken}
-              headerName={headerName}
-              onHeaderNameChange={setHeaderName}
-              headerValue={headerValue}
-              onHeaderValueChange={setHeaderValue}
-              extraOptions={[
-                { value: "oauth", label: "OAuth: each member signs in" },
-              ]}
-            />
-            {bySignIn && (
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Each member signs in at the server and the platform keeps
-                  their token. There is no connection test now: the tools are
-                  listed when the first member has signed in. Leave the client
-                  empty when the server registers clients by itself; else create
-                  an OAuth application there.
-                </p>
-                <div className="space-y-1">
-                  <Label htmlFor="mcp-add-client-id">
-                    Client ID (optional)
-                  </Label>
-                  <Input
-                    id="mcp-add-client-id"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="mcp-add-client-secret">
-                    Client secret (optional)
-                  </Label>
-                  <Input
-                    id="mcp-add-client-secret"
-                    type="password"
-                    autoComplete="off"
-                    value={clientSecret}
-                    onChange={(e) => setClientSecret(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="mcp-add-scopes">Scopes (optional)</Label>
-                  <Input
-                    id="mcp-add-scopes"
-                    value={oauthScopes}
-                    onChange={(e) => setOauthScopes(e.target.value)}
-                    placeholder="read write"
-                  />
-                </div>
-              </div>
-            )}
-            {authType !== "none" && !bySignIn && scope === "personal" && (
-              <p className="text-xs text-muted-foreground">
-                The credential is your own: only your requests carry it.
-              </p>
-            )}
-            {authType !== "none" && !bySignIn && scope !== "personal" && (
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">Credential</legend>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="mcp-add-cred-shared"
-                    name="mcp-add-cred-mode"
-                    checked={!perUser}
-                    onChange={() => setPerUser(false)}
-                  />
-                  <Label htmlFor="mcp-add-cred-shared">
-                    One shared credential
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    id="mcp-add-cred-own"
-                    name="mcp-add-cred-mode"
-                    checked={perUser}
-                    onChange={() => setPerUser(true)}
-                  />
-                  <Label htmlFor="mcp-add-cred-own">
-                    Each member brings their own
-                  </Label>
-                </div>
-                {perUser && (
-                  <>
+                {scopes.length > 1 && (
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">
+                      Who can use it
+                    </legend>
+                    {scopes.map((value) => (
+                      <div key={value} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          id={`mcp-add-scope-${value}`}
+                          name="mcp-add-scope"
+                          checked={scope === value}
+                          onChange={() => setScope(value)}
+                        />
+                        <Label htmlFor={`mcp-add-scope-${value}`}>
+                          {SCOPE_LABEL[value]}
+                        </Label>
+                      </div>
+                    ))}
+                  </fieldset>
+                )}
+                {scopes.length === 1 && scope === "personal" && (
+                  <p className="text-xs text-muted-foreground">
+                    Only you can use this server. An organization admin adds
+                    servers for everyone.
+                  </p>
+                )}
+
+                <CredentialFields
+                  idPrefix="mcp-add"
+                  hint={perUser ? OWN_HINT : undefined}
+                  authType={authType}
+                  onAuthTypeChange={setAuthType}
+                  token={token}
+                  onTokenChange={setToken}
+                  headerName={headerName}
+                  onHeaderNameChange={setHeaderName}
+                  headerValue={headerValue}
+                  onHeaderValueChange={setHeaderValue}
+                  extraOptions={[
+                    { value: "oauth", label: "OAuth: each member signs in" },
+                  ]}
+                />
+                {bySignIn && (
+                  <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">
-                      The value above is yours: it tests the connection and
-                      stays your own credential. Every other member connects
-                      theirs, and the model then does what their credential can
-                      do.
+                      Each member signs in at the server and the platform keeps
+                      their token. There is no connection test now: the tools
+                      are listed when the first member has signed in. Leave the
+                      client empty when the server registers clients by itself;
+                      else create an OAuth application there.
                     </p>
                     <div className="space-y-1">
-                      <Label htmlFor="mcp-add-help-url">
-                        Where to get a credential
+                      <Label htmlFor="mcp-add-client-id">
+                        Client ID (optional)
                       </Label>
                       <Input
-                        id="mcp-add-help-url"
-                        value={helpUrl}
-                        onChange={(e) => setHelpUrl(e.target.value)}
-                        placeholder="https://github.com/settings/tokens"
+                        id="mcp-add-client-id"
+                        value={clientId}
+                        onChange={(e) => setClientId(e.target.value)}
                       />
                     </div>
-                  </>
+                    <div className="space-y-1">
+                      <Label htmlFor="mcp-add-client-secret">
+                        Client secret (optional)
+                      </Label>
+                      <Input
+                        id="mcp-add-client-secret"
+                        type="password"
+                        autoComplete="off"
+                        value={clientSecret}
+                        onChange={(e) => setClientSecret(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="mcp-add-scopes">Scopes (optional)</Label>
+                      <Input
+                        id="mcp-add-scopes"
+                        value={oauthScopes}
+                        onChange={(e) => setOauthScopes(e.target.value)}
+                        placeholder="read write"
+                      />
+                    </div>
+                  </div>
                 )}
-              </fieldset>
-            )}
+                {authType !== "none" && !bySignIn && scope === "personal" && (
+                  <p className="text-xs text-muted-foreground">
+                    The credential is your own: only your requests carry it.
+                  </p>
+                )}
+                {authType !== "none" && !bySignIn && scope !== "personal" && (
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">Credential</legend>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id="mcp-add-cred-shared"
+                        name="mcp-add-cred-mode"
+                        checked={!perUser}
+                        onChange={() => setPerUser(false)}
+                      />
+                      <Label htmlFor="mcp-add-cred-shared">
+                        One shared credential
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id="mcp-add-cred-own"
+                        name="mcp-add-cred-mode"
+                        checked={perUser}
+                        onChange={() => setPerUser(true)}
+                      />
+                      <Label htmlFor="mcp-add-cred-own">
+                        Each member brings their own
+                      </Label>
+                    </div>
+                    {perUser && (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          The value above is yours: it tests the connection and
+                          stays your own credential. Every other member connects
+                          theirs, and the model then does what their credential
+                          can do.
+                        </p>
+                        <div className="space-y-1">
+                          <Label htmlFor="mcp-add-help-url">
+                            Where to get a credential
+                          </Label>
+                          <Input
+                            id="mcp-add-help-url"
+                            value={helpUrl}
+                            onChange={(e) => setHelpUrl(e.target.value)}
+                            placeholder="https://github.com/settings/tokens"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </fieldset>
+                )}
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+                {error && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
+                {oauthHint && !bySignIn && (
+                  <p className="text-sm">
+                    This server offers OAuth sign-in.{" "}
+                    <button
+                      type="button"
+                      className="font-medium underline"
+                      onClick={() => {
+                        setAuthType("oauth");
+                        setError(null);
+                        setOauthHint(false);
+                      }}
+                    >
+                      Use OAuth sign-in
+                    </button>
+                  </p>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         ) : (
           <div className="space-y-4">
             <p className="text-sm font-medium text-green-700 dark:text-green-500">
@@ -465,7 +539,7 @@ export function AddMcpServerDialog({
               >
                 Cancel
               </Button>
-              {bySignIn ? (
+              {tab === "registry" ? null : bySignIn ? (
                 <Button
                   type="button"
                   onClick={handleAdd}

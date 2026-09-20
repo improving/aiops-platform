@@ -43,7 +43,14 @@ export type E2EOptions = {
 export type E2EUser = "alice" | "bob" | "admin";
 
 /** The X-Dev-User identities of the fast tier (backend/auth/dev_users.py). */
-export type DevUser = "dev" | "alice" | "bob" | "viewer" | "outsider";
+export type DevUser =
+  | "dev"
+  | "alice"
+  | "bob"
+  | "viewer"
+  | "outsider"
+  // An organization admin who is no platform admin.
+  | "orgadmin";
 
 /** Cookie names shared with src/lib/orgCookie.ts (kept literal here so the
  * e2e files stay independent of the app's module graph). */

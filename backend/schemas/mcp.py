@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from schemas.mcp_deploy import McpDeploySchema
+
 
 def _web_url(value: str | None) -> str | None:
     """A link a member follows next to the field where they type a
@@ -68,6 +70,9 @@ class McpServerSchema(BaseModel):
     # change the server (an admin, its owner, a platform admin).
     scope: str = "organization"
     can_change: bool = False
+    # The workload of a server the platform deployed; None for a remote
+    # one. ``deploy.usable`` says whether it takes requests.
+    deploy: McpDeploySchema | None = None
 
 
 class McpCredentialInput(BaseModel):

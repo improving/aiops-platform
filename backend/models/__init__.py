@@ -13,6 +13,8 @@ from models import (
     inference_instance,
     inference_instance_dashboards,
     invitation,
+    mcp_catalog,
+    mcp_instance,
     mcp_server,
     membership,
     model_adapters,

@@ -121,6 +121,24 @@ else
   fi
 fi
 
+# A deployed MCP server brings a NetworkPolicy, and Helm installs it with
+# the backend's own account. A laptop backend runs as a cluster admin, so
+# only here does a missing RBAC rule show.
+backend_sa=$(kubectl -n "$CHART_NAMESPACE" get deployment "$CHART_RELEASE-backend" \
+  -o jsonpath='{.spec.template.spec.serviceAccountName}' 2>/dev/null)
+if [[ "$(kubectl auth can-i create networkpolicies.networking.k8s.io -n "$CHART_NAMESPACE" \
+  --as="system:serviceaccount:$CHART_NAMESPACE:$backend_sa" 2>/dev/null)" == yes ]]; then
+  pass "the backend's account may create a NetworkPolicy (MCP deploy)"
+else
+  fail "the backend's account may create a NetworkPolicy (MCP deploy)" "$backend_sa"
+fi
+if kubectl -n "$CHART_NAMESPACE" get configmap "$CHART_RELEASE-backend-config" \
+  -o jsonpath='{.data.AIOPS_LITELLM_POD_LABELS}' 2>/dev/null | grep -q 'app.kubernetes.io/name=litellm'; then
+  pass "the backend knows which pods are the proxy's"
+else
+  fail "the backend knows which pods are the proxy's"
+fi
+
 if (( FAILURES > 0 )); then
   echo "$FAILURES check(s) failed" >&2
   exit 1

@@ -15,6 +15,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from auth.settings import auth_settings
+from registry.mcp_registry import registry_url
 
 router = APIRouter()
 
@@ -28,6 +29,8 @@ class UIConfigSchema(BaseModel):
     langflowUrl: str
     jaegerUrl: str
     authMode: str
+    # Import from the MCP registry is on (``AIOPS_MCP_REGISTRY_URL``).
+    mcpRegistry: bool
 
 
 def _url(name: str) -> str:
@@ -41,4 +44,5 @@ async def ui_config() -> UIConfigSchema:
         langflowUrl=_url(LANGFLOW_URL_ENV),
         jaegerUrl=_url(JAEGER_URL_ENV),
         authMode=auth_settings().mode,
+        mcpRegistry=registry_url() is not None,
     )

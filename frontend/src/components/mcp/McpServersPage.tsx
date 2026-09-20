@@ -27,12 +27,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DotsHorizontalIcon } from "@radix-ui/react-icons";
+import { ChevronDownIcon, DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
 import { useOrg } from "@/hooks/useOrg";
 import { mcpService } from "@/services/mcpService";
-import { allowedTools, type McpScope, type McpServer } from "@/types/mcp";
+import {
+  allowedTools,
+  isStarting,
+  type McpScope,
+  type McpServer,
+} from "@/types/mcp";
+import { usePolling } from "@/hooks/usePolling";
+import { ErrorBanner } from "@/components/instances/ErrorBanner";
+import { LaunchProgress } from "@/components/instances/LaunchProgress";
+import { DeployMcpServerDialog } from "@/components/mcp/DeployMcpServerDialog";
 import { TableSkeleton } from "@/components/LoadingState";
 import { ConnectCredentialDialog } from "@/components/mcp/ConnectCredentialDialog";
 import { AddMcpServerDialog } from "@/components/mcp/AddMcpServerDialog";
@@ -61,6 +70,13 @@ function statusLabel(server: McpServer): {
 } {
   if (!server.enabled) {
     return { text: "Disabled", className: "bg-gray-100 text-gray-800" };
+  }
+  // A deployed server that does not take requests yet says why: its
+  // pod starts, or it has failed. "Unreachable" is for a remote one.
+  if (server.deploy && !server.deploy.usable) {
+    return server.deploy.status === "Failed"
+      ? { text: "Failed", className: "bg-red-100 text-red-800" }
+      : { text: "Starting", className: "bg-blue-100 text-blue-800" };
   }
   if (server.status === "connected") {
     return { text: "Connected", className: "bg-green-100 text-green-800" };
@@ -115,7 +131,14 @@ export default function McpServersPage() {
     { name: string; url: string } | undefined
   >(undefined);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [sheetServer, setSheetServer] = useState<McpServer | null>(null);
+  const [sheetServer, setSheetServerState] = useState<McpServer | null>(null);
+  const [sheetTab, setSheetTab] = useState("tools");
+  const [deployOpen, setDeployOpen] = useState(false);
+  const openSheet = (server: McpServer | null, tab = "tools") => {
+    setSheetTab(tab);
+    setSheetServerState(server);
+  };
+  const setSheetServer = (server: McpServer | null) => openSheet(server);
   const [editToolsServer, setEditToolsServer] = useState<McpServer | null>(
     null
   );
@@ -154,6 +177,10 @@ export default function McpServersPage() {
       setLoading(false);
     }
   }, [toast]);
+
+  // A deployed server starts by itself: follow it, silently, until it
+  // takes requests or has failed.
+  usePolling(fetchServers, servers.some(isStarting));
 
   useEffect(() => {
     (async () => {
@@ -242,11 +269,33 @@ export default function McpServersPage() {
           >
             Connect a client
           </Button>
-          {canAdd && !litellmError && servers.length > 0 && (
-            <Button type="button" onClick={() => openAdd()}>
-              Add MCP server
-            </Button>
-          )}
+          {canAdd &&
+            !litellmError &&
+            servers.length > 0 &&
+            (isAdmin ? (
+              // Only an organization admin deploys, so only they get the
+              // choice; the trigger keeps the button's name.
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button">
+                    Add MCP server
+                    <ChevronDownIcon aria-hidden className="ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => openAdd()}>
+                    Connect a remote server
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDeployOpen(true)}>
+                    Deploy from the catalog
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button type="button" onClick={() => openAdd()}>
+                Add MCP server
+              </Button>
+            ))}
         </div>
       </div>
 
@@ -266,9 +315,20 @@ export default function McpServersPage() {
             {canAdd ? (
               !litellmError && (
                 <>
-                  <Button type="button" onClick={() => openAdd()}>
-                    + Add MCP server
-                  </Button>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button type="button" onClick={() => openAdd()}>
+                      + Add MCP server
+                    </Button>
+                    {isAdmin && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setDeployOpen(true)}
+                      >
+                        Deploy from the catalog
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Try one:{" "}
                     {TRY_ONE_LINKS.map((link, i) => (
@@ -324,13 +384,22 @@ export default function McpServersPage() {
                     >
                       {server.name}
                     </Button>
+                    {server.deploy && (
+                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        deployed
+                      </span>
+                    )}
                     {server.scope && server.scope !== "organization" && (
                       <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                         {server.scope === "personal" ? "only me" : "platform"}
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>{hostAndPath(server.url)}</TableCell>
+                  <TableCell>
+                    {server.deploy
+                      ? "runs on the platform"
+                      : hostAndPath(server.url)}
+                  </TableCell>
                   <TableCell>{toolsLabel(server)}</TableCell>
                   <TableCell>
                     <span
@@ -338,6 +407,20 @@ export default function McpServersPage() {
                     >
                       {status.text}
                     </span>
+                    {server.deploy && !server.deploy.usable && (
+                      <div className="mt-1 max-w-xs space-y-1">
+                        <LaunchProgress
+                          launch={server.deploy.launch}
+                          ready={server.deploy.ready}
+                          compact
+                        />
+                        <ErrorBanner
+                          error={server.deploy.last_error}
+                          at={server.deploy.last_error_at}
+                          compact
+                        />
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>{relativeTime(server.checked_at)}</TableCell>
                   <TableCell>
@@ -375,7 +458,21 @@ export default function McpServersPage() {
                             </DropdownMenuItem>
                             {/* An OAuth server has no credential to
                                 change: each member signs in. */}
-                            {!server.oauth && (
+                            {server.deploy && (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() => openSheet(server, "settings")}
+                                >
+                                  Edit settings
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => openSheet(server, "logs")}
+                                >
+                                  Logs and events
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {!server.oauth && !server.deploy && (
                               <DropdownMenuItem
                                 onSelect={() => setCredentialServer(server)}
                               >
@@ -451,6 +548,13 @@ export default function McpServersPage() {
         }}
       />
 
+      <DeployMcpServerDialog
+        open={deployOpen}
+        onOpenChange={setDeployOpen}
+        isPlatformAdmin={isPlatformAdmin}
+        onDeployed={(server) => setServers((prev) => [...prev, server])}
+      />
+
       <ConnectClientDialog
         open={connectOpen}
         onOpenChange={setConnectOpen}
@@ -458,10 +562,18 @@ export default function McpServersPage() {
       />
 
       <McpServerSheet
-        server={sheetServer}
+        // The row as the list has it now: a deployed server changes
+        // while the sheet is open.
+        server={
+          sheetServer
+            ? (servers.find((s) => s.id === sheetServer.id) ?? sheetServer)
+            : null
+        }
         open={sheetServer !== null}
         onOpenChange={(open) => !open && setSheetServer(null)}
         admin={sheetServer?.can_change ?? isAdmin}
+        initialTab={sheetTab}
+        onChanged={fetchServers}
         onRequestDelete={(server) => {
           setSheetServer(null);
           setDeleteTarget(server);

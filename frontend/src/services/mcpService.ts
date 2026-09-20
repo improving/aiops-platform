@@ -1,5 +1,10 @@
 import api from "./api";
+import type { InstanceEvent, LogsQuery, PodLogs } from "@/types/models";
 import type {
+  McpCatalogEntry,
+  McpCatalogReview,
+  McpInstance,
+  McpRegistryPreview,
   McpApproval,
   McpScope,
   McpCredentialInput,
@@ -9,6 +14,8 @@ import type {
 } from "@/types/mcp";
 
 const SERVERS = "/api/v1alpha1/mcp/servers";
+const INSTANCES = "/api/v1alpha1/mcp/instances";
+const CATALOG = "/api/v1alpha1/mcp/catalog";
 
 export interface McpServerInput {
   name: string;
@@ -66,6 +73,97 @@ export const mcpService = {
       tries it against the server before it stores it. */
   setOwnCredential: async (id: string, value: string) =>
     (await api.put<McpServer>(`${SERVERS}/${id}/credential`, { value })).data,
+
+  // --- servers the platform deploys ---------------------------------
+
+  getCatalog: async () => (await api.get<McpCatalogEntry[]>(CATALOG)).data,
+
+  deploy: async (body: {
+    catalog: string;
+    name: string;
+    description?: string;
+    settings: Record<string, string>;
+    approval?: McpApproval;
+  }) => (await api.post<McpServer>(INSTANCES, body)).data,
+
+  getInstance: async (id: string) =>
+    (await api.get<McpInstance>(`${INSTANCES}/${id}`)).data,
+
+  /** A secret setting that is left out keeps its value. */
+  updateSettings: async (id: string, settings: Record<string, string>) =>
+    (await api.put<McpInstance>(`${INSTANCES}/${id}/settings`, { settings }))
+      .data,
+
+  upgradeImage: async (id: string) =>
+    (await api.post<McpInstance>(`${INSTANCES}/${id}/upgrade`)).data,
+
+  restartInstance: async (id: string) =>
+    (await api.post(`${INSTANCES}/${id}/restart`)).data,
+
+  getInstanceLogs: async (id: string, query: LogsQuery) =>
+    (
+      await api.get<PodLogs>(`${INSTANCES}/${id}/logs`, {
+        params: {
+          tail: query.tail,
+          previous: query.previous,
+          container: query.container,
+        },
+      })
+    ).data,
+
+  getInstanceEvents: async (id: string) =>
+    (await api.get<InstanceEvent[]>(`${INSTANCES}/${id}/events`)).data,
+
+  // The catalog, for a platform admin: import, review, publish.
+  getCatalogEntry: async (id: string) =>
+    (await api.get<McpCatalogReview>(`${CATALOG}/${id}`)).data,
+
+  importCatalogEntry: async (name: string, slug?: string) =>
+    (await api.post<McpCatalogReview>(`${CATALOG}/import`, { name, slug }))
+      .data,
+
+  updateCatalogEntry: async (
+    id: string,
+    changes: Partial<
+      Pick<
+        McpCatalogReview,
+        | "name"
+        | "title"
+        | "description"
+        | "args"
+        | "port"
+        | "path"
+        | "egress"
+        | "status"
+      >
+    >
+  ) => (await api.patch<McpCatalogReview>(`${CATALOG}/${id}`, changes)).data,
+
+  syncCatalogEntry: async (id: string) =>
+    (await api.post<McpCatalogReview>(`${CATALOG}/${id}/sync`)).data,
+
+  deleteCatalogEntry: async (id: string) => {
+    await api.delete(`${CATALOG}/${id}`);
+  },
+
+  /** Entries of the official MCP registry (through the backend). */
+  searchRegistry: async (q: string) =>
+    (
+      await api.get<McpRegistryPreview[]>("/api/v1alpha1/mcp/registry/search", {
+        params: { q, limit: 20 },
+      })
+    ).data,
+
+  /** After a refused connection test: does the server offer OAuth? */
+  offersOAuth: async (url: string) => {
+    try {
+      return (
+        await api.post<{ oauth: boolean }>(`${SERVERS}/oauth-probe`, { url })
+      ).data.oauth;
+    } catch {
+      return false;
+    }
+  },
 
   /** Where the browser goes to sign in to an OAuth server. */
   startSignIn: async (id: string) =>

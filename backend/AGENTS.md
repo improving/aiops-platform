@@ -346,6 +346,24 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   Names (`_name_taken`, three partial unique indexes, migration `0014`): unique among the shared servers and among one member's own; `scopes.by_name` picks the nearer server where a caller sees two.
   `delete_for_user` also deletes what a leaver stored for platform servers when this was their last membership.
   The mock (`mock_oauth_metadata`, code `mock`) points the authorization URL at the UI's own callback page. `test_mcp_oauth.py`.
+  Import and deploy (ADR 0011, `docs/superpowers/specs/2026-09-20-deployed-mcp-servers-design.md`):
+  `registry/mcp_registry.py` reads the official MCP registry like `huggingface.py` reads its source (`parse_server` is pure and tested against `test_fixtures/mcp_registry.json`, recorded from the real registry; `search`/`fetch` stream under a byte cap and a deadline, `fetch` needs `/v0/servers/<url-encoded name>/versions/latest`).
+  A remote entry only fills the add dialog (`api/mcp_registry.py`, every writer, cached 60 s; `oauth-probe` is the hint after a refused test, one 5 s deadline, never an error, because `discover` never sees a 401: the proxy answers 200 with `error: true`).
+  An image entry becomes a `draft` of `mcp_catalog` that only a platform admin sees, reviews and publishes (`api/mcp_catalog.py`); `runtimeArguments` are docker options and are refused, a loopback bind address becomes `0.0.0.0`, port and path come from the transport URL's placeholders, `latest` is refused, a secret's default is dropped, and a sync that changes what runs returns the entry to `draft`.
+  The seed (`raw_data/mcp_catalog.yaml`, `load_mcp_catalog`) finds builtin rows by `(source, source_id)` and gives them `builtin_id(name)`, not a `genid` id: a seed row must not move the ids the snapshots hold.
+  A deployed server is `mcp_servers` (`source = "deployed"`, created `unreachable`, because the column's default `connected` would turn it on in Chat before its pod exists) plus `mcp_instances` (migration `0015`; ORM cascade, SQLite enforces no foreign keys).
+  `api/mcp_instances.py`: deploy is a plain `def` that runs Helm with `asyncio.run` in its worker thread (no `await` between a flush and its commit); names are `mcpi-<last eight hex>` (`mcp-<id8>-credentials` is taken by a shared credential; the vector database controller uses the FIRST eight, do not copy it);
+  settings come from the catalog entry's schema only (`utils/mcp_catalog_settings.py`; a `flag` setting is a switch that adds an argument), secret ones live in Secret `mcpi-<id8>-env`, and a checksum of all of them rolls the pod.
+  `controller/mcp_server_controller.py` has no gateway code and calls `local_chart_path` first; `utils/mcp_instances.proxy_selector` reads `AIOPS_LITELLM_NAMESPACE` and `AIOPS_LITELLM_POD_LABELS`, and without them nothing is rendered (the chart would refuse too).
+  The poller `update_all_mcp_instances` has its own query (every instance that is not Stopped): `refresh_stale` leaves Running rows out, and `apply_pod_status` keeps Running while a pod restarts, so it stores `ready` and `launch` each tick.
+  At first ready it registers with `server_id` = the registry row's id (`utils/mcp_registration.register_once`: a 400 "already exists" is success, measured), then the team permission, then discovery, then ONE commit (`registered_at`); a failure commits nothing and the next tick starts again; after ten minutes `last_error` names what to check.
+  `utils/mcp_instances.usable` is the one answer to "does it take requests" (`ready`, registered, `connected`); `_selected` leaves such a server out (measured: one dead registered server adds 9 s to the proxy's `tools/list`) and answers 409 by name.
+  The registry guards what the platform owns (PATCH of url, transport or credential: 409; refresh while not ready: 409); delete is the proxy (fail closed), then the true state committed (disabled, unregistered), then `remove_workload`, then the rows, so a delete that stops half-way can be repeated; a Failed instance is always deletable.
+  An instance renders its own copy of the entry's start-up (`mcp_instances.startup`, made at deploy and at `upgrade`, which refuses a moved port or path): the proxy is registered with that port and path, and an entry that a sync returned to draft must not change a running server.
+  `_register` runs the connection test BEFORE the registration (ready is a TCP check), `register_once` sends the body again on "already exists" (the allow-list is enforced in the proxy alone, and a PATCH skips the proxy while nothing is committed), and `unregister` always asks the proxy by the row's id and accepts a 404.
+  `parse_server` never raises anything but `EntryError` (anybody publishes to the registry; a search leaves the entry out), the search cache has 256 keys at most and keeps no `raw`, and a setting named `LD_*`, `PATH`, `NODE_OPTIONS` or the like is refused (`LOADER_NAMES`).
+  `utils/mcp_registration.py` holds the organization-based team functions and `server_body` (the old `_litellm_server`, with `server_id=`); `LiteLLMError` carries `status` and `text`.
+  Mock mode: a deployed server is Starting until it is `MOCK_START_SECONDS` old, and the next read of the list or of the instance finishes it (a function of the instance alone: the fast tier is parallel); a name that starts with `failing` fails. Dev user `orgadmin` is an organization admin who is no platform admin.
   `McpUpstream` is the seam for a direct connection later. The path is excluded from the audit log by exact match (`audit/events.py` `EXCLUDED_PATHS`); each `tools/call` is an info log line.
   Token scope `mcp` (`auth/tokens.py`) is valid on that path only, with the member's role (`get_current_user` answers 403 elsewhere).
   `checked_at` and `credential_set_at` go out with the server's offset (`_aware`): the rows hold naive `datetime.now()` values, and a browser read a naive one in its own zone ("6 h" in IST for a minute-old check).
@@ -512,7 +530,7 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   so it never blocks the rest; a later success clears it. `core.py` schedules it every
   `REGISTRY_SYNC_INTERVAL_SECONDS` (default 86400; `0` disables it; like every other scheduled job, `TEST_MODE`
   never builds the scheduler at all) alongside the three endpoint-polling jobs -- `test_lifespan_runs_scheduler`
-  asserts 4 jobs, not 3.
+  asserts 5 jobs (three endpoint pollers, the MCP instances poller, this sync).
 
 ## Conventions and gotchas
 
@@ -524,7 +542,7 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   drop the spurious `NUMERIC` to `UUID` `alter_column` calls SQLite reflection produces).
   Data steps go through typed `sa.table()`/`sa.column()` objects so UUID binds work on SQLite and Postgres.
   `make db-migrate` applies them to the local Postgres; `uv run alembic history` shows the chain.
-- The chain is linear and `0014` (MCP servers: tables, a member's own credential, approval, scopes, OAuth, names) is the single head; a new change is a new revision on top of it.
+- The chain is linear and `0015` (MCP servers: tables, a member's own credential, approval, scopes, OAuth, names, the deploy catalog and instances) is the single head; a new change is a new revision on top of it.
   (While the enterprise streams were open, their columns went into `0008` so that `upgrade_to_head` never saw a fork; that rule ended with their merge.)
   `test_migrations.py` checks every model agrees column for column.
 - Every `HTTPException` carries a human-readable string `detail`; the frontend shows it in a toast.

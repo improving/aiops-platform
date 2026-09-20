@@ -1,3 +1,4 @@
+import type { LaunchProgress } from "@/types/models";
 // MCP servers (backend/api/mcp.py): an organization admin registers a
 // remote MCP server, and every member uses its tools in Chat, in Langflow
 // and from an IDE or SDK through /v1alpha1/mcp.
@@ -60,6 +61,8 @@ export interface McpServer {
   scope?: McpScope;
   /** The caller may change it (an admin, its owner, a platform admin). */
   can_change?: boolean;
+  /** The workload of a server the platform deployed; absent for a remote one. */
+  deploy?: McpDeploy | null;
 }
 
 /** The tools of a server the organization allows. */
@@ -71,10 +74,108 @@ export function allowedTools(server: McpServer): McpTool[] {
 }
 
 /** A server a member can turn on in Chat right now. */
+/** One entry of the official MCP registry, as the backend previews it. */
+export interface McpRegistryPreview {
+  name: string;
+  title: string;
+  description: string | null;
+  version: string | null;
+  publisher: string;
+  website: string | null;
+  /** A valid server name to start from. */
+  suggested_name: string;
+  remote: {
+    url: string;
+    transport: McpTransport;
+    auth_type: "none" | "bearer" | "header";
+    auth_header: string | null;
+  } | null;
+  remote_reason: string | null;
+  deployable: boolean;
+  deployable_reason: string | null;
+  already_added: boolean;
+  /** For a platform admin: the deploy catalog has this entry. */
+  already_imported?: boolean;
+}
+
 export function usable(server: McpServer): boolean {
   return (
     server.enabled &&
     server.status === "connected" &&
-    server.my_credential !== "missing"
+    server.my_credential !== "missing" &&
+    // A deployed server: its pod serves and the proxy knows it.
+    (server.deploy ? server.deploy.usable : true)
   );
+}
+
+/** A deployed server that is still on its way: worth polling for. */
+export function isStarting(server: McpServer): boolean {
+  const deploy = server.deploy;
+  return (
+    !!deploy && server.enabled && !deploy.usable && deploy.status !== "Failed"
+  );
+}
+
+/** The workload side of a deployed server. */
+export interface McpDeploy {
+  instance_id: string;
+  catalog: string;
+  catalog_title: string;
+  image: string;
+  tag: string;
+  status: string | null;
+  ready: boolean;
+  launch: LaunchProgress | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  usable: boolean;
+  upgrade_available: boolean;
+}
+
+export interface McpSetting {
+  name: string;
+  label: string;
+  help: string;
+  secret: boolean;
+  required: boolean;
+  /** A switch that adds this argument, not an environment variable. */
+  flag: string | null;
+  default: string | null;
+}
+
+export type McpEgress = "none" | "public" | "cluster";
+export type McpCatalogStatus = "draft" | "published" | "deprecated";
+
+export interface McpCatalogEntry {
+  id: string;
+  name: string;
+  title: string;
+  description: string | null;
+  docs_url: string | null;
+  image: string;
+  tag: string;
+  port: number;
+  path: string;
+  settings: McpSetting[];
+  egress: McpEgress;
+  source: string;
+  source_id: string;
+  source_version: string | null;
+  status: McpCatalogStatus;
+}
+
+/** What a platform admin reads before Publish. */
+export interface McpCatalogReview extends McpCatalogEntry {
+  command: string[];
+  args: string[];
+  notes: string[];
+  in_use: number;
+}
+
+export interface McpInstance extends McpDeploy {
+  server_id: string;
+  name: string;
+  settings: Record<string, string>;
+  secret_settings: string[];
+  schema: McpSetting[];
 }

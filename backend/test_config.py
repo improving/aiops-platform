@@ -9,7 +9,7 @@ URL_VARS = ("GRAFANA_URL", "LANGFLOW_URL", "JAEGER_URL")
 
 
 def test_ui_config_is_empty_without_the_variables(monkeypatch):
-    for name in URL_VARS:
+    for name in (*URL_VARS, "AIOPS_MCP_REGISTRY_URL"):
         monkeypatch.delenv(name, raising=False)
     client = TestClient(create_app())
     response = client.get(UI_CONFIG)
@@ -19,10 +19,13 @@ def test_ui_config_is_empty_without_the_variables(monkeypatch):
         "langflowUrl": "",
         "jaegerUrl": "",
         "authMode": "disabled",
+        "mcpRegistry": True,
     }
 
 
 def test_ui_config_reads_the_environment(monkeypatch):
+    # Empty turns import from the MCP registry off (no internet).
+    monkeypatch.setenv("AIOPS_MCP_REGISTRY_URL", "")
     monkeypatch.setenv("GRAFANA_URL", " https://grafana.example.test/ ")
     monkeypatch.setenv("LANGFLOW_URL", "https://langflow.example.test")
     monkeypatch.setenv("JAEGER_URL", "https://jaeger.example.test/")
@@ -32,6 +35,7 @@ def test_ui_config_reads_the_environment(monkeypatch):
         "langflowUrl": "https://langflow.example.test",
         "jaegerUrl": "https://jaeger.example.test",
         "authMode": "disabled",
+        "mcpRegistry": False,
     }
 
 
