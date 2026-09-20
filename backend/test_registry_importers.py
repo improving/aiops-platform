@@ -268,7 +268,14 @@ def test_parse_model_vision_and_text_only():
     text_only = orr.parse_model(
         entries["inclusionai/ling-3.0-flash-sante:free"]
     )
-    assert text_only.capabilities == ["chat"]
+    assert text_only.capabilities == ["chat", "tools"]
+
+
+def test_parse_model_tools_follow_supported_parameters():
+    base = {"id": "acme/plain", "architecture": {"input_modalities": ["text"]}}
+    assert orr.parse_model(base).capabilities == ["chat"]
+    with_tools = {**base, "supported_parameters": ["temperature", "tools"]}
+    assert orr.parse_model(with_tools).capabilities == ["chat", "tools"]
 
 
 def test_list_models_parses_the_data_array():

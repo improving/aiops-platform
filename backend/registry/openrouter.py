@@ -44,6 +44,8 @@ def parse_model(data: dict) -> RegistryEntry:
     capabilities = ["chat"]
     if "image" in input_modalities:
         capabilities.append("vision")
+    if "tools" in (data.get("supported_parameters") or []):
+        capabilities.append("tools")
     return RegistryEntry(
         source="openrouter",
         source_id=model_id,

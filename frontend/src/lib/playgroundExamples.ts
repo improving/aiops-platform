@@ -6,6 +6,8 @@ export type PlaygroundRequest = {
   system: string;
   temperature?: number;
   maxOutputTokens?: number;
+  /** The MCP servers turned on in the playground, by name. */
+  mcpServers?: string[];
 };
 
 const TOKEN = "<API_TOKEN>";
@@ -51,6 +53,31 @@ function requestBody(request: PlaygroundRequest) {
  * `inf-<id8>` host: that one is on the instance page, and it skips the
  * platform's per-user usage records.
  */
+/** The playground runs the tool loop itself; a client of the API does the
+    same against the platform's MCP endpoint, so the honest example is
+    where the tools are, not a `tools` array the API would not fill. */
+function toolsExample(request: PlaygroundRequest): CodeExample[] {
+  const servers = request.mcpServers ?? [];
+  if (servers.length === 0) return [];
+  return [
+    {
+      id: "tools",
+      label: "Tools (MCP)",
+      lang: "shell",
+      code: [
+        "# The tools turned on here, as one MCP server (streamable HTTP).",
+        "# Point an MCP client at it, or list the tools by hand:",
+        `curl -N -X POST ${request.apiUrl}/v1alpha1/mcp \\`,
+        `  -H "Authorization: Bearer ${TOKEN}" \\`,
+        `  -H "X-Mcp-Servers: ${servers.join(",")}" \\`,
+        `  -H "Content-Type: application/json" \\`,
+        `  -H "Accept: application/json, text/event-stream" \\`,
+        `  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`,
+      ].join("\n"),
+    },
+  ];
+}
+
 export function playgroundExamples(request: PlaygroundRequest): CodeExample[] {
   const body = requestBody(request);
   const extras = [
@@ -92,5 +119,6 @@ export function playgroundExamples(request: PlaygroundRequest): CodeExample[] {
         "print(response.choices[0].message.content)",
       ].join("\n"),
     },
+    ...toolsExample(request),
   ];
 }

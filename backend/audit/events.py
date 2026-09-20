@@ -17,6 +17,10 @@ EXCLUDED_PREFIXES = (
     "/v1alpha1/rerank",
     "/v1alpha1/authz/",
 )
+# The MCP endpoint itself: one event per protocol message would drown the
+# log (api/mcp.py logs each tool call instead). An exact path, because the
+# writes under /v1alpha1/mcp/servers are recorded.
+EXCLUDED_PATHS = ("/v1alpha1/mcp",)
 READ_METHODS = ("GET", "HEAD", "OPTIONS")
 # The operations stream's verbs, recorded as the action when they end the
 # path.
@@ -39,6 +43,8 @@ def should_record(method: str, path: str) -> bool:
     if method.upper() in READ_METHODS:
         return False
     if not path.startswith(API_PREFIX):
+        return False
+    if path.rstrip("/") in EXCLUDED_PATHS:
         return False
     return not path.startswith(EXCLUDED_PREFIXES)
 

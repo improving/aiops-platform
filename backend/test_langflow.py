@@ -161,6 +161,50 @@ def test_provisioning_writes_base_url_then_key(env):
     assert langflow.posted[1]["value"] == "sk-alice"
 
 
+def test_mcp_variables_need_the_backend_address_and_a_writer(env, monkeypatch):
+    # Without AIOPS_BACKEND_CLUSTER_URL: as before, two variables.
+    langflow = FakeLangflow()
+    _provision(langflow)
+    assert len(langflow.variables) == 2
+
+    monkeypatch.setenv(
+        "AIOPS_BACKEND_CLUSTER_URL", "http://aiops-backend.ai-stack.svc:8000/"
+    )
+    seen = []
+
+    def managed(db, **kwargs):
+        seen.append(kwargs)
+        return None if kwargs["holder_has_it"] else "aiops_abcd1234_secret"
+
+    monkeypatch.setattr(lf, "ensure_managed_token", managed)
+    ALICE.role = "member"
+    langflow = FakeLangflow()
+    _provision(langflow)
+    by_name = {v["name"]: v for v in langflow.posted}
+    assert by_name[lf.MCP_URL_VAR]["value"] == (
+        "http://aiops-backend.ai-stack.svc:8000/v1alpha1/mcp"
+    )
+    assert by_name[lf.MCP_TOKEN_VAR]["value"] == "aiops_abcd1234_secret"
+    assert by_name[lf.MCP_TOKEN_VAR]["type"] == "Credential"
+    assert seen[0]["scope"] == "mcp" and seen[0]["name"] == "langflow"
+    assert seen[0]["holder_has_it"] is False
+
+    # The next page load: Langflow has the variable, no new token, and
+    # the stored one is not written over.
+    posted = len(langflow.posted)
+    _provision(langflow)
+    assert seen[1]["holder_has_it"] is True
+    assert len(langflow.posted) == posted
+    assert ("PATCH", "/api/v1/variables/id-3") not in langflow.calls
+
+    # A viewer cannot use the endpoint, so gets no way to it.
+    ALICE.role = "viewer"
+    langflow = FakeLangflow()
+    _provision(langflow)
+    assert len(langflow.variables) == 2
+    ALICE.role = "member"
+
+
 def test_a_second_run_updates_in_place(env):
     langflow = FakeLangflow()
     langflow.variables = [

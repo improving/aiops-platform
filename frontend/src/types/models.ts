@@ -93,6 +93,11 @@ interface ChatTarget {
   /** The window the target serves, in tokens; absent or null when the
       platform does not know it (every engine but vLLM, some hosted models). */
   context_length?: number | null;
+  /** Whether the target answers a request that carries tools: false for
+      a vLLM instance without the tool-calling flag (it answers 400) or a
+      hosted model the price catalog says cannot; absent or null when
+      the platform does not know (Ollama: it depends on the model). */
+  tools?: boolean | null;
 }
 
 // Hosted providers (Phase 2b, backend/api/providers.py): an organization

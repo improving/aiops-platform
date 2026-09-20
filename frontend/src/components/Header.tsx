@@ -22,6 +22,7 @@ import {
   CubeIcon,
   IdCardIcon,
   LayersIcon,
+  MixerHorizontalIcon,
   Pencil2Icon,
 } from "@radix-ui/react-icons";
 
@@ -61,6 +62,13 @@ const menuItems = [
     label: "Providers",
     icon: <IdCardIcon className="mr-2 h-4 w-4" />,
     href: "/providers",
+  },
+  {
+    // Short on purpose: one more long label wraps the bar to a second
+    // line at 1280 px, and the chat page's bounded height counts on one.
+    label: "MCP",
+    icon: <MixerHorizontalIcon className="mr-2 h-4 w-4" />,
+    href: "/mcp-servers",
   },
   {
     label: "Usage",

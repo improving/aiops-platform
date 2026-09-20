@@ -27,6 +27,7 @@ from models.invitation import Invitation
 from models.membership import Membership
 from models.organization import Organization
 from models.user import User
+from utils import mcp_credentials
 from utils.litellm import LiteLLMError, delete_user_key, rotate_org_key
 
 router = APIRouter()
@@ -271,6 +272,22 @@ async def remove_member(
             detail=(
                 "The member stays: the organization's LiteLLM key could "
                 f"not be rotated ({exc})"
+            ),
+        ) from exc
+    # Their own credentials for MCP servers (a GitHub token, say) go
+    # too, for the same reason, and the member stays when that fails.
+    # After the LiteLLM steps on purpose: a deleted Secret cannot be
+    # rolled back, so nothing that can still fail comes after it.
+    try:
+        mcp_credentials.delete_for_user(db, org.id, user_id)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Could not delete MCP credentials of %s", user_id)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "The member stays: their MCP server credentials could "
+                "not be deleted"
             ),
         ) from exc
     db.delete(membership)

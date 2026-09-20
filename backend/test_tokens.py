@@ -126,7 +126,7 @@ def test_create_retries_once_on_prefix_collision(
         calls.append(2)
         return real_generate_token()
 
-    monkeypatch.setattr("api.tokens.generate_token", flaky_generate_token)
+    monkeypatch.setattr("auth.tokens.generate_token", flaky_generate_token)
     body = create_token(oidc_client, alice)
     assert body["prefix"] != colliding
     assert calls == [1, 2]
@@ -144,7 +144,7 @@ def test_create_answers_500_when_every_retry_collides(
         secret = "b" * SECRET_LENGTH
         return colliding, secret, f"{TOKEN_PREFIX}{colliding}_{secret}"
 
-    monkeypatch.setattr("api.tokens.generate_token", always_collides)
+    monkeypatch.setattr("auth.tokens.generate_token", always_collides)
     response = oidc_client.post(
         TOKENS, json={"name": "x", "scope": "read"}, headers=alice
     )
@@ -206,6 +206,98 @@ def test_read_token_is_a_viewer_and_write_token_keeps_the_role(
         f"{NOTEBOOKS}/{created.json()['id']}", headers=bearer(write)
     )
     assert deleted.status_code == 200, deleted.text
+
+
+def test_mcp_token_is_valid_on_the_mcp_endpoint_only(
+    oidc_client,  # noqa: F811
+    rsa_key,  # noqa: F811
+    monkeypatch,
+):
+    """What an IDE or a Langflow flow holds: it reaches the tools with
+    the member's own role and nothing else of the API."""
+    monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
+    alice = jwt_for(rsa_key, "tok-alice")
+    token = create_token(oidc_client, alice, scope="mcp")["token"]
+    refused = oidc_client.get(MODELS, headers=bearer(token))
+    assert refused.status_code == 403
+    assert "/v1alpha1/mcp" in refused.json()["detail"]
+    assert (
+        oidc_client.get(
+            "/v1alpha1/mcp/servers", headers=bearer(token)
+        ).status_code
+        == 403
+    )
+    listed = oidc_client.post(
+        "/v1alpha1/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        headers=bearer(token),
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["result"]["tools"][0]["name"] == "echo"
+
+
+def test_a_managed_token_is_kept_renewed_and_never_piles_up(
+    oidc_client,  # noqa: F811
+    rsa_key,  # noqa: F811
+):
+    from auth.tokens import ensure_managed_token
+
+    alice = jwt_for(rsa_key, "tok-managed")
+    oidc_client.get(MODELS, headers=alice)
+    db = get_db_direct()
+    try:
+        user = db.query(User).filter(User.sub == "tok-managed").one()
+        member = (
+            db.query(Membership).filter(Membership.user_id == user.id).one()
+        )
+        args = dict(
+            user_id=user.id, org_id=member.org_id, name="langflow", scope="mcp"
+        )
+
+        def rows():
+            return (
+                db.query(ApiToken)
+                .filter(
+                    ApiToken.user_id == user.id, ApiToken.name == "langflow"
+                )
+                .all()
+            )
+
+        first = ensure_managed_token(db, holder_has_it=False, **args)
+        assert first.startswith("aiops_") and len(rows()) == 1
+        # The holder has it and it is far from its end: nothing to do.
+        assert ensure_managed_token(db, holder_has_it=True, **args) is None
+        # The holder lost it: a new one, and the old row is gone.
+        second = ensure_managed_token(db, holder_has_it=False, **args)
+        assert second != first and len(rows()) == 1
+        # Near its end: renewed although the holder has it.
+        rows()[0].expires_at = datetime.now() + timedelta(days=5)
+        db.commit()
+        third = ensure_managed_token(db, holder_has_it=True, **args)
+        assert third is not None and len(rows()) == 1
+        listed = oidc_client.post(
+            "/v1alpha1/mcp", json={}, headers=bearer(second)
+        )
+        assert listed.status_code == 401
+
+        # The holder keeps one token, whatever the organization: after a
+        # provision in another organization it holds that one, so back
+        # here a new one is due although "the holder has it".
+        other = Organization(name="Managed other", slug="managed-other")
+        db.add(other)
+        db.commit()
+        elsewhere = dict(args, org_id=other.id)
+        assert ensure_managed_token(db, holder_has_it=True, **elsewhere)
+        assert ensure_managed_token(db, holder_has_it=True, **args) is not None
+        assert ensure_managed_token(db, holder_has_it=True, **args) is None
+    finally:
+        for row in rows():
+            db.delete(row)
+        db.query(Organization).filter(
+            Organization.slug == "managed-other"
+        ).delete()
+        db.commit()
+        db.close()
 
 
 def test_revoked_token_is_401(oidc_client, rsa_key):  # noqa: F811

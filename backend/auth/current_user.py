@@ -30,7 +30,14 @@ from auth.errors import unauthorized
 from auth.jwt import decode_token
 from auth.roles import ROLE_ADMIN, ROLE_MEMBER, ROLE_VIEWER, WRITER_ROLES
 from auth.settings import MODE_DISABLED, auth_settings
-from auth.tokens import SCOPE_READ, TokenError, authenticate_token, is_token
+from auth.tokens import (
+    MCP_PATH,
+    SCOPE_MCP,
+    SCOPE_READ,
+    TokenError,
+    authenticate_token,
+    is_token,
+)
 from db.database import get_db
 from logger import setup_logger
 from models.api_token import ApiToken
@@ -73,6 +80,8 @@ class CurrentUser:
     auth_kind: str = AUTH_KIND_SESSION
     # The personal token's prefix when auth_kind is "token".
     token_prefix: str | None = None
+    # The personal token's scope when auth_kind is "token".
+    token_scope: str | None = None
 
     @property
     def is_default_org(self) -> bool:
@@ -383,6 +392,7 @@ def resolve_token_user(db: Session, token: ApiToken) -> CurrentUser:
         is_platform_admin=False,
         auth_kind=AUTH_KIND_TOKEN,
         token_prefix=token.prefix,
+        token_scope=token.scope,
     )
 
 
@@ -417,6 +427,14 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> CurrentUser:
     user = _resolve_request(db, creds, x_org, x_dev_user)
+    if (
+        user.token_scope == SCOPE_MCP
+        and request.url.path.rstrip("/") != MCP_PATH
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=f"This token is valid for {MCP_PATH} only",
+        )
     request.state.current_user = user
     return user
 

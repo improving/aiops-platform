@@ -12,7 +12,7 @@ export const tokenService = {
   },
   create: async (body: {
     name: string;
-    scope: "read" | "write";
+    scope: "read" | "write" | "mcp";
     expires_in_days: number;
   }) => {
     const response = await api.post<CreatedApiToken>(URL, body);

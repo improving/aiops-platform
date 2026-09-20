@@ -28,6 +28,7 @@ export function Composer({
   placeholder,
   contextUsed,
   contextLength,
+  toolServers = 0,
 }: {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
@@ -39,6 +40,9 @@ export function Composer({
   placeholder: string;
   contextUsed?: number;
   contextLength?: number | null;
+  /** How many tool servers the next message may use; said next to the
+      field, because the switches are in the side panel. */
+  toolServers?: number;
 }) {
   useEffect(() => {
     const field = inputRef.current;
@@ -105,7 +109,15 @@ export function Composer({
         )}
       </div>
       <div className="mt-1 flex justify-between gap-4 text-xs text-muted-foreground">
-        <span>Enter to send, Shift+Enter for a new line</span>
+        <span>
+          Enter to send, Shift+Enter for a new line
+          {toolServers > 0 && (
+            <span data-testid="chat-tools-on" className="ml-2 font-medium">
+              · {toolServers}{" "}
+              {toolServers === 1 ? "tool server" : "tool servers"} on
+            </span>
+          )}
+        </span>
         {!!contextUsed && !!contextLength && (
           <span
             data-testid="chat-context"

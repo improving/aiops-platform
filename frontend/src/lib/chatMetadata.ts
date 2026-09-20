@@ -10,6 +10,15 @@ export type ChatMetadata = {
   tokensPerSecond?: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** Model calls of this answer; above one when tools ran. */
+  steps?: number;
+  /** What the last step held (its input and output tokens): the
+      conversation the next request starts from. With one step it is
+      the two counts above, so it is only set for a tool loop, where
+      those are sums over the steps and count the prompt once a step. */
+  contextTokens?: number;
+  /** The answer stopped at the limit of tool steps, not at its end. */
+  toolLimit?: boolean;
 };
 
 export type ChatUIMessage = UIMessage<ChatMetadata>;
@@ -53,6 +62,9 @@ export function speedLine(meta: ChatMetadata | undefined): string {
   if (meta.outputTokens !== undefined) {
     parts.push(`${formatTokens(meta.outputTokens)} tokens`);
   }
+  if (meta.steps !== undefined && meta.steps > 1) {
+    parts.push(`${meta.steps} steps`);
+  }
   return parts.join(" · ");
 }
 
@@ -61,6 +73,7 @@ export function speedLine(meta: ChatMetadata | undefined): string {
 export function contextUsed(
   meta: ChatMetadata | undefined
 ): number | undefined {
+  if (meta?.contextTokens !== undefined) return meta.contextTokens;
   if (meta?.inputTokens === undefined || meta.outputTokens === undefined) {
     return undefined;
   }

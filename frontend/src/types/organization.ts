@@ -84,7 +84,7 @@ export interface ApiToken {
   id: string;
   name: string;
   prefix: string;
-  scope: "read" | "write";
+  scope: "read" | "write" | "mcp";
   created_at: string;
   expires_at: string;
   last_used_at: string | null;

@@ -147,6 +147,12 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   and the seed changed once (4192 to 16384) under a running instance. `api/inference_instance.py` `_record_window` therefore writes the default
   into a new vLLM instance's own arguments at create; an instance from before that answers `null` until its argument is set.
   The other source is a hosted model's `ProviderModel.context_length`.
+  `tools` says whether the target answers a request that carries `tools`: `instance_tool_calling` reads the vLLM flag
+  `--enable-auto-tool-choice` from the instance's own arguments (vLLM answers 400 without it) and is `null` for every other engine,
+  because with Ollama it depends on the model; `hosted_tool_calling` reads `supports_function_calling` from the price catalog (`ModelPrice.tools`), at list time,
+  so `utils/model_prices.py` does not repeat a failed fetch for `RETRY_AFTER` seconds. `null` means unknown, and the chat page lets the user try.
+  The chat mock runs a tool loop for the fast tier: with `tools` in the request and a last user turn that starts with `call `,
+  it calls the first tool with the rest of the text as the first argument; after a `tool` message it answers `Tool said: <content>`.
   When the target is registered in LiteLLM (`litellm_model_id` set) every route forwards to the proxy with the
   organization's virtual key (`org_key` → `utils.litellm.ensure_org_key`, `_relay_litellm`); otherwise chat
   falls back to the Phase 1 direct passthrough to `<target.endpoint>/v1/chat/completions` with the workload
@@ -288,6 +294,39 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   gateway host locally (`passThroughAuthHeader`) and the Service in the chart. `LangflowError` (Langflow's own
   detail, 502) and `LiteLLMError` (502) are the two failure shapes; `AIOPS_CHAT_MOCK=true` answers with `inst-mock`
   for the Playwright fast tier. `test_langflow.py` fakes Langflow with `httpx.MockTransport`.
+  With `AIOPS_BACKEND_CLUSTER_URL` set (the address a pod reaches the backend at) and a writer role, provisioning also writes `AIOPS_MCP_URL` (`<that>/v1alpha1/mcp`) and `AIOPS_MCP_TOKEN`,
+  so a flow uses the organization's tools through the one endpoint and not LiteLLM's `/mcp` with the model key, which would go around the viewer rule and a member's own credentials.
+  The token is a personal token of scope `mcp` named `langflow` that the platform manages (`auth/tokens.py` `ensure_managed_token`): a stored token cannot be read back,
+  so the caller says whether Langflow still has the variable; a new one is minted only when it does not or the token has under 30 days left,
+  and the old rows are deleted, not revoked, because this runs on every Develop page load. Langflow keeps one variable for the user whatever the organization, so "the holder has it" also needs the newest `langflow` token of the user to be this organization's; after a provision in another organization a new one is minted here. `mint_token` is the one mint path, shared with `api/tokens.py`.
+
+- MCP servers (`api/mcp.py`, routes in docs/api.md, design in `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`, ADR 0010):
+  an admin registers a remote MCP server, the hosted-provider way (row, Secret, LiteLLM, commit; a failure undoes the earlier steps, 502).
+  `models/mcp_server.py` has `McpServer` and `McpCredential`; the credential is a table of its own (`user_id` NULL = the organization's shared one,
+  two partial unique indexes because NULLs are distinct), so a member's own credential is a new row and not a new column.
+  `utils/mcp.py`: the LiteLLM alias `<name without _><server id8>`, letters and digits only (the proxy names tools `<alias>-<tool>`, so the first `-` ends the alias; and the alias is part of the header name `x-mcp-<alias>-authorization`, where Envoy refuses a `_`),
+  and `validate_server_url` (https only; no loopback, private, link-local, metadata or cluster-internal address, checked after resolution;
+  a host in `AIOPS_MCP_ALLOW_INSECURE_HOSTS` skips both rules, which `make backend` sets for the local test server; `resolve=False` in mock mode).
+  `utils/mcp_credentials.py`: Secret names (`mcp-<id8>-credentials`, `mcp-<id8>-usr-<uid8>-credentials`), `state(server, user)` from the rows alone (what the list shows),
+  and `resolve(server, user, alias)`, the one place that says which headers a caller's request carries: nothing for `none` and `shared` (LiteLLM holds a copy of the shared credential as `static_headers`),
+  and for `per_user` the member's value from their Secret (cached 60 s in this process: another backend replica serves a replaced or removed value for up to that long, the same class as `_org_key_cache`) as `x-mcp-<alias>-<header>`, which the proxy forwards to that server for that call only
+  (measured with the `whoami` tool of `infra/local/mcp/test-server.yaml`: two callers, two credentials, no mixing; a header name with `_` was refused by Envoy, hence the alias form).
+  A `per_user` server is registered in the proxy without a credential; the admin's value of the create is their own and sets the header shape (`user_auth_type`, `user_auth_header`, migration `0010`).
+  `PUT .../credential` tries the value through discovery before it stores it. `remove_member` (`api/organizations.py`) calls `delete_for_user` first and keeps the member on a failure, like the LiteLLM key.
+  `utils/litellm.py` has the proxy's MCP calls (`/v1/mcp/server`, which is not in its OpenAPI document; `/team/update` with `object_permission.mcp_servers`;
+  `/mcp-rest/test/tools/list` for discovery, which answers 200 with `error: true` on a failure). Always send `transport`: the proxy's default is `sse`.
+  `_team_id` runs before the first change of a request: `ensure_org_key` commits when it creates the team, and a row flushed before it survived the rollback of a failed registration (found on the live stack).
+  `/v1alpha1/mcp` (GET, POST, DELETE; `require_writer`, so a viewer gets 403) is the one door for every client. `utils/mcp_relay.py` forwards an allow-list of headers only
+  (never `Authorization`, `Cookie` or `X-Org`: LiteLLM reads a key from `Authorization` too), passes the upstream status through (404, 405 and 202 are protocol answers),
+  streams when the upstream answers `text/event-stream`, and ends a broken stream without an error frame. `X-Mcp-Servers: <name>,<name>` selects servers; an unknown name is a 400.
+  `GET` answers 405 (no server-to-client stream: each would hold a worker thread of the pool that runs every sync route), and the relay sends the organization's key in `Authorization` too, so the master key never travels on a member's request
+  (measured: `x-litellm-api-key` has priority when both are present).
+  Order of side effects, from the review of #58: a Secret that is deleted or written over cannot be rolled back, so `update_server` calls the proxy first and changes Secrets after it (`_target_mode` makes the mode explicit and refuses a change on a `per_user` server that does not name it; `_apply_credential_change`),
+  `delete_server` fails closed (502, everything stays) when the proxy refuses, and `remove_member` deletes the leaver's MCP credentials after the LiteLLM steps.
+  `McpUpstream` is the seam for a direct connection later. The path is excluded from the audit log by exact match (`audit/events.py` `EXCLUDED_PATHS`); each `tools/call` is an info log line.
+  Token scope `mcp` (`auth/tokens.py`) is valid on that path only, with the member's role (`get_current_user` answers 403 elsewhere).
+  `AIOPS_CHAT_MOCK=true` mocks discovery, registration (`litellm_server_id="mock"`) and the endpoint (a stateless JSON-RPC handler with one tool, `echo`).
+  `test_mcp.py` patches `api.mcp.litellm_client`, `org_key` and `_team_id`, and `utils.mcp._resolve` so no test needs DNS.
 
 ## Tenancy, audit and tokens
 
@@ -461,9 +500,9 @@ Routes, parameters and the day-2 action semantics are in docs/api.md; here, wher
   drop the spurious `NUMERIC` to `UUID` `alter_column` calls SQLite reflection produces).
   Data steps go through typed `sa.table()`/`sa.column()` objects so UUID binds work on SQLite and Postgres.
   `make db-migrate` applies them to the local Postgres; `uv run alembic history` shows the chain.
-- Migration `0008` is the single head; a stream's column goes into `0008` on `feat/enterprise-schema` and is
-  merged forward, never its own migration, so `upgrade_to_head` never sees a fork; `test_migrations.py` checks
-  every model agrees column for column.
+- The chain is linear and `0010` (MCP servers, then a member's own credential) is the single head; a new change is a new revision on top of it.
+  (While the enterprise streams were open, their columns went into `0008` so that `upgrade_to_head` never saw a fork; that rule ended with their merge.)
+  `test_migrations.py` checks every model agrees column for column.
 - Every `HTTPException` carries a human-readable string `detail`; the frontend shows it in a toast.
   Validation errors are 422, duplicates 409, an unreachable cluster 503.
 - `pyproject.toml` turns `DeprecationWarning` into errors in tests; add a targeted `filterwarnings` entry rather

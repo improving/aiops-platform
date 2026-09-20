@@ -29,6 +29,7 @@ import type { CreatedApiToken } from "@/types/organization";
 const SCOPES = [
   { value: "read", label: "Read only" },
   { value: "write", label: "Read and write" },
+  { value: "mcp", label: "MCP tools only" },
 ] as const;
 // backend/auth/tokens.py: 1 to 365 days, default 90.
 const EXPIRIES = [
@@ -76,7 +77,7 @@ export function CreateTokenDialog({
 }: CreateTokenDialogProps) {
   const { toast } = useToast();
   const [name, setName] = useState("");
-  const [scope, setScope] = useState<"read" | "write">("write");
+  const [scope, setScope] = useState<"read" | "write" | "mcp">("write");
   const [expiry, setExpiry] = useState("90");
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<CreatedApiToken | null>(null);
@@ -172,7 +173,7 @@ export function CreateTokenDialog({
               <Label htmlFor="token-scope">Scope</Label>
               <Select
                 value={scope}
-                onValueChange={(v) => setScope(v as "read" | "write")}
+                onValueChange={(v) => setScope(v as "read" | "write" | "mcp")}
               >
                 <SelectTrigger id="token-scope" aria-label="Scope">
                   <SelectValue />

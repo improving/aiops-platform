@@ -88,6 +88,15 @@ It is a monorepo assembled from four former repositories with their history (`MI
    that the endpoint pages embed for Ollama instances through `var-target`.
    `AIOPS_CHAT_MOCK=true` (honoured only with `TEST_MODE=true`) serves one mock target, canned answers and canned usage rows for the Playwright fast tier.
 
+10. **Tools come from MCP servers, registered per organization and reached through one platform endpoint.**
+    An organization admin registers remote MCP servers (`backend/api/mcp.py`, page `/mcp-servers`): a URL and at most one shared credential in a Secret,
+    registered in the LiteLLM MCP gateway and scoped to the organization's LiteLLM team (ADR 0010, `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`).
+    Every client reaches the tools through `/v1alpha1/mcp` on the platform API (MCP over streamable HTTP):
+    it authenticates the caller, refuses viewers, selects servers (`X-Mcp-Servers`), resolves the caller's credentials and relays to LiteLLM `/mcp`, which stays inside the cluster.
+    The chat playground runs the tool loop in its route handler (`frontend/src/lib/toolSources.ts`) as an MCP client of that endpoint;
+    an IDE or SDK uses a personal token of scope `mcp`, valid there only; Langflow gets `AIOPS_MCP_URL` and such a token at provision time (`AIOPS_BACKEND_CLUSTER_URL`).
+    A chat target says whether it can call tools (`tools`); with `AIOPS_CHAT_MOCK=true` the backend mocks the registry, the endpoint (one tool, `echo`) and a model that calls it.
+
 ## Local stack and commands
 
 ```bash
@@ -113,7 +122,7 @@ and why deployed instances no longer need a `LoadBalancer` IP.
 
 ## Packaging
 
-`charts/aiops-platform` (version 0.3.3) is the umbrella chart that installs the platform (`docs/install.md`):
+`charts/aiops-platform` (version 0.3.5) is the umbrella chart that installs the platform (`docs/install.md`):
 the backend and frontend templates live in the chart,
 Postgres, Keycloak and LiteLLM are conditional dependencies (`<name>.enabled`, `<name>.external.*`) with fixed names
 (`aiops-postgresql`, `aiops-keycloak`, `aiops-litellm`) so the subchart values can reference each other literally,

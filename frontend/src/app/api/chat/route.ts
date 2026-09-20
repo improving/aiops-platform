@@ -4,9 +4,9 @@ import {
   convertToModelMessages,
   createUIMessageStreamResponse,
   RetryError,
+  stepCountIs,
   streamText,
   toUIMessageStream,
-  type StepResultPerformance,
   type TextStreamPart,
   type ToolSet,
   type UIMessage,
@@ -21,6 +21,13 @@ import {
   ORG_COOKIE,
   ORG_HEADER,
 } from "@/lib/orgCookie";
+import { stepMetrics } from "@/lib/stepMetrics";
+import {
+  MAX_TOOL_STEPS,
+  parseToolSources,
+  resolveToolSources,
+  ToolSourceError,
+} from "@/lib/toolSources";
 
 export const runtime = "nodejs";
 // A CPU model streams slowly; do not cut the answer short.
@@ -32,6 +39,8 @@ type ChatBody = {
   system?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  /** Where this request's tools come from (`src/lib/toolSources.ts`). */
+  toolSources?: unknown;
 };
 
 function authDisabled(): boolean {
@@ -81,23 +90,51 @@ export async function POST(req: Request) {
     includeUsage: true,
   });
 
+  // The tools the user turned on. A failure here is an answer of its
+  // own: the chat page offers to send the message without tools.
+  let resolved;
+  try {
+    resolved = await resolveToolSources(
+      parseToolSources(body.toolSources),
+      headers
+    );
+  } catch (error) {
+    if (error instanceof ToolSourceError) {
+      return Response.json({ detail: error.message }, { status: 502 });
+    }
+    throw error;
+  }
+  const { tools, close } = resolved;
+  const hasTools = Object.keys(tools).length > 0;
+
   const result = streamText({
     model: provider.chatModel(body.model),
     instructions: body.system?.trim() || undefined,
-    messages: await convertToModelMessages(body.messages),
+    // A stopped answer can leave a tool call without its result in the
+    // browser's copy of the conversation; the model must not see half
+    // of a call.
+    messages: await convertToModelMessages(body.messages, {
+      tools,
+      ignoreIncompleteToolCalls: true,
+    }),
     temperature: body.temperature,
     maxOutputTokens: body.maxOutputTokens,
+    // With tools the answer is a loop: call, read the result, go on.
+    ...(hasTools ? { tools, stopWhen: stepCountIs(MAX_TOOL_STEPS) } : {}),
+    // The MCP client lives as long as the loop, however it ends.
+    onFinish: close,
+    onError: close,
+    onAbort: close,
   });
 
   // `messageMetadata` sees only the `start` and `finish` parts, and the
-  // timings live on `finish-step`, which comes first: keep them as they
-  // pass. The SDK's own figures, not a timer here, so a reasoning model's
-  // first output counts as the first token too.
-  let performance: StepResultPerformance | undefined;
+  // timings live on the `finish-step` parts, which come first: keep
+  // them as they pass (`stepMetrics` says what it makes of several).
+  const metrics = stepMetrics(MAX_TOOL_STEPS);
   const stream = result.stream.pipeThrough(
     new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
       transform(part, controller) {
-        if (part.type === "finish-step") performance = part.performance;
+        if (part.type === "finish-step") metrics.add(part);
         controller.enqueue(part);
       },
     })
@@ -107,15 +144,7 @@ export async function POST(req: Request) {
     stream: toUIMessageStream({
       stream,
       messageMetadata: ({ part }): ChatMetadata | undefined =>
-        part.type === "finish"
-          ? {
-              ttftMs: performance?.timeToFirstOutputMs,
-              totalMs: performance?.responseTimeMs,
-              tokensPerSecond: performance?.outputTokensPerSecond,
-              inputTokens: part.totalUsage.inputTokens,
-              outputTokens: part.totalUsage.outputTokens,
-            }
-          : undefined,
+        part.type === "finish" ? metrics.metadata(part.totalUsage) : undefined,
       // Show the backend's detail (503 no endpoint, 502 unreachable) in
       // the chat instead of the generic "An error occurred".
       onError: (error) => {

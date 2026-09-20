@@ -33,6 +33,10 @@ data:
   # The backend calls Langflow's API as the caller (utils/langflow.py):
   # through the Service here, where Langflow verifies the token itself.
   LANGFLOW_API_URL: "http://{{ include "aiops-platform.langflowFullname" . }}:7860"
+  # Where a flow reaches the platform's MCP endpoint (/v1alpha1/mcp): the
+  # backend writes it, with a token of scope mcp, into the member's
+  # Langflow variables.
+  AIOPS_BACKEND_CLUSTER_URL: "http://{{ include "aiops-platform.backendFullname" . }}:8000"
   {{- else if .Values.ui.langflowUrl }}
   # A Langflow of yours, on platform identity: the same API through its
   # public address (Langflow verifies the forwarded token there too).

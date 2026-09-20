@@ -22,10 +22,13 @@ export function ChatSettings({
   onTemperatureChange,
   maxTokens,
   onMaxTokensChange,
+  tools,
   examples,
   onClear,
   canClear,
 }: {
+  /** The Tools section (`ChatTools`), between the numbers and the actions. */
+  tools?: React.ReactNode;
   system: string;
   onSystemChange: (value: string) => void;
   /** "" is the model's default. */
@@ -108,6 +111,7 @@ export function ChatSettings({
           middle.
         </p>
       </div>
+      {tools}
       <div className="flex flex-wrap gap-2">
         {examples.length > 0 && (
           <CodeExamplesDialog

@@ -158,7 +158,7 @@ def test_upgrade_fresh_database(tmp_path):
     )
     assert current_revision(engine) == head_revision()
     # A mis-numbered file would still satisfy the dynamic check above.
-    assert head_revision() == "0008"
+    assert head_revision() == "0010"
     assert {"organizations", "users", "memberships"} <= table_names(engine)
     assert "model_serving_options" in table_names(engine)
     assert "reference" in column_names(engine, "inference_instances")
@@ -263,7 +263,7 @@ def test_registry_migration_seeds_serving_options_from_category_and_model_id(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0008"
+    assert current_revision(engine) == head_revision() == "0010"
     with engine.connect() as conn:
         rows = conn.execute(
             sa.select(
@@ -368,7 +368,7 @@ def test_enterprise_migration_adds_tables_and_columns_and_downgrades(
 
     upgrade_to_head(engine)
 
-    assert current_revision(engine) == head_revision() == "0008"
+    assert current_revision(engine) == head_revision() == "0010"
     assert set(ENTERPRISE_TABLES) <= table_names(engine)
     assert column_names(engine, "invitations") == {
         "id",
@@ -449,3 +449,23 @@ def test_enterprise_migration_defaults_replicas_and_gpu_count(tmp_path):
             ).where(inference_instances_table.c.id == instance_id)
         ).one()
     assert row == (None, 1, 1)
+
+
+def test_mcp_migration_matches_the_models_and_downgrades(tmp_path):
+    """0009 and 0010: the two MCP tables carry exactly the declared columns, the
+    shared credential is one per server, and the downgrade removes
+    both."""
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'mcp.db'}")
+    upgrade_to_head(engine)
+    for table in ("mcp_servers", "mcp_credentials"):
+        declared = set(Base.metadata.tables[table].columns.keys())
+        assert column_names(engine, table) == declared, table
+    assert {
+        "uq_mcp_credentials_shared",
+        "uq_mcp_credentials_user",
+    } <= index_names(engine, "mcp_credentials")
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0008")
+    assert current_revision(engine) == "0008"
+    assert not {"mcp_servers", "mcp_credentials"} & table_names(engine)

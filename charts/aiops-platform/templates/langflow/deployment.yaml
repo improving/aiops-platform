@@ -105,7 +105,9 @@ spec:
             - name: LANGFLOW_REFRESH_SECURE
               value: "true"
             - name: LANGFLOW_SSRF_ALLOWED_HOSTS
-              value: {{ .Values.langflow.ssrfAllowedHosts | default (.Values.litellm.enabled | ternary .Values.litellm.fullnameOverride "") | quote }}
+              # LiteLLM for the models, the backend for the tools
+              # (/v1alpha1/mcp); nothing else inside the cluster.
+              value: {{ .Values.langflow.ssrfAllowedHosts | default (printf "%s%s" (.Values.litellm.enabled | ternary (printf "%s," .Values.litellm.fullnameOverride) "") (include "aiops-platform.backendFullname" .)) | quote }}
             - name: LANGFLOW_HOST
               value: "0.0.0.0"
             - name: LANGFLOW_PORT

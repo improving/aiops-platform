@@ -158,6 +158,119 @@ test.describe("chat page", () => {
     await expect(chat.speed).toContainText("4 tokens");
   });
 
+  test("an answer shows its tool calls in order, done and failed", async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    await page.evaluate(() => {
+      const turns = [
+        {
+          id: "u1",
+          role: "user",
+          parts: [{ type: "text", text: "what changed in PR 52?" }],
+        },
+        {
+          id: "a1",
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "dynamic-tool",
+              toolName: "github-get_pull_request",
+              toolCallId: "call_1",
+              state: "output-available",
+              input: { number: 52 },
+              output: {
+                content: [{ type: "text", text: "Edit settings dialog" }],
+                isError: false,
+              },
+            },
+            {
+              type: "dynamic-tool",
+              toolName: "github-search_issues",
+              toolCallId: "call_2",
+              state: "output-error",
+              input: { query: "tool calling" },
+              errorText: "403 Forbidden",
+            },
+            { type: "step-start" },
+            { type: "text", text: "PR 52 adds an Edit settings dialog." },
+          ],
+        },
+      ];
+      localStorage.setItem("aiops.chat.dev.inst-mock", JSON.stringify(turns));
+    });
+    await page.reload();
+
+    await expect(chat.toolCalls).toHaveCount(2);
+    const done = chat.toolCalls.first();
+    await expect(done).toHaveAttribute("data-state", "done");
+    await expect(done).toContainText("github-get_pull_request");
+    // Closed once done: the answer is the main text.
+    await expect(done.getByRole("group", { name: /^Result of/ })).toBeHidden();
+    await done.locator("summary").click();
+    await expect(
+      done.getByRole("group", { name: "Input of github-get_pull_request" })
+    ).toContainText('"number": 52');
+    // An MCP result shows the text the model read, not its envelope.
+    await expect(
+      done.getByRole("group", { name: "Result of github-get_pull_request" })
+    ).toHaveText("Edit settings dialog");
+
+    const failed = chat.toolCalls.nth(1);
+    await expect(failed).toHaveAttribute("data-state", "failed");
+    await failed.locator("summary").click();
+    await expect(failed.getByRole("alert")).toHaveText("403 Forbidden");
+
+    await expect(chat.assistantMessages.last()).toContainText(
+      "PR 52 adds an Edit settings dialog."
+    );
+  });
+
+  test("a streamed tool call replaces the waiting row and stays open while it runs", async ({
+    page,
+  }) => {
+    // The stream ends before the tool's result: what a stopped answer
+    // leaves behind, and the only way to hold the running state still.
+    const chunks = [
+      { type: "start", messageId: "m1" },
+      { type: "start-step" },
+      {
+        type: "tool-input-available",
+        toolCallId: "call_1",
+        toolName: "echo",
+        input: { message: "hi" },
+        dynamic: true,
+      },
+    ];
+    await page.route("**/api/chat", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "x-vercel-ai-ui-message-stream": "v1",
+        },
+        body:
+          chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
+          "data: [DONE]\n\n",
+      })
+    );
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    await chat.send("call hi");
+
+    await expect(chat.toolCalls).toHaveCount(1);
+    await expect(chat.toolCalls.first()).toHaveAttribute(
+      "data-state",
+      "running"
+    );
+    await expect(
+      chat.toolCalls.first().getByRole("group", { name: "Input of echo" })
+    ).toContainText('"message": "hi"');
+    await expect(chat.waiting).toBeHidden();
+  });
+
   test("the last turn can be regenerated, and the last message edited", async ({
     page,
   }) => {

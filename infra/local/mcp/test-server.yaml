@@ -1,0 +1,123 @@
+# A small MCP server for local tests (make mcp-test-up), never for a real
+# cluster: streamable HTTP, stateless, in namespace mcp-test.
+#
+# - It refuses a request without a bearer (401), so a test proves that the
+#   credential an admin stored reaches the server.
+# - `echo` answers its argument; `whoami` answers the first eight hex
+#   characters of the SHA-256 of the caller's bearer, so a test can tell
+#   two credentials apart without printing either.
+#
+# LiteLLM reaches it at http://mcp-test.mcp-test.svc.cluster.local:8000/mcp.
+# The backend on the laptop cannot resolve that name and refuses plain http,
+# so `make backend` lists the host in AIOPS_MCP_ALLOW_INSECURE_HOSTS.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-test
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-test-server
+  namespace: mcp-test
+data:
+  server.py: |
+    import hashlib
+
+    import uvicorn
+    from mcp.server.fastmcp import Context, FastMCP
+    from mcp.server.transport_security import TransportSecuritySettings
+    from starlette.responses import JSONResponse
+
+    mcp = FastMCP(
+        "aiops-mcp-test",
+        stateless_http=True,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        ),
+    )
+
+
+    @mcp.tool()
+    def echo(message: str) -> str:
+        """Say it again."""
+        return message
+
+
+    @mcp.tool()
+    def whoami(ctx: Context) -> str:
+        """A short fingerprint of the credential the caller sent."""
+        header = ctx.request_context.request.headers.get("authorization", "")
+        token = header.removeprefix("Bearer ").strip()
+        return hashlib.sha256(token.encode()).hexdigest()[:8]
+
+
+    inner = mcp.streamable_http_app()
+
+
+    async def app(scope, receive, send):
+        if scope["type"] == "http":
+            headers = dict(scope["headers"])
+            if not headers.get(b"authorization", b"").startswith(b"Bearer "):
+                response = JSONResponse(
+                    {"error": "a bearer token is required"}, status_code=401
+                )
+                await response(scope, receive, send)
+                return
+        await inner(scope, receive, send)
+
+
+    if __name__ == "__main__":
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-test
+  namespace: mcp-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-test
+  template:
+    metadata:
+      labels:
+        app: mcp-test
+    spec:
+      containers:
+        - name: server
+          image: ghcr.io/astral-sh/uv:0.8-python3.13-bookworm-slim
+          command: ["uv", "run", "--no-project", "--with", "mcp==1.15.0", "--with", "uvicorn", "python", "/app/server.py"]
+          ports:
+            - containerPort: 8000
+          env:
+            - name: UV_CACHE_DIR
+              value: /tmp/uv-cache
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            periodSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: mcp-test-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-test
+  namespace: mcp-test
+spec:
+  selector:
+    app: mcp-test
+  ports:
+    - port: 8000
+      targetPort: 8000

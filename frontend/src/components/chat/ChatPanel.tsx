@@ -8,13 +8,22 @@ import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ToastAction } from "@/components/ui/toast";
-import { ChatMessage, messageText } from "@/components/chat/ChatMessage";
+import {
+  ChatMessage,
+  hasContent,
+  messageText,
+} from "@/components/chat/ChatMessage";
 import { ChatSettings } from "@/components/chat/ChatSettings";
 import { Composer } from "@/components/chat/Composer";
 import { EmptyConversation } from "@/components/chat/EmptyConversation";
 import { TargetPicker } from "@/components/chat/TargetPicker";
 import { contextUsed, type ChatUIMessage } from "@/lib/chatMetadata";
 import { platformApiUrl, playgroundExamples } from "@/lib/playgroundExamples";
+import { ChatTools } from "@/components/chat/ChatTools";
+import { ConnectCredentialDialog } from "@/components/mcp/ConnectCredentialDialog";
+import type { McpServer } from "@/types/mcp";
+import { useToolServers } from "@/components/chat/useToolServers";
+import { useOrg } from "@/hooks/useOrg";
 import { modelService } from "@/services/modelService";
 import { loadMessages, saveMessages } from "@/lib/chatStorage";
 import type { ChatTarget } from "@/types/models";
@@ -26,6 +35,9 @@ function describeChatError(message: string): string {
   const text = message || "";
   if (/no endpoint yet|503/.test(text)) {
     return "The instance is still starting. Wait until it is Ready and retry.";
+  }
+  if (/Could not reach the tools/.test(text)) {
+    return "The tools could not be reached, so nothing was sent to the model. Retry, or send the message without tools.";
   }
   if (/not reach|502|Connection error/.test(text)) {
     return "The model did not answer: the instance or the provider is unreachable. Check the instance page and retry.";
@@ -74,6 +86,21 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   const requested = chatTargets.find((t) => t.name === target);
   const selected = requested?.ready ? requested : undefined;
 
+  // Tools: the servers this user turned on, as far as this target and
+  // this role can use them.
+  const { role, isAdmin } = useOrg();
+  const isViewer = role === "viewer";
+  const preselect = useMemo(
+    () => (searchParams.get("tools") ?? "").split(",").filter(Boolean),
+    [searchParams]
+  );
+  const toolServers = useToolServers(userKey, preselect);
+  const [connecting, setConnecting] = useState<McpServer | null>(null);
+  const toolsBlocked = isViewer || selected?.tools === false;
+  const activeTools = useMemo(
+    () => (toolsBlocked ? [] : toolServers.active),
+    [toolsBlocked, toolServers.active]
+  );
   const temperatureValue = temperature === "" ? undefined : Number(temperature);
   const maxOutputTokens =
     Number(maxTokens) >= 1 ? Math.floor(Number(maxTokens)) : undefined;
@@ -82,17 +109,21 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     () =>
       new DefaultChatTransport<ChatUIMessage>({
         api: "/api/chat",
-        prepareSendMessagesRequest: ({ messages }) => ({
+        prepareSendMessagesRequest: ({ messages, body }) => ({
           body: {
             messages,
             model: target,
             system,
             temperature: temperatureValue,
             maxOutputTokens,
+            toolSources: activeTools.map((server) => ({ type: "mcp", server })),
+            // One request's own fields last: "Send without tools" sends
+            // an empty `toolSources` through `regenerate({ body })`.
+            ...body,
           },
         }),
       }),
-    [target, system, temperatureValue, maxOutputTokens]
+    [target, system, temperatureValue, maxOutputTokens, activeTools]
   );
 
   const {
@@ -174,6 +205,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     [clearError, regenerate]
   );
 
+  const continueAnswer = useCallback(() => {
+    sendMessage({ text: "Continue." });
+  }, [sendMessage]);
+
   // Back into the field, and the turn (with its answer) out of the log:
   // sending it again continues from what came before it.
   const onEdit = useCallback(
@@ -229,9 +264,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
             system,
             temperature: temperatureValue,
             maxOutputTokens,
+            mcpServers: activeTools,
           })
         : [],
-    [selected, system, temperatureValue, maxOutputTokens]
+    [selected, system, temperatureValue, maxOutputTokens, activeTools]
   );
 
   if (loaded && chatTargets.length === 0) {
@@ -248,7 +284,19 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
-      <aside className="min-w-0 space-y-4">
+      <ConnectCredentialDialog
+        server={connecting}
+        onOpenChange={(open) => !open && setConnecting(null)}
+        onSaved={(server) => {
+          toolServers.replace(server);
+          // Connected in order to use it: turn it on.
+          toolServers.toggle(server.name, true);
+        }}
+      />
+      {/* The same bound as the conversation: with the Tools section the
+          panel can be taller than the window, and it must scroll in
+          itself, not make the page scroll the composer away. */}
+      <aside className="min-w-0 space-y-4 lg:max-h-[calc(100vh-18rem)] lg:min-h-[24rem] lg:overflow-y-auto lg:pr-1">
         <div className="space-y-2">
           <Label>Target</Label>
           <TargetPicker
@@ -264,6 +312,24 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           onTemperatureChange={setTemperature}
           maxTokens={maxTokens}
           onMaxTokensChange={setMaxTokens}
+          tools={
+            <ChatTools
+              servers={toolServers.servers}
+              selected={toolServers.selected}
+              active={activeTools}
+              onToggle={toolServers.toggle}
+              targetTools={selected?.tools}
+              engine={selected?.engine}
+              settingsHref={
+                selected?.instance_id
+                  ? `/models/endpoints/${selected.instance_id}`
+                  : undefined
+              }
+              isViewer={isViewer}
+              isAdmin={isAdmin}
+              onConnect={setConnecting}
+            />
+          }
           examples={examples}
           onClear={clear}
           canClear={messages.length > 0}
@@ -309,6 +375,9 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
                     : undefined
                 }
                 onEdit={!busy && message.id === lastUserId ? onEdit : undefined}
+                onContinue={
+                  !busy && message === last ? continueAnswer : undefined
+                }
               />
             ))}
             {waiting && (
@@ -349,6 +418,19 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
                   >
                     Retry
                   </Button>
+                  {/Could not reach the tools/.test(error.message) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        clearError();
+                        regenerate({ body: { toolSources: [] } });
+                      }}
+                    >
+                      Send without tools
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -382,16 +464,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           }
           contextUsed={contextUsed(lastAssistant?.metadata)}
           contextLength={selected?.context_length}
+          toolServers={activeTools.length}
         />
       </section>
     </div>
-  );
-}
-
-function hasContent(message: ChatUIMessage): boolean {
-  return message.parts.some(
-    (part) =>
-      (part.type === "text" || part.type === "reasoning") && part.text !== ""
   );
 }
 

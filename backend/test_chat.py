@@ -282,6 +282,8 @@ def test_hosted_targets_are_listed_and_resolvable(client):
     assert targets[litellm_name]["provider_id"] == str(provider_id)
     assert targets[litellm_name]["capability"] == "chat"
     assert targets[litellm_name]["instance_id"] is None
+    # gpt-4o-mini supports function calling in the price catalog.
+    assert targets[litellm_name]["tools"] is True
 
     seen = {}
 
@@ -480,6 +482,7 @@ def test_mock_stream_ends_with_usage_when_asked(client, monkeypatch):
     monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
     targets = client.get("/v1alpha1/chat/targets").json()
     assert targets[0]["context_length"] == 4096
+    assert targets[0]["tools"] is True
 
     def chunks(body):
         text = client.post("/v1alpha1/chat/completions", json=body).text
@@ -499,6 +502,95 @@ def test_mock_stream_ends_with_usage_when_asked(client, monkeypatch):
         "completion_tokens": 3,
         "total_tokens": 4,
     }
+
+
+ECHO_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "echo",
+        "description": "Say it again",
+        "parameters": {
+            "type": "object",
+            "properties": {"message": {"type": "string"}},
+        },
+    },
+}
+
+
+def test_mock_calls_a_tool_then_answers_from_its_result(client, monkeypatch):
+    monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
+
+    def chunks(body):
+        text = client.post("/v1alpha1/chat/completions", json=body).text
+        return [
+            json.loads(line[len("data: ") :])
+            for line in text.splitlines()
+            if line.startswith("data: {")
+        ]
+
+    ask = {"role": "user", "content": "call hi there"}
+    body = {
+        "model": "inst-mock",
+        "stream": True,
+        "tools": [ECHO_TOOL],
+        "messages": [ask],
+    }
+    first = chunks(body)
+    calls = [
+        call
+        for c in first
+        for call in c["choices"][0]["delta"].get("tool_calls", [])
+    ]
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "echo"
+    assert json.loads(calls[0]["function"]["arguments"]) == {
+        "message": "hi there"
+    }
+    assert first[-1]["choices"][0]["finish_reason"] == "tool_calls"
+
+    # The second step of the loop: the tool's result is the last message.
+    body["messages"] = [
+        ask,
+        {"role": "assistant", "content": None, "tool_calls": calls},
+        {
+            "role": "tool",
+            "tool_call_id": calls[0]["id"],
+            "content": "hi there",
+        },
+    ]
+    text = "".join(
+        c["choices"][0]["delta"].get("content") or "" for c in chunks(body)
+    )
+    assert text.strip() == "Tool said: hi there"
+    # The AI SDK sends an MCP result as the JSON of its content parts.
+    body["messages"][-1]["content"] = json.dumps(
+        [{"type": "text", "text": "hi there"}]
+    )
+    text = "".join(
+        c["choices"][0]["delta"].get("content") or "" for c in chunks(body)
+    )
+    assert text.strip() == "Tool said: hi there"
+
+    # Without tools the same words are only text, and without "call"
+    # the tools are left alone.
+    plain = chunks({**body, "messages": [ask], "tools": []})
+    assert "tool_calls" not in json.dumps(plain)
+    body["messages"] = [{"role": "user", "content": "hello"}]
+    assert "tool_calls" not in json.dumps(chunks(body))
+
+
+def test_mock_tool_call_without_a_stream(client, monkeypatch):
+    monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
+    body = {
+        "model": "inst-mock",
+        "tools": [ECHO_TOOL],
+        "messages": [{"role": "user", "content": "call hi"}],
+    }
+    choice = client.post("/v1alpha1/chat/completions", json=body).json()[
+        "choices"
+    ][0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"][0]["function"]["name"] == "echo"
 
 
 def test_instance_context_length_is_the_instances_own_argument():
@@ -522,6 +614,26 @@ def test_instance_context_length_is_the_instances_own_argument():
     # Ollama's served window is not something the platform sets.
     ollama = NS(name="Ollama", default_args=[default])
     assert instance_context_length(row({}, ollama)) is None
+
+
+def test_instance_tool_calling_reads_the_vllm_flag():
+    from types import SimpleNamespace as NS
+
+    from api.chat import instance_tool_calling
+
+    def row(args, engine="vLLM"):
+        return NS(engine=NS(name=engine), config=NS(args=args))
+
+    on = {"--enable-auto-tool-choice": "", "--tool-call-parser": "hermes"}
+    assert instance_tool_calling(row(on)) is True
+    assert instance_tool_calling(row({"max_model_len": "4192"})) is False
+    assert instance_tool_calling(row(None)) is False
+    assert instance_tool_calling(NS(engine=NS(name="vLLM"), config=None)) is (
+        False
+    )
+    # The platform cannot tell for the other engines: it depends on the
+    # model (Ollama) or is not an option at all.
+    assert instance_tool_calling(row(on, "Ollama")) is None
 
 
 def test_create_records_the_vllm_window_on_the_instance():

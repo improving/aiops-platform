@@ -1,8 +1,10 @@
 import { memo } from "react";
+import { isToolUIPart } from "ai";
 import { Pencil1Icon, ReloadIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/CopyButton";
 import { Markdown } from "@/components/chat/Markdown";
+import { ToolCallBlock } from "@/components/chat/ToolCallBlock";
 import { speedLine, type ChatUIMessage } from "@/lib/chatMetadata";
 
 export function messageText(message: ChatUIMessage): string {
@@ -12,12 +14,14 @@ export function messageText(message: ChatUIMessage): string {
     .join("");
 }
 
-/** Reasoning models (qwen3, o-series) stream their thinking first. */
-function messageReasoning(message: ChatUIMessage): string {
-  return message.parts
-    .filter((part) => part.type === "reasoning")
-    .map((part) => part.text)
-    .join("");
+/** Something of this answer can be shown: text, thinking, or a tool
+    call (which has a line of its own from its first moment). */
+export function hasContent(message: ChatUIMessage): boolean {
+  return message.parts.some(
+    (part) =>
+      isToolUIPart(part) ||
+      ((part.type === "text" || part.type === "reasoning") && part.text !== "")
+  );
 }
 
 /**
@@ -27,6 +31,11 @@ function messageReasoning(message: ChatUIMessage): string {
  * An answer with nothing to show yet renders nothing, so "the message is
  * not empty" keeps meaning "text has arrived" for the specs, and the
  * waiting row stands in for it.
+ *
+ * An answer's parts are shown in the order they arrived: with tools a
+ * turn is several steps (thinking, a tool call, then the text), and
+ * the order is the explanation. Reasoning models (qwen3, o-series)
+ * stream their thinking first.
  *
  * An answer has no bubble: it is the page's main text, and its code
  * blocks and tables need the contrast a filled bubble would take away.
@@ -39,17 +48,19 @@ export const ChatMessage = memo(function ChatMessage({
   streaming,
   onRegenerate,
   onEdit,
+  onContinue,
 }: {
   message: ChatUIMessage;
   /** This answer is still arriving: no actions, no speed line yet. */
   streaming: boolean;
   onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
+  /** Offered when the answer stopped at the limit of tool steps. */
+  onContinue?: () => void;
 }) {
   const text = messageText(message);
-  const reasoning = messageReasoning(message);
   const isUser = message.role === "user";
-  if (!isUser && !text && !reasoning) return null;
+  if (!isUser && !hasContent(message)) return null;
   const speed = isUser || streaming ? "" : speedLine(message.metadata);
 
   return (
@@ -65,14 +76,47 @@ export const ChatMessage = memo(function ChatMessage({
             : "w-full min-w-0 py-1"
         }
       >
-        {reasoning && (
-          <details className="mb-1 text-xs text-muted-foreground">
-            <summary className="cursor-pointer">Thinking</summary>
-            <div className="mt-1 whitespace-pre-wrap">{reasoning}</div>
-          </details>
-        )}
-        {isUser ? text : <Markdown text={text} />}
+        {isUser
+          ? text
+          : message.parts.map((part, index) => {
+              if (isToolUIPart(part)) {
+                return <ToolCallBlock key={part.toolCallId} part={part} />;
+              }
+              if (part.type === "reasoning" && part.text) {
+                return (
+                  <details
+                    key={index}
+                    className="mb-1 text-xs text-muted-foreground"
+                  >
+                    <summary className="cursor-pointer">Thinking</summary>
+                    <div className="mt-1 whitespace-pre-wrap">{part.text}</div>
+                  </details>
+                );
+              }
+              if (part.type === "text" && part.text) {
+                return <Markdown key={index} text={part.text} />;
+              }
+              return null;
+            })}
       </div>
+      {!streaming && message.metadata?.toolLimit && (
+        <p
+          data-testid="chat-tool-limit"
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+        >
+          Stopped after {message.metadata.steps} tool steps.
+          {onContinue && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onContinue}
+            >
+              Continue
+            </Button>
+          )}
+        </p>
+      )}
       {!streaming && (
         <div className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
           {/* Hidden until the turn is hovered or holds the focus; a touch

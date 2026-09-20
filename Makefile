@@ -277,6 +277,7 @@ CHART_IMAGE_TAG     ?= $(shell git rev-parse HEAD | cut -c1-7)
 CHART_CA_SECRET     := aiops-platform-ca
 CHART_TLS_SECRET    := $(CHART_RELEASE)-wildcard-tls
 
+.PHONY: mcp-test-up mcp-test-down
 .PHONY: chart-deps chart-lint chart-images chart-install chart-uninstall chart-smoke image-tag
 
 # Helm 4 applies server-side by default and then owns the whole targetRefs
@@ -419,6 +420,8 @@ backend: $(CA_BUNDLE) ## Run the backend API with uv (needs helm on PATH and a k
 		LITELLM_MASTER_KEY=$(LITELLM_MASTER_KEY) \
 		LANGFLOW_API_URL=$(LANGFLOW_URL) \
 		LITELLM_CLUSTER_URL=http://litellm.litellm.svc:4000 \
+		AIOPS_BACKEND_CLUSTER_URL=http://aiops-backend.ai-stack.svc:8000 \
+		AIOPS_MCP_ALLOW_INSECURE_HOSTS=$(MCP_TEST_HOST) \
 		SSL_CERT_FILE=$(PWD)/$(CA_BUNDLE) \
 		REQUESTS_CA_BUNDLE=$(PWD)/$(CA_BUNDLE) \
 		uv run uvicorn app:app --reload --port 8000
@@ -444,6 +447,18 @@ e2e-smoke: ## Run the end-to-end smoke test against a running backend (ARGS="--s
 		./hack/e2e-smoke.sh $(ARGS)
 
 # --- UI end-to-end tests (Playwright, see docs/testing.md) -------------------
+
+# --- MCP test server ---------------------------------------------------------------
+
+MCP_TEST_HOST := mcp-test.mcp-test.svc.cluster.local
+
+mcp-test-up: ## Deploy the local MCP test server (echo, whoami; needs a bearer) for the cluster e2e tier
+	kubectl apply -f infra/local/mcp/test-server.yaml
+	kubectl -n mcp-test rollout status deployment/mcp-test --timeout=300s
+	@echo "MCP test server: http://$(MCP_TEST_HOST):8000/mcp (any bearer; 'make backend' allows this host)"
+
+mcp-test-down: ## Remove the local MCP test server
+	-kubectl delete -f infra/local/mcp/test-server.yaml --ignore-not-found
 
 ui-e2e: ## Run the fast UI e2e tier; starts a TEST_MODE backend on :8001 and a built frontend on :3001
 	cd frontend && E2E_START_SERVERS=1 pnpm e2e $(ARGS)

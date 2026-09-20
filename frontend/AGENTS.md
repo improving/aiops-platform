@@ -77,6 +77,22 @@ pnpm e2e:ui                               # Playwright UI mode
   redirect. The handler sets `includeUsage` and attaches `ChatMetadata` (`src/lib/chatMetadata.ts`) to a finished answer:
   the SDK's own `finish-step.performance` timings, kept by a `TransformStream` tap because `messageMetadata` sees only `start` and `finish`,
   and the token counts of the usage chunk. No timer of our own: a reasoning model's first output is not a `text-delta`.
+  `src/lib/stepMetrics.ts` makes one answer's figures from several steps (a tool loop): the first step's time to first output, all output tokens over all generating time,
+  `steps`, and `contextTokens` from the last step alone, because the usage total counts the prompt once for every step and would overstate the window meter.
+  `convertToModelMessages` runs with `ignoreIncompleteToolCalls`, since a stopped answer leaves a tool call without its result in `localStorage`.
+  `ChatTarget.tools` (`true`, `false`, or null for unknown) says whether the target answers a request with tools.
+  Tools: the body also carries `toolSources` (`[{ type: "mcp", server: "<name>" }]`), resolved in `src/lib/toolSources.ts`, one resolver for each `type`
+  (a tool typed in the playground or a built-in one is a new member of the union, not a change to the route).
+  The MCP resolver opens one `@ai-sdk/mcp` client (streamable HTTP) on the backend's `/v1alpha1/mcp` with the caller's bearer and `X-Mcp-Servers`; this process holds no credential.
+  With tools, `streamText` gets them and `stopWhen: stepCountIs(MAX_TOOL_STEPS)` (8), and the client closes on finish, error and abort.
+  A resolver failure answers 502 `Could not reach the tools: ...` before anything goes to the model, never a silent answer without tools;
+  the page maps it and offers "Send without tools", which is `regenerate({ body: { toolSources: [] } })` (`prepareSendMessagesRequest` spreads the request's own `body` last).
+  An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.
+  `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),
+  and `ChatTools.tsx` is the Tools section (`role="group"` "Tools", a switch `Use <name>` per server): blocked with the reason when `ChatTarget.tools` is false
+  (a vLLM instance links to its page for Tool calling) or the role is viewer, with the choice kept; `null` allows use with a note. `Composer` says "N tool servers on" (`data-testid="chat-tools-on"`).
+  `ToolCallBlock` shows a platform tool name `<server><id8>-<tool>` as `server · tool`. "View code" adds a "Tools (MCP)" example for the API host.
+  `e2e/fast/chat-tools.spec.ts` runs the whole loop against the backend mocks (registry, MCP endpoint, a model that calls the first tool on `call ...`).
   `src/components/chat/ChatPanel.tsx` (`/chat`, `?target=<name>` preselects) fetches the targets, lists
   those with `capability === "chat"` (one that is not `ready` is listed disabled as "Starting"), uses `useChat` with a `DefaultChatTransport` whose
   `prepareSendMessagesRequest` sends the target name as `model`, and keeps one conversation per target in
@@ -87,12 +103,17 @@ pnpm e2e:ui                               # Playwright UI mode
   (which takes a per-item `group` and `disabled` for this; an organization with a hosted provider has tens of targets, so the list is searchable).
   `ChatPanel.tsx` keeps the state, the transport, the storage and the scroll; the parts are
   `ChatMessage.tsx` (memoized; an answer is Markdown without a bubble, a user turn plain text in one; Copy, Regenerate and Edit only on the last turn of each side;
-  an answer with no text yet renders nothing, so "the message is not empty" still means text for the specs, and the `role="status"` waiting row stands in),
+  an answer with nothing to show yet renders nothing, so "the message is not empty" still means content for the specs, and the `role="status"` waiting row stands in;
+  an answer's parts render in the order they arrived, because with tools a turn is several steps: thinking, a `ToolCallBlock.tsx` per tool part
+  (`data-testid="chat-tool-call"`, `data-state` `running`, `done` or `failed`; a `<details>` that is open only while the call runs; input and result as plain, never highlighted, `CodeSnippet`s,
+  since a tool's result comes from outside the platform; an MCP result shows its text parts, not the envelope), then the text.
+  `hasContent` (exported next to `messageText`) counts a tool part as content, so the waiting row gives way to the tool line),
   `Markdown.tsx` (`react-markdown` + `remark-gfm`, no `rehype-raw`, so HTML in an answer stays text; a fenced block is a `CodeSnippet`, an unknown language is not highlighted),
   `Composer.tsx` (one box, a field that grows, the `Message` label kept `sr-only` for the page object, and the window meter from the last answer's counts against `context_length`),
   `ChatSettings.tsx` (temperature slider behind a "Model default" switch, `Max tokens`, "View code" from `src/lib/playgroundExamples.ts`, which shows the platform API with a personal token, not the instance host)
   and `EmptyConversation.tsx` (starter prompts that fill the field and do not send).
   "Clear conversation" clears at once and offers Undo in the toast. The log is `aria-live="off"`; a hidden status announces a finished answer once.
+  The side panel has the same bound and scrolls in itself (the Tools section can make it taller than the window).
   The conversation section has a bounded height (`h-[calc(100vh-18rem)]`, the 18rem being the shell around it)
   and the log inside it carries `min-h-0` next to `flex-1`: without both, the section grew with the history,
   the log never scrolled and the composer was pushed off the page.
@@ -110,6 +131,21 @@ pnpm e2e:ui                               # Playwright UI mode
   The "Monthly budget (USD)" field is a plain `type="text"` input (not `type="number"`), so it keeps the
   `textbox` accessible role the fast tier targets; the same is true of nothing else here, but keep it in mind
   when adding a numeric field a Playwright spec will locate by role.
+- MCP servers: `/mcp-servers` (`components/mcp/McpServersPage.tsx`, `src/services/mcpService.ts`, types and the `allowedTools`/`usable` helpers in `src/types/mcp.ts`)
+  lists the organization's remote MCP servers (`GET /v1alpha1/mcp/servers`), gated through `useOrg()`:
+  an admin gets "Add MCP server", a "Try one" prefill (DeepWiki, Context7) on the empty state and a row menu `Actions for <name>`
+  (Try in chat, Refresh tools, Edit tools, Change credential, Disable or Enable, Delete); a member gets the table read-only (Try in chat, View tools).
+  `AddMcpServerDialog.tsx` has two steps: "Test connection" calls `mcpService.discover` and shows a refused URL or a failed connection inline (`role="alert"`, never a toast);
+  step 2's `ToolPicker.tsx` (shared with `EditToolsDialog.tsx`) is "All tools, also new ones" (`allowed_tools: null`) or a checked selection, with a "changes data" badge only where the server says `read_only: false`.
+  `CredentialFields.tsx` (shared with `ChangeCredentialDialog.tsx`) is None, Bearer token or Custom header; a stored credential is never shown again.
+  `McpServerSheet.tsx` is the detail sheet of a row (a click on the name). `ConnectClientDialog.tsx` shows the platform's MCP endpoint for IDEs and SDKs:
+  `${platformApiUrl(origin)}/v1alpha1/mcp`, the API host and never the UI's `/api/...` path, which is a session proxy and sends a token client to the login page; the token scope to use is `mcp` ("MCP tools only" in `CreateTokenDialog.tsx`).
+  A server where each member brings their own credential (`credential_mode: "per_user"`, the "Each member brings their own" choice of the add dialog, with "Where to get a credential"):
+  `ConnectCredentialDialog.tsx` ("Connect <name>", "Test and save"; a refusal shows inline, the value is never shown again) opens from the row menu
+  ("Connect my credential", "Replace my credential", "Disconnect my credential") and from the Tools section of Chat, where such a server reads "needs your credential" with a `Connect <name>` button and turns on once connected.
+  A `Link` inside a `DropdownMenuItem asChild` needs `prefetch={false}`, as in `UserMenu.tsx`.
+  The nav label is "MCP", short on purpose: one more long label wraps the header to a second line at 1280 px, and the chat page's bounded height (`100vh-18rem`) counts on one line.
+  The page object's `openActions` waits until the previous menu has left the DOM: a click on the trigger while a menu animates out opens one that closes at once.
 - Usage: `/usage` (`UsagePage.tsx`, `src/services/usageService.ts`) reads
   `GET /v1alpha1/organizations/current/usage?days=` (a "Period" combobox, "Last 7 days"/"Last 30 days") and
   renders four totals cards (Requests, Input tokens, Output tokens, Spend USD), a "By target" table and a "By

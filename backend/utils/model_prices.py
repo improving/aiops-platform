@@ -10,6 +10,7 @@ the catalog uses for non-OpenAI providers.
 """
 
 import os
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -27,7 +28,11 @@ PRICES_URL = (
 SAMPLE_FILE = RAW_DATA_DIR / "model_prices.sample.json"
 FETCH_TIMEOUT = 10.0
 
+# After a failed fetch, do not try again for this many seconds.
+RETRY_AFTER = 300.0
+
 _cache: dict[str, dict] = {}
+_failed_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +43,8 @@ class ModelPrice:
     output_cost_per_token: float | None
     mode: str | None
     provider: str | None
+    # ``supports_function_calling``; None when the catalog does not say.
+    tools: bool | None = None
 
 
 def _is_test_mode() -> bool:
@@ -56,6 +63,9 @@ def load_prices() -> dict[str, dict]:
             data = json.load(f)
         _cache.update(data)
         return _cache
+    global _failed_at
+    if _failed_at is not None and time.monotonic() - _failed_at < RETRY_AFTER:
+        return {}
     try:
         response = httpx.get(
             PRICES_URL, timeout=FETCH_TIMEOUT, verify=public_ca_bundle()
@@ -64,6 +74,7 @@ def load_prices() -> dict[str, dict]:
         data = response.json()
     except (httpx.HTTPError, ValueError) as e:
         logger.error("Could not fetch the LiteLLM prices catalog: %s", e)
+        _failed_at = time.monotonic()
         return {}
     _cache.update(data)
     return _cache
@@ -77,6 +88,7 @@ def _to_price(entry: dict) -> ModelPrice:
         output_cost_per_token=entry.get("output_cost_per_token"),
         mode=entry.get("mode"),
         provider=entry.get("litellm_provider"),
+        tools=entry.get("supports_function_calling"),
     )
 
 

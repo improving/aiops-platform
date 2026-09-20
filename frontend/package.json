@@ -14,6 +14,7 @@
     "e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "@ai-sdk/mcp": "2.0.45",
     "@ai-sdk/openai-compatible": "3.0.44",
     "@ai-sdk/react": "4.0.96",
     "@hookform/resolvers": "^3.9.0",

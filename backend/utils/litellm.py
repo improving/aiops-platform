@@ -160,30 +160,49 @@ class LiteLLMClient:
         params: dict | None = None,
         stream: bool = False,
         api_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        content: bytes | None = None,
+        raise_for_status: bool = True,
     ) -> httpx.Response:
         """One call with the master key (or ``api_key``); the caller closes
         a streamed response and its client (``response.close()``,
-        ``response.extensions["aiops_client"].close()``)."""
+        ``response.extensions["aiops_client"].close()``).
+
+        ``headers`` and ``content`` are for the MCP relay, which passes a
+        client's body through as bytes; ``raise_for_status=False`` hands
+        back a 4xx as it is, because there a 404 or a 405 is an answer of
+        the protocol and not a failure of the proxy."""
         headers = {
-            "authorization": f"Bearer {api_key or self.settings.master_key}"
+            **(headers or {}),
+            "authorization": f"Bearer {api_key or self.settings.master_key}",
         }
         client = self._client(stream)
         try:
             if stream:
                 request = client.build_request(
-                    method, path, json=json, params=params, headers=headers
+                    method,
+                    path,
+                    json=json,
+                    params=params,
+                    headers=headers,
+                    content=content,
                 )
                 response = client.send(request, stream=True)
                 response.extensions["aiops_client"] = client
                 return response
             response = client.request(
-                method, path, json=json, params=params, headers=headers
+                method,
+                path,
+                json=json,
+                params=params,
+                headers=headers,
+                content=content,
             )
         except httpx.HTTPError as e:
             client.close()
             raise LiteLLMError(f"LiteLLM unreachable: {e}") from e
         client.close()
-        if response.status_code >= 400:
+        if raise_for_status and response.status_code >= 400:
             raise LiteLLMError(
                 f"LiteLLM {method} {path} answered "
                 f"{response.status_code}: {response.text[:300]}"
@@ -202,6 +221,48 @@ class LiteLLMClient:
 
     def delete_model(self, model_id: str) -> None:
         self.request("POST", "/model/delete", json={"id": model_id})
+
+    # --- MCP servers (measured against v1.99.1; the routes are not in
+    # the proxy's OpenAPI document) -------------------------------------
+
+    def register_mcp_server(self, server: dict) -> str:
+        """``POST /v1/mcp/server``; returns the proxy's ``server_id``."""
+        response = self.request("POST", "/v1/mcp/server", json=server)
+        return response.json()["server_id"]
+
+    def update_mcp_server(self, server_id: str, server: dict) -> None:
+        self.request(
+            "PUT", "/v1/mcp/server", json={**server, "server_id": server_id}
+        )
+
+    def delete_mcp_server(self, server_id: str) -> None:
+        self.request("DELETE", f"/v1/mcp/server/{server_id}")
+
+    def set_team_mcp_servers(
+        self, team_id: str, server_ids: list[str]
+    ) -> None:
+        """Replace the list of MCP servers the team's keys may use."""
+        self.request(
+            "POST",
+            "/team/update",
+            json={
+                "team_id": team_id,
+                "object_permission": {"mcp_servers": server_ids},
+            },
+        )
+
+    def list_mcp_tools(self, server: dict) -> list[dict]:
+        """The tools of a server that is not registered (yet): the proxy
+        connects once and forgets it. Raises ``LiteLLMError`` with the
+        proxy's words when the server cannot be reached."""
+        response = self.request(
+            "POST", "/mcp-rest/test/tools/list", json=server
+        )
+        body = response.json()
+        if body.get("error") or "tools" not in body:
+            detail = body.get("message") or body.get("error") or body
+            raise LiteLLMError(f"Could not list the tools: {detail}")
+        return body["tools"]
 
     def create_team(
         self, alias: str, metadata: dict, max_budget: float | None = None

@@ -141,9 +141,11 @@ spec:
             # Langflow refuses requests to private addresses (SSRF
             # protection, on by default). Flows reach models through
             # LiteLLM only (never a deployed model's Service directly),
-            # so only the LiteLLM Service is allowed; a hostname works.
+            # and tools through the backend's MCP endpoint only
+            # (/v1alpha1/mcp), so those two Services are allowed; a
+            # hostname works.
             - name: LANGFLOW_SSRF_ALLOWED_HOSTS
-              value: litellm.litellm.svc
+              value: litellm.litellm.svc,aiops-backend.ai-stack.svc
             - name: LANGFLOW_HOST
               value: "0.0.0.0"
             - name: LANGFLOW_PORT

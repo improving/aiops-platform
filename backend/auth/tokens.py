@@ -11,6 +11,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.api_token import ApiToken
@@ -20,7 +21,12 @@ PREFIX_LENGTH = 8
 SECRET_LENGTH = 32
 SCOPE_READ = "read"
 SCOPE_WRITE = "write"
-SCOPES = (SCOPE_READ, SCOPE_WRITE)
+# Valid on the MCP endpoint only (auth/current_user.py), with the
+# member's own role there: what an IDE or a Langflow flow holds, so that
+# a leaked tool token cannot create or delete platform resources.
+SCOPE_MCP = "mcp"
+MCP_PATH = "/v1alpha1/mcp"
+SCOPES = (SCOPE_READ, SCOPE_WRITE, SCOPE_MCP)
 DEFAULT_EXPIRES_IN_DAYS = 90
 MAX_EXPIRES_IN_DAYS = 365
 # How long a last_used_at value is kept before it is written again.
@@ -98,3 +104,104 @@ def authenticate_token(db: Session, value: str) -> ApiToken:
     ):
         token.last_used_at = now
     return token
+
+
+class TokenMintError(Exception):
+    """Two generated prefixes in a row were taken."""
+
+
+def mint_token(
+    db,
+    *,
+    user_id,
+    org_id,
+    name: str,
+    scope: str,
+    expires_in_days: int,
+) -> tuple[ApiToken, str]:
+    """A committed token row and the full token, shown this once.
+    ``prefix`` is short and drawn from a small alphabet, so a collision
+    with another token is rare but possible: one retry, then give up."""
+    for _ in range(2):
+        prefix, secret, full = generate_token()
+        now = datetime.now()
+        row = ApiToken(
+            user_id=user_id,
+            org_id=org_id,
+            name=name,
+            prefix=prefix,
+            token_hash=hash_secret(secret),
+            scope=scope,
+            created_at=now,
+            expires_at=now + timedelta(days=expires_in_days),
+        )
+        db.add(row)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            continue
+        db.refresh(row)
+        return row, full
+    raise TokenMintError("Could not mint a unique token; try again")
+
+
+# A token the platform keeps for the user in another system (Langflow's
+# MCP variable) is renewed when it has less than this left.
+MANAGED_RENEW_BEFORE = timedelta(days=30)
+
+
+def ensure_managed_token(
+    db, *, user_id, org_id, name: str, scope: str, holder_has_it: bool
+) -> str | None:
+    """The token named ``name`` that the platform manages for this user
+    and organization: ``None`` when the holder still has a live one,
+    else a new token (the old rows deleted, not revoked: this runs on
+    every page load of the holder, and a list of revoked rows would
+    grow without end). A stored token cannot be read back, which is why
+    the caller says whether the holder has it."""
+    now = datetime.now()
+    rows = (
+        db.query(ApiToken)
+        .filter(
+            ApiToken.user_id == user_id,
+            ApiToken.org_id == org_id,
+            ApiToken.name == name,
+            ApiToken.scope == scope,
+        )
+        .all()
+    )
+    live = [
+        r
+        for r in rows
+        if r.revoked_at is None and r.expires_at - now > MANAGED_RENEW_BEFORE
+    ]
+    # The holder keeps ONE token for the user, whatever the organization
+    # (one Langflow variable). What it holds is the newest one minted
+    # under this name: when that was for another organization, the
+    # holder does not have this organization's token, whatever it says.
+    newest = (
+        db.query(ApiToken)
+        .filter(
+            ApiToken.user_id == user_id,
+            ApiToken.name == name,
+            ApiToken.scope == scope,
+        )
+        .order_by(ApiToken.created_at.desc())
+        .first()
+    )
+    held_here = newest is not None and newest.org_id == org_id
+    if holder_has_it and held_here and live:
+        return None
+    for row in rows:
+        db.delete(row)
+    db.flush()
+    _, full = mint_token(
+        db,
+        user_id=user_id,
+        org_id=org_id,
+        name=name,
+        scope=scope,
+        expires_in_days=MAX_EXPIRES_IN_DAYS,
+    )
+    return full

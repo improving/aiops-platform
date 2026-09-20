@@ -2,11 +2,10 @@
 organization (spec 5.4). A token cannot manage tokens."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth.current_user import (
@@ -20,8 +19,8 @@ from auth.tokens import (
     DEFAULT_EXPIRES_IN_DAYS,
     MAX_EXPIRES_IN_DAYS,
     SCOPES,
-    generate_token,
-    hash_secret,
+    TokenMintError,
+    mint_token,
 )
 from db.database import get_db
 from models.api_token import ApiToken
@@ -92,23 +91,6 @@ def list_tokens(
     return query.order_by(ApiToken.created_at.desc()).all()
 
 
-def _new_token_row(user: CurrentUser, body: TokenCreateRequest):
-    """A fresh, unsaved token row and the full token it hashes."""
-    prefix, secret, full = generate_token()
-    now = datetime.now()
-    row = ApiToken(
-        user_id=user.id,
-        org_id=user.org_id,
-        name=body.name,
-        prefix=prefix,
-        token_hash=hash_secret(secret),
-        scope=body.scope,
-        created_at=now,
-        expires_at=now + timedelta(days=body.expires_in_days),
-    )
-    return row, full
-
-
 @router.post(
     "/v1alpha1/tokens", response_model=TokenCreatedSchema, status_code=201
 )
@@ -117,27 +99,17 @@ def create_token(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(require_session_identity),
 ):
-    # ``prefix`` is drawn from a small alphabet at a short, fixed length,
-    # so a collision with another organization's token is rare but not
-    # impossible (spec: unique across every organization); one retry with
-    # a freshly generated prefix, then give up.
-    row, full = _new_token_row(user, body)
-    db.add(row)
     try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        row, full = _new_token_row(user, body)
-        db.add(row)
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail="Could not mint a unique token; try again",
-            )
-    db.refresh(row)
+        row, full = mint_token(
+            db,
+            user_id=user.id,
+            org_id=user.org_id,
+            name=body.name,
+            scope=body.scope,
+            expires_in_days=body.expires_in_days,
+        )
+    except TokenMintError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
     return TokenCreatedSchema(
         id=row.id,
         name=row.name,

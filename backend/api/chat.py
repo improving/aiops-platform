@@ -45,6 +45,7 @@ from utils.litellm import (
     get_client,
     instance_model_name,
 )
+from utils.providers import enrich
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -208,6 +209,30 @@ def instance_context_length(row: DBInferenceInstance) -> int | None:
     return _int_or_none(args.get("max_model_len"))
 
 
+TOOL_CALLING_FLAG = "--enable-auto-tool-choice"
+
+
+def instance_tool_calling(row: DBInferenceInstance) -> bool | None:
+    """Whether the instance answers a request that carries ``tools``.
+
+    vLLM refuses one (400) unless it was started with the tool-calling
+    flag, which is an argument of the instance's own. For every other
+    engine the platform cannot tell -- with Ollama it depends on the
+    model -- so ``None`` means unknown and the chat page lets the user
+    try."""
+    if row.engine.name != "vLLM":
+        return None
+    args = (row.config.args if row.config else None) or {}
+    return TOOL_CALLING_FLAG in args
+
+
+def hosted_tool_calling(kind: str, model: str) -> bool | None:
+    """What the price catalog says about function calling for a hosted
+    model; ``None`` when it has no entry or no such field."""
+    price = enrich(kind, model)
+    return price.tools if price else None
+
+
 def list_instance_targets(
     db: Session, user: CurrentUser, *, probe: bool = True
 ) -> list[dict]:
@@ -247,6 +272,7 @@ def list_instance_targets(
                 "ready": bool(ready),
                 "via": "litellm" if registered else "direct",
                 "context_length": instance_context_length(row),
+                "tools": instance_tool_calling(row),
             }
         )
     return targets
@@ -277,6 +303,9 @@ def list_hosted_targets(db: Session, user: CurrentUser) -> list[dict]:
                     "ready": True,
                     "via": "litellm",
                     "context_length": model.context_length,
+                    "tools": hosted_tool_calling(provider.kind, model.model)
+                    if model.capability == "chat"
+                    else None,
                 }
             )
     return targets
@@ -329,14 +358,7 @@ def _last_user_text(body: dict) -> str:
     for message in reversed(body.get("messages") or []):
         if message.get("role") != "user":
             continue
-        content = message.get("content")
-        if isinstance(content, list):
-            return "".join(
-                part.get("text", "")
-                for part in content
-                if isinstance(part, dict)
-            )
-        return str(content or "")
+        return _message_text(message)
     return ""
 
 
@@ -373,9 +395,74 @@ def _mock_usage_chunk(body: dict, reply: str) -> bytes:
     return f"data: {json.dumps(payload)}\n\n".encode()
 
 
+MOCK_TOOL_PREFIX = "call "
+
+
+def _message_text(message: dict) -> str:
+    content = message.get("content")
+    if isinstance(content, list):
+        return "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+    return str(content or "")
+
+
+def _mock_tool_call(body: dict) -> dict | None:
+    """The mock's one rule for tools, so the fast tier can run a real
+    tool loop: when the request offers tools and the last message is a
+    user turn that starts with ``call ``, call the first tool with the
+    rest of the text as its first argument."""
+    tools = body.get("tools") or []
+    messages = body.get("messages") or []
+    if not tools or not messages or messages[-1].get("role") != "user":
+        return None
+    text = _message_text(messages[-1])
+    if not text.startswith(MOCK_TOOL_PREFIX):
+        return None
+    function = tools[0].get("function") or {}
+    properties = (function.get("parameters") or {}).get("properties") or {}
+    first = next(iter(properties), None)
+    arguments = {first: text[len(MOCK_TOOL_PREFIX) :]} if first else {}
+    return {
+        "index": 0,
+        "id": "call_mock_1",
+        "type": "function",
+        "function": {
+            "name": function.get("name", ""),
+            "arguments": json.dumps(arguments),
+        },
+    }
+
+
+def _tool_text(message: dict) -> str:
+    """The text of a tool message. A client sends an MCP result as the
+    JSON of its content parts (the AI SDK does), so read the text out
+    of that; anything else is the content as it is."""
+    text = _message_text(message)
+    try:
+        parts = json.loads(text)
+    except ValueError:
+        return text
+    if isinstance(parts, list) and all(isinstance(p, dict) for p in parts):
+        return "".join(str(p.get("text", "")) for p in parts)
+    return text
+
+
+def _mock_reply(body: dict) -> str:
+    messages = body.get("messages") or []
+    if messages and messages[-1].get("role") == "tool":
+        return f"Tool said: {_tool_text(messages[-1])}"
+    return f"You said: {_last_user_text(body)}"
+
+
 def _mock_chat(body: dict):
-    reply = f"You said: {_last_user_text(body)}"
+    tool_call = _mock_tool_call(body)
+    reply = "" if tool_call else _mock_reply(body)
+    finish = "tool_calls" if tool_call else "stop"
     if not body.get("stream"):
+        message: dict = {"role": "assistant", "content": reply or None}
+        if tool_call:
+            message["tool_calls"] = [tool_call]
         return JSONResponse(
             {
                 "id": "chatcmpl-mock",
@@ -384,8 +471,8 @@ def _mock_chat(body: dict):
                 "choices": [
                     {
                         "index": 0,
-                        "message": {"role": "assistant", "content": reply},
-                        "finish_reason": "stop",
+                        "message": message,
+                        "finish_reason": finish,
                     }
                 ],
             }
@@ -393,9 +480,12 @@ def _mock_chat(body: dict):
 
     async def stream() -> AsyncIterator[bytes]:
         yield _mock_chunk({"role": "assistant", "content": ""})
-        for word in reply.split(" "):
-            yield _mock_chunk({"content": word + " "})
-        yield _mock_chunk({}, "stop")
+        if tool_call:
+            yield _mock_chunk({"tool_calls": [tool_call]})
+        else:
+            for word in reply.split(" "):
+                yield _mock_chunk({"content": word + " "})
+        yield _mock_chunk({}, finish)
         if (body.get("stream_options") or {}).get("include_usage"):
             yield _mock_usage_chunk(body, reply)
         yield b"data: [DONE]\n\n"
@@ -619,6 +709,8 @@ async def chat_targets(
             "ready": True,
             "via": "mock",
             "context_length": MOCK_CONTEXT_LENGTH,
+            # The mock runs a tool loop (``_mock_tool_call``).
+            "tools": True,
         }
         hosted = await asyncio.to_thread(list_hosted_targets, db, user)
         return [mock_target] + hosted

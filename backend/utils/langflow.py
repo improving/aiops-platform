@@ -29,6 +29,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from auth.roles import WRITER_ROLES
+from auth.tokens import SCOPE_MCP, ensure_managed_token
 from models.organization import Organization
 from schemas.langflow import LangflowModelSchema, LangflowProvisionSchema
 from utils.litellm import ensure_user_key
@@ -42,6 +44,13 @@ API_KEY_VAR = "OPENAI_COMPATIBLE_API_KEY"
 # extension.json component_metadata.mapping_field).
 BASE_URL_FIELDS = ["openai_compatible_base_url"]
 API_KEY_FIELDS = ["api_key"]
+# The platform's MCP endpoint, for Langflow's MCP Tools component: the
+# address a pod can reach, and a token of scope ``mcp`` (valid there and
+# nowhere else) that the platform keeps under this name for the member.
+MCP_URL_VAR = "AIOPS_MCP_URL"
+MCP_TOKEN_VAR = "AIOPS_MCP_TOKEN"
+MCP_TOKEN_NAME = "langflow"
+MCP_PATH = "/v1alpha1/mcp"
 TIMEOUT_SECONDS = 30.0
 
 
@@ -49,6 +58,8 @@ TIMEOUT_SECONDS = 30.0
 class LangflowSettings:
     api_url: str
     litellm_cluster_url: str
+    # Empty: the MCP variables are not provisioned.
+    backend_cluster_url: str = ""
 
 
 def langflow_settings() -> LangflowSettings | None:
@@ -60,8 +71,11 @@ def langflow_settings() -> LangflowSettings | None:
         return None
     cluster = os.environ.get("LITELLM_CLUSTER_URL", "").strip()
     cluster = cluster or os.environ.get("LITELLM_URL", "").strip()
+    backend = os.environ.get("AIOPS_BACKEND_CLUSTER_URL", "").strip()
     return LangflowSettings(
-        api_url=api_url, litellm_cluster_url=cluster.rstrip("/")
+        api_url=api_url,
+        litellm_cluster_url=cluster.rstrip("/"),
+        backend_cluster_url=backend.rstrip("/"),
     )
 
 
@@ -165,6 +179,35 @@ def _upsert(
         client.update_variable(row["id"], name, value, type_, default_fields)
 
 
+def _provision_mcp(db, user, client, existing, settings) -> None:
+    """The member's way to the organization's tools from a flow: the
+    platform's one MCP endpoint, so the viewer rule, the server
+    selection and a member's own credentials hold for a flow as for the
+    chat page. Not LiteLLM's ``/mcp`` with the model key, which would go
+    around all three. A viewer gets nothing: the endpoint refuses them.
+    Skipped without ``AIOPS_BACKEND_CLUSTER_URL``."""
+    if not settings.backend_cluster_url or user.role not in WRITER_ROLES:
+        return
+    token = ensure_managed_token(
+        db,
+        user_id=user.id,
+        org_id=user.org_id,
+        name=MCP_TOKEN_NAME,
+        scope=SCOPE_MCP,
+        holder_has_it=MCP_TOKEN_VAR in existing,
+    )
+    _upsert(
+        client,
+        existing,
+        MCP_URL_VAR,
+        f"{settings.backend_cluster_url}{MCP_PATH}",
+        "Generic",
+        [],
+    )
+    if token is not None:
+        _upsert(client, existing, MCP_TOKEN_VAR, token, "Credential", [])
+
+
 def provision_openai_compatible(
     db,
     user,
@@ -209,6 +252,7 @@ def provision_openai_compatible(
         _upsert(
             client, existing, API_KEY_VAR, key, "Credential", API_KEY_FIELDS
         )
+        _provision_mcp(db, user, client, existing, settings)
     return LangflowProvisionSchema(
         langflow_user=username,
         organization=org.name,

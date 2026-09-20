@@ -14,6 +14,9 @@ export class ChatPage extends AppShell {
   readonly emptyState: Locator;
   readonly waiting: Locator;
   readonly speed: Locator;
+  readonly toolCalls: Locator;
+  readonly tools: Locator;
+  readonly toolsOn: Locator;
   readonly contextMeter: Locator;
   readonly starterPrompts: Locator;
 
@@ -35,6 +38,9 @@ export class ChatPage extends AppShell {
     this.emptyState = page.getByText("No running inference instance");
     this.waiting = page.getByRole("status", { name: "Waiting for the model" });
     this.speed = this.conversation.getByTestId("chat-speed");
+    this.toolCalls = this.conversation.getByTestId("chat-tool-call");
+    this.tools = page.getByRole("group", { name: "Tools" });
+    this.toolsOn = page.getByTestId("chat-tools-on");
     this.contextMeter = page.getByTestId("chat-context");
     this.starterPrompts = page
       .getByRole("group", { name: "Starter prompts" })
