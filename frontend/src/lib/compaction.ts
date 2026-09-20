@@ -206,6 +206,21 @@ export function transcript(
   return cut(lines.join("\n"), maxChars);
 }
 
+/**
+ * The most the model may write for a summary. The summary itself is
+ * about 400 tokens, but a reasoning model thinks first, inside the same
+ * limit: measured on the lab, Qwen3.8 27B used 700 tokens for thinking
+ * about a 12,000-character transcript and wrote no summary at all; with
+ * room it thought for 2,300 tokens and then wrote a good one (2,651 in
+ * all, 50 s).
+ * A quarter of the window, so that with the transcript (half of it) and
+ * the instruction the request still fits.
+ */
+export function summaryTokens(window: number | null | undefined): number {
+  if (!window || window <= 0) return 2000;
+  return Math.min(4000, Math.max(700, Math.floor(window / 4)));
+}
+
 /** Room for the transcript: half of the window, at 3 characters a token
     (the other half is the instructions, the summary and a margin). */
 export function transcriptBudget(window: number | null | undefined): number {

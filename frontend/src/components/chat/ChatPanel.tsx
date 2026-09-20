@@ -383,6 +383,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
         ]),
         body: JSON.stringify({
           model: target,
+          window: selected?.context_length ?? null,
           transcript: transcript(
             current,
             transcriptBudget(selected?.context_length)
