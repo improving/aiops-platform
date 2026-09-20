@@ -30,6 +30,71 @@ export const MAX_TOOL_STEPS = 8;
 export const DEFAULT_TOOL_INSTRUCTIONS =
   "You can call tools. When a tool helps, call it, and write nothing before the call: no plan, no JSON, no description of the call. After the results, answer the user directly, in the language the user wrote in.";
 
+/**
+ * How much text of ONE tool result goes back to the model (and into the
+ * conversation the next request carries). A documentation tool can
+ * answer with tens of thousands of characters; measured on the lab, one
+ * turn with two such results took about 7,000 of a 16,384-token window.
+ * About four characters make a token, so this is near 4,000 tokens. The
+ * cut is said in the result itself, so the model and the reader know.
+ */
+export const MAX_TOOL_RESULT_CHARS = 16_000;
+
+function truncationNote(dropped: number): string {
+  return `\n\n[The platform cut this tool result: ${dropped.toLocaleString("en-US")} more characters were left out to keep the model's context window free. Ask for a narrower result if something is missing.]`;
+}
+
+/** The text parts of an MCP result, cut to the budget in order; other
+    parts (images, resources) and other shapes pass as they are. */
+export function capToolResult(result: unknown): unknown {
+  if (!result || typeof result !== "object") return result;
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return result;
+  let left = MAX_TOOL_RESULT_CHARS;
+  let dropped = 0;
+  const capped = content.map((part) => {
+    if (
+      !part ||
+      typeof part !== "object" ||
+      (part as { type?: unknown }).type !== "text" ||
+      typeof (part as { text?: unknown }).text !== "string"
+    ) {
+      return part;
+    }
+    const text = (part as { text: string }).text;
+    if (text.length <= left) {
+      left -= text.length;
+      return part;
+    }
+    dropped += text.length - left;
+    const kept = text.slice(0, left);
+    left = 0;
+    return { ...part, text: kept };
+  });
+  if (dropped === 0) return result;
+  return {
+    ...result,
+    content: [...capped, { type: "text", text: truncationNote(dropped) }],
+  };
+}
+
+function withCappedResults(tools: ToolSet): ToolSet {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const execute = tool.execute;
+      if (!execute) return [name, tool];
+      return [
+        name,
+        {
+          ...tool,
+          execute: async (...args: Parameters<typeof execute>) =>
+            capToolResult(await execute(...args)),
+        },
+      ];
+    })
+  ) as ToolSet;
+}
+
 export type ResolvedTools = {
   tools: ToolSet;
   /** Release what the resolvers opened; safe to call more than once. */
@@ -76,7 +141,7 @@ async function resolveMcp(
     const opened = client;
     let closed = false;
     return {
-      tools: tools as ToolSet,
+      tools: withCappedResults(tools as ToolSet),
       close: async () => {
         if (closed) return;
         closed = true;

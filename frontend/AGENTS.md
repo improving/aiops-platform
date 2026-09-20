@@ -89,6 +89,7 @@ pnpm e2e:ui                               # Playwright UI mode
   a user's own system prompt is sent as it is. The chat mock answers `system?` with the system message it got, which is how `chat-tools.spec.ts` checks this.
   A resolver failure answers 502 `Could not reach the tools: ...` before anything goes to the model, never a silent answer without tools;
   the page maps it and offers "Send without tools", which is `regenerate({ body: { toolSources: [] } })` (`prepareSendMessagesRequest` spreads the request's own `body` last).
+  One tool result gives the model at most `MAX_TOOL_RESULT_CHARS` (16,000, about 4,000 tokens) of text: `capToolResult` wraps each tool's `execute`, cuts the text parts in order and appends a note that says how much was left out, so the model and the reader both know (a documentation tool can fill a 16k window with one answer).
   An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.
   `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),
   and `ChatTools.tsx` is the Tools section (`role="group"` "Tools", a switch `Use <name>` per server): blocked with the reason when `ChatTarget.tools` is false

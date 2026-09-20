@@ -93,6 +93,25 @@ test.describe("chat with tools", () => {
     await use.click();
   });
 
+  test("a very long tool result is cut before it goes back to the model, and says so", async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    await use.click();
+    // The mock tool echoes its argument: 20,000 characters in, 16,000
+    // back to the model, and a note about the 4,000 that were left out.
+    await chat.send(`call ${"x".repeat(20_000)}`);
+    await expect(chat.toolCalls.first()).toHaveAttribute("data-state", "done");
+    const answer = chat.assistantMessages.last();
+    await expect(answer).toContainText("Tool said: xxxx");
+    await expect(answer).toContainText(
+      "The platform cut this tool result: 4,000 more characters"
+    );
+    await use.click();
+  });
+
   test("a Try in chat link turns the server on", async ({ page }) => {
     const chat = new ChatPage(page);
     await page.goto(`/chat?target=inst-mock&tools=${serverName}`);
