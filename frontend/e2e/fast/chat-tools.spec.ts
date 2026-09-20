@@ -65,6 +65,47 @@ test.describe("chat with tools", () => {
     await expect(chat.toolsOn).toBeHidden();
   });
 
+  test("a compaction keeps a tool call with its result, in the summary's transcript", async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    await chat.open("inst-mock");
+    await chat.tools.getByRole("switch", { name: `Use ${serverName}` }).click();
+    await chat.send("call hi there");
+    await expect(chat.toolCalls.first()).toHaveAttribute("data-state", "done");
+    await expect(chat.assistantMessages.last()).toContainText("Tool said:");
+    for (const [text, answers] of [
+      ["second", 2],
+      ["third", 3],
+    ] as const) {
+      await chat.send(text);
+      await expect(chat.assistantMessages).toHaveCount(answers);
+      await expect(chat.assistantMessages.last()).toContainText(text);
+    }
+
+    const asked = page.waitForRequest((r) =>
+      r.url().endsWith("/api/chat/compact")
+    );
+    await page.getByRole("button", { name: "Compact", exact: true }).click();
+    const { transcript } = (await asked).postDataJSON() as {
+      transcript: string;
+    };
+    // The turn with the tool is what gets summarized: the call and its
+    // result are one line, never parted by the cut.
+    expect(transcript).toContain("User: call hi there");
+    expect(transcript).toMatch(/\[tool \S*echo .*-> .*hi there/);
+    expect(transcript).toContain("Assistant: Tool said: hi there");
+    expect(transcript).not.toContain("second");
+    const marker = page.getByTestId("chat-compaction");
+    await expect(marker).toContainText("2 messages");
+    // The tool call stays on the page, in the collapsed part.
+    await page.getByTestId("chat-compacted").locator("summary").first().click();
+    await expect(
+      page.getByTestId("chat-compacted").getByTestId("chat-tool-call")
+    ).toHaveCount(1);
+    await chat.clearButton.click();
+  });
+
   test("with tools on and no system prompt the model gets a default instruction", async ({
     page,
   }) => {

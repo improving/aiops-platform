@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { AppShell } from "./app-shell";
 
 export class McpServersPage extends AppShell {
@@ -48,21 +48,32 @@ export class McpServersPage extends AppShell {
   }
 
   async openDeployDialog() {
+    // The page polls while a deployed server of ANY test starts, so the
+    // list can become empty, or get its first row, between a look and a
+    // click: the empty state has a button of its own, the list has the
+    // menu. Whichever is there at the moment of the click is the one.
     const emptyDeploy = this.page.getByRole("button", {
       name: "Deploy from the catalog",
     });
-    if (await emptyDeploy.isVisible().catch(() => false)) {
-      await emptyDeploy.click();
-    } else {
-      await this.headerAddButton.click();
-      await this.page
-        .getByRole("menuitem", { name: "Deploy from the catalog" })
-        .click();
-    }
     const dialog = this.page.getByRole("dialog", {
       name: "Deploy an MCP server",
     });
-    await dialog.waitFor();
+    const item = this.page.getByRole("menuitem", {
+      name: "Deploy from the catalog",
+    });
+    await expect(async () => {
+      if (await dialog.isVisible()) return;
+      if (await item.isVisible()) {
+        await item.click({ timeout: 2000 });
+      } else {
+        await emptyDeploy
+          .or(this.headerAddButton)
+          .first()
+          .click({ timeout: 2000 });
+        if (!(await dialog.isVisible())) await item.click({ timeout: 2000 });
+      }
+      await expect(dialog).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
     return dialog;
   }
 

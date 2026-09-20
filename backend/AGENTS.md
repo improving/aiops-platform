@@ -151,6 +151,7 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   `--enable-auto-tool-choice` from the instance's own arguments (vLLM answers 400 without it) and is `null` for every other engine,
   because with Ollama it depends on the model; `hosted_tool_calling` reads `supports_function_calling` from the price catalog (`ModelPrice.tools`), at list time,
   so `utils/model_prices.py` does not repeat a failed fetch for `RETRY_AFTER` seconds. `null` means unknown, and the chat page lets the user try.
+  For the playground's compaction the mock answers a request whose system message starts with `MOCK_COMPACTION_PREFIX` with "Mock summary of <n> user turns.".
   The chat mock runs a tool loop for the fast tier: with `tools` in the request and a last user turn that starts with `call `,
   it calls the first tool with the rest of the text as the first argument; after a `tool` message it answers `Tool said: <content>`.
   When the target is registered in LiteLLM (`litellm_model_id` set) every route forwards to the proxy with the

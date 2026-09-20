@@ -594,6 +594,30 @@ def test_mock_reads_the_system_message_back(client, monkeypatch):
     )
 
 
+def test_mock_writes_a_canned_summary_for_a_compaction(client, monkeypatch):
+    """The playground's compaction (frontend/src/lib/compaction.ts)."""
+    monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
+    body = {
+        "model": "inst-mock",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You compress a conversation between a user and "
+                "an assistant, so that the assistant can continue it.",
+            },
+            {
+                "role": "user",
+                "content": "The conversation so far:\n\nUser: one\n"
+                "Assistant: You said: one\nUser: two\n\nWrite the summary.",
+            },
+        ],
+    }
+    reply = client.post("/v1alpha1/chat/completions", json=body).json()
+    assert reply["choices"][0]["message"]["content"] == (
+        "Mock summary of 2 user turns."
+    )
+
+
 def test_mock_tool_call_without_a_stream(client, monkeypatch):
     monkeypatch.setenv("AIOPS_CHAT_MOCK", "true")
     body = {

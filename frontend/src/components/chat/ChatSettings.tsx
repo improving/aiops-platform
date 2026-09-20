@@ -26,6 +26,9 @@ export function ChatSettings({
   examples,
   onClear,
   canClear,
+  autoCompact,
+  onAutoCompactChange,
+  windowKnown,
 }: {
   /** The Tools section (`ChatTools`), between the numbers and the actions. */
   tools?: React.ReactNode;
@@ -41,6 +44,12 @@ export function ChatSettings({
   examples: CodeExample[];
   onClear: () => void;
   canClear: boolean;
+  /** Compact before a send when the window is nearly full. */
+  autoCompact: boolean;
+  onAutoCompactChange: (on: boolean) => void;
+  /** The target says how large its window is; without that, automatic
+      compaction cannot know when to act. */
+  windowKnown: boolean;
 }) {
   const ownTemperature = temperature !== "";
   return (
@@ -109,6 +118,24 @@ export function ChatSettings({
         <p className="text-xs text-muted-foreground">
           The longest answer, in tokens. An answer that reaches it stops in the
           middle.
+        </p>
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="chat-auto-compact"
+            checked={autoCompact}
+            onCheckedChange={onAutoCompactChange}
+          />
+          <Label htmlFor="chat-auto-compact">Compact automatically</Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When the conversation fills three quarters of the model&apos;s window,
+          the older turns are summarized before your next message goes. They
+          stay on the page, and you can undo it.
+          {autoCompact &&
+            !windowKnown &&
+            " This target does not say how large its window is, so use Compact under the message field."}
         </p>
       </div>
       {tools}

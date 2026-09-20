@@ -397,6 +397,7 @@ def _mock_usage_chunk(body: dict, reply: str) -> bytes:
 
 MOCK_TOOL_PREFIX = "call "
 MOCK_SYSTEM_QUESTION = "system?"
+MOCK_COMPACTION_PREFIX = "You compress a conversation"
 
 
 def _message_text(message: dict) -> str:
@@ -453,6 +454,16 @@ def _mock_reply(body: dict) -> str:
     messages = body.get("messages") or []
     if messages and messages[-1].get("role") == "tool":
         return f"Tool said: {_tool_text(messages[-1])}"
+    # The playground's compaction asks for a summary of a transcript
+    # (frontend/src/lib/compaction.ts): a canned one that says how much
+    # it stood for, so the fast tier can follow it into the next request.
+    system = next((m for m in messages if m.get("role") == "system"), None)
+    if system and _message_text(system).startswith(MOCK_COMPACTION_PREFIX):
+        transcript = _last_user_text(body)
+        turns = sum(
+            1 for line in transcript.splitlines() if line.startswith("User: ")
+        )
+        return f"Mock summary of {turns} user turns."
     # "system?" reads the system message back, so the fast tier can see
     # what instructions the UI's route handler sent.
     if _last_user_text(body).strip() == MOCK_SYSTEM_QUESTION:

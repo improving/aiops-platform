@@ -29,6 +29,8 @@ export function Composer({
   contextUsed,
   contextLength,
   toolServers = 0,
+  onCompact,
+  compacting = false,
 }: {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
@@ -43,6 +45,10 @@ export function Composer({
   /** How many tool servers the next message may use; said next to the
       field, because the switches are in the side panel. */
   toolServers?: number;
+  /** Summarize the older turns now; absent when there is nothing to
+      compact. */
+  onCompact?: () => void;
+  compacting?: boolean;
 }) {
   useEffect(() => {
     const field = inputRef.current;
@@ -118,17 +124,35 @@ export function Composer({
             </span>
           )}
         </span>
-        {!!contextUsed && !!contextLength && (
-          <span
-            data-testid="chat-context"
-            className={
-              nearlyFull ? "font-medium text-amber-600 dark:text-amber-400" : ""
-            }
-          >
-            {formatTokens(contextUsed)} of {formatTokens(contextLength)} tokens
-            {nearlyFull && ": nearly full, clear the conversation soon"}
-          </span>
-        )}
+        <span className="flex items-center gap-2">
+          {!!contextUsed && !!contextLength && (
+            <span
+              data-testid="chat-context"
+              className={
+                nearlyFull
+                  ? "font-medium text-amber-600 dark:text-amber-400"
+                  : ""
+              }
+            >
+              {formatTokens(contextUsed)} of {formatTokens(contextLength)}{" "}
+              tokens
+              {nearlyFull &&
+                (onCompact
+                  ? ": nearly full, compact the conversation"
+                  : ": nearly full, clear the conversation soon")}
+            </span>
+          )}
+          {(onCompact || compacting) && (
+            <button
+              type="button"
+              className="font-medium underline disabled:no-underline disabled:opacity-60"
+              disabled={compacting || busy}
+              onClick={onCompact}
+            >
+              {compacting ? "Compacting…" : "Compact"}
+            </button>
+          )}
+        </span>
       </div>
     </form>
   );

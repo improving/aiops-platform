@@ -138,6 +138,23 @@ test.describe("deploy an MCP server from the catalog", () => {
 });
 
 test.describe("the deploy catalog of a platform admin", () => {
+  // Two users, two pages and a reload: more than the default minute on a
+  // slow runner.
+  test.setTimeout(150_000);
+
+  // An attempt that stopped half-way leaves its entry in the catalog, and
+  // the retry would find "Imported" where it wants to import.
+  test.beforeEach(async ({ page }) => {
+    const listed = await page.request.get("/api/v1alpha1/mcp/catalog");
+    for (const entry of (await listed.json()) as {
+      id: string;
+      source: string;
+    }[]) {
+      if (entry.source !== "builtin")
+        await page.request.delete(`/api/v1alpha1/mcp/catalog/${entry.id}`);
+    }
+  });
+
   test("imports an image entry as a draft, reviews and publishes it", async ({
     page,
     asUser,

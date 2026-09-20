@@ -1,4 +1,3 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   APICallError,
   convertToModelMessages,
@@ -11,16 +10,9 @@ import {
   type ToolSet,
   type UIMessage,
 } from "ai";
-import { cookies } from "next/headers";
-import { auth } from "@/auth";
-import { backendUrl } from "@/lib/backend";
+import { backendHeaders, chatProvider } from "@/lib/chatBackend";
 import type { ChatMetadata } from "@/lib/chatMetadata";
-import {
-  DEV_USER_COOKIE,
-  DEV_USER_HEADER,
-  ORG_COOKIE,
-  ORG_HEADER,
-} from "@/lib/orgCookie";
+import { MAX_SUMMARY_CHARS, withSummary } from "@/lib/compaction";
 import { stepMetrics } from "@/lib/stepMetrics";
 import {
   DEFAULT_TOOL_INSTRUCTIONS,
@@ -44,19 +36,10 @@ type ChatBody = {
   toolSources?: unknown;
   /** The user wants to say yes before a tool runs. */
   approveTools?: boolean;
+  /** A compacted conversation: what the turns that are not sent said
+      (`src/lib/compaction.ts`). */
+  summary?: string;
 };
-
-function authDisabled(): boolean {
-  return process.env.AUTH_MODE === "disabled";
-}
-
-async function accessToken(): Promise<string | undefined> {
-  if (authDisabled()) return undefined;
-  const session = await auth();
-  // A session whose refresh was rejected is as good as none (src/proxy.ts).
-  if (!session || session.error) return undefined;
-  return session.accessToken;
-}
 
 /**
  * Turns the AI SDK UI message stream into the backend's OpenAI-compatible
@@ -69,29 +52,11 @@ export async function POST(req: Request) {
   if (!body.model) {
     return Response.json({ detail: "model is required" }, { status: 400 });
   }
-  const token = await accessToken();
-  if (!token && !authDisabled()) {
+  const headers = await backendHeaders();
+  if (!headers) {
     return Response.json({ detail: "Not signed in" }, { status: 401 });
   }
-
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-  // The route is excluded from the proxy matcher, so it forwards the
-  // organization (and, in disabled mode, the dev user) cookie itself.
-  const jar = await cookies();
-  const org = jar.get(ORG_COOKIE)?.value;
-  if (org) headers[ORG_HEADER] = org;
-  const devUser = authDisabled() ? jar.get(DEV_USER_COOKIE)?.value : undefined;
-  if (devUser) headers[DEV_USER_HEADER] = devUser;
-
-  const provider = createOpenAICompatible({
-    name: "aiops",
-    baseURL: `${backendUrl()}/v1alpha1`,
-    headers,
-    // `stream_options.include_usage`: the last chunk carries the token
-    // counts the speed line and the context meter show.
-    includeUsage: true,
-  });
+  const provider = chatProvider(headers);
 
   // The tools the user turned on. A failure here is an answer of its
   // own: the chat page offers to send the message without tools.
@@ -112,8 +77,16 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model: provider.chatModel(body.model),
-    instructions:
+    // The summary of a compacted conversation goes into the one system
+    // message, after the user's (or the default one for tools): several
+    // chat templates accept no second system message.
+    instructions: withSummary(
       body.system?.trim() || (hasTools ? DEFAULT_TOOL_INSTRUCTIONS : undefined),
+      // The caller's own request, like `system`; only its shape is checked.
+      typeof body.summary === "string"
+        ? body.summary.slice(0, MAX_SUMMARY_CHARS)
+        : undefined
+    ),
     // A stopped answer can leave a tool call without its result in the
     // browser's copy of the conversation; the model must not see half
     // of a call.

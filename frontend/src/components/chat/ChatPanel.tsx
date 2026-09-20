@@ -35,6 +35,20 @@ import { FunctionDialog } from "@/components/chat/FunctionDialog";
 import { useOrg } from "@/hooks/useOrg";
 import { modelService } from "@/services/modelService";
 import { loadMessages, saveMessages } from "@/lib/chatStorage";
+import {
+  applyCompaction,
+  forRequest,
+  isMarker,
+  lastMarkerIndex,
+  markerInfo,
+  markerMessage,
+  planCompaction,
+  shouldAutoCompact,
+  transcript,
+  transcriptBudget,
+  undoCompaction,
+} from "@/lib/compaction";
+import { CompactionMarker } from "@/components/chat/CompactionMarker";
 import type { ChatTarget } from "@/types/models";
 import { useToast } from "@/components/hooks/use-toast";
 import { parseApiError } from "@/lib/utils";
@@ -59,6 +73,8 @@ function describeChatError(message: string): string {
   }
   return text;
 }
+
+const COMPACT_TIMEOUT_MS = 120_000;
 
 export default function ChatPanel({ userKey }: { userKey: string }) {
   const router = useRouter();
@@ -172,7 +188,10 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
         api: "/api/chat",
         prepareSendMessagesRequest: ({ messages, body }) => ({
           body: {
-            messages,
+            // A compacted conversation: the summary of the last marker,
+            // and the turns after it. The turns above the marker stay in
+            // the browser and do not go to the model.
+            ...forRequest(messages),
             model: target,
             system,
             temperature: temperatureValue,
@@ -257,8 +276,12 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     pinned.current = true;
   }, [target]);
 
+  const [compacting, setCompacting] = useState(false);
   const busy = status === "submitted" || status === "streaming";
-  const canSend = !!selected && !busy && input.trim().length > 0;
+  // While a summary is being written nothing else may change the
+  // conversation: it is decided against the turns as they are.
+  const locked = busy || compacting;
+  const canSend = !!selected && !locked && input.trim().length > 0;
 
   const last = messages.at(-1);
   // Sent, and nothing to show yet: the request is on its way, or the
@@ -274,10 +297,185 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
     router.replace(`/chat?target=${value}`);
   };
 
-  const submit = () => {
+  // Compaction: a summary of the older turns takes their place in what
+  // the model gets (`src/lib/compaction.ts`).
+  const [autoCompact, setAutoCompact] = useState(false);
+  // localStorage is the browser's: read it after mount, never in render.
+  useEffect(() => {
+    (async () => {
+      try {
+        setAutoCompact(
+          window.localStorage.getItem(`aiops.chat.compact.${userKey}`) === "on"
+        );
+      } catch {
+        // Without storage the switch starts off.
+      }
+    })();
+  }, [userKey]);
+  const changeAutoCompact = (on: boolean) => {
+    setAutoCompact(on);
+    try {
+      window.localStorage.setItem(
+        `aiops.chat.compact.${userKey}`,
+        on ? "on" : "off"
+      );
+    } catch {
+      // The choice then holds for this page only.
+    }
+  };
+
+  const plan = useMemo(() => planCompaction(messages), [messages]);
+  // The page: the turns above the last marker (collapsed), the marker,
+  // and the live turns. An older marker is inside the collapsed part as
+  // nothing: only the last summary is in use.
+  const markerAt = lastMarkerIndex(messages);
+  const marker = markerAt >= 0 ? messages[markerAt] : undefined;
+  const hidden = messages
+    .slice(0, Math.max(markerAt, 0))
+    .filter((m) => !isMarker(m));
+  const live = messages.slice(markerAt + 1);
+  // After a compaction the newest answer still carries the count of the
+  // long conversation; the meter waits for the next answer.
+  const meterUsed =
+    marker && markerInfo(marker)?.atMessageId === lastAssistant?.id
+      ? undefined
+      : contextUsed(lastAssistant?.metadata);
+
+  // One summary call at a time, and it ends with the conversation it
+  // belongs to: a switch of target, or leaving the page, aborts it.
+  const compactAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => compactAbort.current?.abort(), [target]);
+  // After Undo of an automatic compaction: not again before a new answer.
+  const noAutoFor = useRef<string | undefined>(undefined);
+
+  /**
+   * "done", "failed" (nothing changed; a message still goes, with the
+   * whole history) or "moved": the conversation is no longer the one
+   * that was summarized, so the summary is dropped and nothing must be
+   * sent in its name.
+   *
+   * Everything this reads comes from the render of the click, and the
+   * call can take two minutes. So what it writes is decided against the
+   * conversation as it is THEN (`setMessages` with a function), and only
+   * for the same target: `setMessages` and `sendMessage` act on the chat
+   * of the moment they run, which after a switch is another target's.
+   */
+  const compact = async (
+    automatic: boolean
+  ): Promise<"done" | "failed" | "moved"> => {
+    const current = planCompaction(messages);
+    if (!current || !target || compacting) return "failed";
+    const from = target;
+    const cutId = messages[current.at].id;
+    const oldIds = current.old.map((m) => m.id);
+    const controller = new AbortController();
+    compactAbort.current = controller;
+    setCompacting(true);
+    try {
+      const response = await fetch("/api/chat/compact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // The composer waits for this; a summary that does not come in
+        // two minutes will not come, and the message must still go.
+        signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(COMPACT_TIMEOUT_MS),
+        ]),
+        body: JSON.stringify({
+          model: target,
+          transcript: transcript(
+            current,
+            transcriptBudget(selected?.context_length)
+          ),
+        }),
+      });
+      const answer = (await response.json()) as {
+        summary?: string;
+        summaryTokens?: number;
+        detail?: string;
+      };
+      if (targetRef.current !== from) return "moved";
+      if (!response.ok || !answer.summary) {
+        throw new Error(
+          answer.detail ?? `The summary failed (${response.status})`
+        );
+      }
+      const marker = markerMessage(answer.summary, {
+        covered: current.old.length,
+        tokensBefore: contextUsed(lastAssistant?.metadata),
+        summaryTokens: answer.summaryTokens,
+        atMessageId: lastAssistant?.id,
+        automatic,
+      });
+      let applied = false;
+      setMessages((now) => {
+        // Still the turns that were summarized, in front of the same
+        // turn of the user? Anything else (cleared, edited, a marker
+        // undone) and the summary stands for a conversation that is gone.
+        const at = now.findIndex((m) => m.id === cutId);
+        const start = lastMarkerIndex(now) + 1;
+        const same =
+          at >= 0 &&
+          at - start === oldIds.length &&
+          oldIds.every((id, k) => now[start + k]?.id === id);
+        if (!same) return now;
+        applied = true;
+        return applyCompaction(now, { ...current, at }, marker);
+      });
+      if (!applied) {
+        toast({
+          title: "The conversation changed",
+          description: "The summary was for the earlier turns; it was dropped.",
+        });
+        return "failed";
+      }
+      setAnnouncement(
+        `The earlier conversation was summarized at ${timeNow()}`
+      );
+      return "done";
+    } catch (e) {
+      if (controller.signal.aborted || targetRef.current !== from) {
+        return "moved";
+      }
+      toast({
+        title: "The conversation was not compacted",
+        description: `${e instanceof Error ? e.message : e}. ${
+          automatic ? "Your message goes with the whole history." : ""
+        }`.trim(),
+        variant: "destructive",
+      });
+      return "failed";
+    } finally {
+      if (compactAbort.current === controller) compactAbort.current = null;
+      setCompacting(false);
+      // "Compact" leaves the page when nothing is left to compact; the
+      // focus must not fall to the document.
+      if (!automatic) inputRef.current?.focus();
+    }
+  };
+
+  const submit = async () => {
     if (!canSend) return;
-    sendMessage({ text: input.trim() });
+    const text = input.trim();
     setInput("");
+    if (
+      autoCompact &&
+      noAutoFor.current !== lastAssistant?.id &&
+      shouldAutoCompact(
+        messages,
+        contextUsed(lastAssistant?.metadata),
+        selected?.context_length,
+        lastAssistant?.id
+      )
+    ) {
+      if ((await compact(true)) === "moved") {
+        // Another target's chat is on the page now: this message was for
+        // the one that was left. It goes back into the field.
+        setInput(text);
+        return;
+      }
+    }
+    sendMessage({ text });
   };
 
   const onRegenerate = useCallback(
@@ -438,6 +636,9 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           onTemperatureChange={setTemperature}
           maxTokens={maxTokens}
           onMaxTokensChange={setMaxTokens}
+          autoCompact={autoCompact}
+          onAutoCompactChange={changeAutoCompact}
+          windowKnown={!!selected?.context_length}
           tools={
             <ChatTools
               servers={toolServers.servers}
@@ -464,7 +665,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           }
           examples={examples}
           onClear={clear}
-          canClear={messages.length > 0}
+          canClear={messages.length > 0 && !compacting}
         />
       </aside>
 
@@ -496,26 +697,68 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
                 }}
               />
             )}
-            {messages.map((message) => (
+            {hidden.length > 0 && (
+              <details
+                data-testid="chat-compacted"
+                className="rounded-md border border-dashed p-2 text-xs text-muted-foreground"
+              >
+                <summary className="cursor-pointer">
+                  Earlier conversation ({hidden.length}{" "}
+                  {hidden.length === 1 ? "message" : "messages"}, not sent to
+                  the model any more)
+                </summary>
+                <div className="mt-3 flex flex-col gap-3 opacity-70">
+                  {hidden.map((message) => (
+                    <ChatMessage
+                      key={message.id}
+                      message={message}
+                      streaming={false}
+                      typedFunctions={typedNames}
+                    />
+                  ))}
+                </div>
+              </details>
+            )}
+            {marker && (
+              <CompactionMarker
+                summary={messageText(marker)}
+                info={markerInfo(marker)!}
+                onUndo={
+                  locked
+                    ? undefined
+                    : () => {
+                        // Undone by hand: with the switch on, the next
+                        // send must not compact the same turns again.
+                        noAutoFor.current = lastAssistant?.id;
+                        setMessages((now) => undoCompaction(now, marker.id));
+                      }
+                }
+              />
+            )}
+            {live.map((message) => (
               <ChatMessage
                 key={message.id}
                 message={message}
                 streaming={busy && message.id === last?.id}
                 onRegenerate={
-                  !busy && message.id === lastAssistant?.id && message === last
+                  !locked &&
+                  message.id === lastAssistant?.id &&
+                  message === last
                     ? onRegenerate
                     : undefined
                 }
-                onEdit={!busy && message.id === lastUserId ? onEdit : undefined}
+                onEdit={
+                  !locked && message.id === lastUserId ? onEdit : undefined
+                }
                 onContinue={
-                  !busy && message === last ? continueAnswer : undefined
+                  !locked && message === last ? continueAnswer : undefined
                 }
                 onToolApproval={
-                  !busy && message === last ? onToolApproval : undefined
+                  !locked && message === last ? onToolApproval : undefined
                 }
                 typedFunctions={typedNames}
                 onToolResult={
-                  !busy && message === last ? onToolResult : undefined
+                  !locked && message === last ? onToolResult : undefined
                 }
               />
             ))}
@@ -601,7 +844,11 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
                 ? "This instance is still starting"
                 : "Pick a target first"
           }
-          contextUsed={contextUsed(lastAssistant?.metadata)}
+          contextUsed={meterUsed}
+          onCompact={
+            plan && selected && !busy ? () => compact(false) : undefined
+          }
+          compacting={compacting}
           contextLength={selected?.context_length}
           toolServers={activeTools.length}
         />
