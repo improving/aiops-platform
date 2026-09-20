@@ -41,20 +41,26 @@ export function CodeExamplesDialog({
   title,
   description,
   triggerLabel = "Code examples",
+  trigger,
 }: {
   examples: CodeExample[];
   title: string;
   description: string;
   triggerLabel?: string;
+  /** A trigger of the caller's own (an icon button in a tight row);
+      it must carry its accessible name itself. */
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          {triggerLabel}
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" size="sm">
+            {triggerLabel}
+          </Button>
+        )}
       </DialogTrigger>
       {/* sm:max-w-3xl, not max-w-3xl: DialogContent ships sm:max-w-lg, which
           wins at that breakpoint. And min-w-0 all the way down to the pre,

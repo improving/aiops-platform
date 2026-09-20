@@ -1,4 +1,5 @@
 import { test, expect, shortId, FAILED_RESOURCE } from "../fixtures";
+import { ChatPage } from "../pages/chat";
 import { McpServersPage } from "../pages/mcp-servers";
 
 // OAuth sign-in to an MCP server. With AIOPS_CHAT_MOCK the backend's
@@ -53,7 +54,9 @@ test.describe("MCP server with OAuth sign-in", () => {
     // conversation, and the server is on.
     await mcp.runAction(name, "Sign out of this server");
     await page.goto("/chat?target=inst-mock");
-    const tools = page.getByRole("group", { name: "Tools", exact: true });
+    const chat = new ChatPage(page);
+    await chat.openTools();
+    const tools = chat.tools;
     await expect(tools).toContainText("needs your sign-in");
     await tools.getByRole("button", { name: `Connect ${name}` }).click();
     await page
@@ -62,9 +65,11 @@ test.describe("MCP server with OAuth sign-in", () => {
       .click();
     await expect(page).toHaveURL(/\/chat\?target=inst-mock$/);
     await expect(page.getByText(`Signed in to ${name}`).first()).toBeVisible();
+    await chat.openTools();
     await expect(
       page.getByRole("switch", { name: `Use ${name}` })
     ).toBeChecked();
+    await chat.closeTools();
 
     await mcp.open();
     await mcp.waitForLoaded();

@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, type ReactNode, type RefObject } from "react";
 import { PaperPlaneIcon, StopIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,8 @@ export function Composer({
   placeholder,
   contextUsed,
   contextLength,
-  toolServers = 0,
+  tools,
+  actions,
   onCompact,
   compacting = false,
 }: {
@@ -42,9 +43,12 @@ export function Composer({
   placeholder: string;
   contextUsed?: number;
   contextLength?: number | null;
-  /** How many tool servers the next message may use; said next to the
-      field, because the switches are in the side panel. */
-  toolServers?: number;
+  /** The tools of the next message (`ChatTools`): a button, what is on
+      as chips, and a popover, in the row under the field. */
+  tools?: ReactNode;
+  /** What is needed now and then, as icon buttons at the end of the
+      row: the code of this request, the settings, clear. */
+  actions?: ReactNode;
   /** Summarize the older turns now; absent when there is nothing to
       compact. */
   onCompact?: () => void;
@@ -90,6 +94,7 @@ export function Composer({
             }
           }}
           rows={1}
+          aria-describedby="chat-input-hint"
           placeholder={placeholder}
           className="max-h-60 min-h-9 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
         />
@@ -114,26 +119,19 @@ export function Composer({
           </Button>
         )}
       </div>
-      <div className="mt-1 flex justify-between gap-4 text-xs text-muted-foreground">
-        <span>
-          Enter to send, Shift+Enter for a new line
-          {toolServers > 0 && (
-            <span data-testid="chat-tools-on" className="ml-2 font-medium">
-              · {toolServers}{" "}
-              {toolServers === 1 ? "tool server" : "tool servers"} on
-            </span>
-          )}
-        </span>
-        <span className="flex items-center gap-2">
+      <div className="mt-1.5 flex items-center justify-between gap-4 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">{tools}</div>
+        <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {!!contextUsed && !!contextLength && (
             <span
               data-testid="chat-context"
               className={
                 nearlyFull
-                  ? "font-medium text-amber-600 dark:text-amber-400"
-                  : ""
+                  ? "flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400"
+                  : "flex items-center gap-1.5"
               }
             >
+              <WindowRing share={contextUsed / contextLength} />
               {formatTokens(contextUsed)} of {formatTokens(contextLength)}{" "}
               tokens
               {nearlyFull &&
@@ -152,8 +150,43 @@ export function Composer({
               {compacting ? "Compacting…" : "Compact"}
             </button>
           )}
+          {actions && (
+            <span className="flex items-center gap-0.5 border-l pl-2">
+              {actions}
+            </span>
+          )}
         </span>
       </div>
+      <p id="chat-input-hint" className="sr-only">
+        Enter to send, Shift+Enter for a new line
+      </p>
     </form>
+  );
+}
+
+/** How full the model's window is, at a glance; the numbers are next to
+    it for whoever wants them. */
+function WindowRing({ share }: { share: number }) {
+  const radius = 6;
+  const around = 2 * Math.PI * radius;
+  const filled = Math.min(Math.max(share, 0), 1) * around;
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5 -rotate-90"
+      fill="none"
+      strokeWidth="2.5"
+    >
+      <circle cx="8" cy="8" r={radius} className="stroke-muted" />
+      <circle
+        cx="8"
+        cy="8"
+        r={radius}
+        stroke="currentColor"
+        strokeDasharray={`${filled} ${around}`}
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

@@ -23,6 +23,7 @@ test.describe("chat page", () => {
       "You said: hello there"
     );
 
+    await chat.closeSettings();
     await chat.clearButton.click();
     await expect(chat.messages).toHaveCount(0);
   });
@@ -85,7 +86,7 @@ test.describe("chat page", () => {
     await expect(chat.sendButton).toBeEnabled();
   });
 
-  test("a long target name stays inside the side panel", async ({ page }) => {
+  test("a long target name stays inside its picker", async ({ page }) => {
     const label =
       "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ-with-a-very-long-suffix · vLLM";
     await page.route("**/api/v1alpha1/chat/targets", (route) =>
@@ -109,11 +110,16 @@ test.describe("chat page", () => {
     await chat.open("inst-mock");
     await expect(chat.targetSelect).toContainText("Qwen/Qwen2.5-Coder");
 
-    const panel = (await page.locator("aside").first().boundingBox())!;
+    // The picker has a fixed width in the composer's row: a long name is
+    // cut, and does not push the rest of the row away.
     const select = (await chat.targetSelect.boundingBox())!;
-    expect(select.x + select.width).toBeLessThanOrEqual(
-      panel.x + panel.width + 1
+    expect(select.width).toBeLessThanOrEqual(225);
+    await expect(chat.toolsButton).toBeInViewport();
+    await expect(chat.settingsButton).toBeInViewport();
+    const scrolls = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
     );
+    expect(scrolls).toBe(false);
   });
 
   test("an answer renders as Markdown, code in a block with a copy button", async ({
@@ -313,15 +319,19 @@ test.describe("chat page", () => {
     });
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
+    await chat.openSettings();
     const slider = page.getByRole("slider", { name: "Temperature" });
     await expect(slider).toBeDisabled();
     await chat.send("one");
     await expect(chat.assistantMessages).toHaveCount(1);
 
+    await chat.openSettings();
     await page.getByRole("switch", { name: "Model default" }).click();
     await expect(slider).toBeEnabled();
     await slider.press("ArrowRight");
+    await chat.openSettings();
     await page.getByRole("spinbutton", { name: "Max tokens" }).fill("64");
+    await chat.openSettings();
     await chat.systemPrompt.fill("Be brief.");
     await expect(page.getByText("Active", { exact: true })).toBeVisible();
     await chat.send("two");
@@ -339,6 +349,7 @@ test.describe("chat page", () => {
     await chat.open("inst-mock");
     await chat.send("keep me");
     await expect(chat.assistantMessages.last()).toContainText("keep me");
+    await chat.closeSettings();
     await chat.clearButton.click();
     await expect(chat.messages).toHaveCount(0);
     await page.getByRole("button", { name: "Undo" }).click();
@@ -418,7 +429,9 @@ test.describe("chat page", () => {
   }) => {
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
+    await chat.openSettings();
     await chat.systemPrompt.fill("Be brief.");
+    await chat.closeSettings();
     await page.getByRole("button", { name: "View code" }).click();
     const curl = page.getByRole("group", { name: "curl example" });
     await expect(curl).toContainText("/v1alpha1/chat/completions");

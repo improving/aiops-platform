@@ -1,4 +1,5 @@
 import { test, expect, shortId, FAILED_RESOURCE } from "../fixtures";
+import { ChatPage } from "../pages/chat";
 import { McpServersPage } from "../pages/mcp-servers";
 
 // The TEST_MODE backend runs with AIOPS_CHAT_MOCK=true: discover() answers
@@ -320,7 +321,9 @@ test.describe("an MCP server where each member brings their own credential", () 
     await theirs.runAction(name, "Disconnect my credential");
 
     await alice.goto("/chat?target=inst-mock");
-    const tools = alice.getByRole("group", { name: "Tools" });
+    const aliceChat = new ChatPage(alice);
+    await aliceChat.openTools();
+    const tools = aliceChat.tools;
     await expect(tools).toContainText("needs your credential");
     await expect(
       tools.getByRole("switch", { name: `Use ${name}` })
@@ -330,6 +333,7 @@ test.describe("an MCP server where each member brings their own credential", () 
     await inChat.getByLabel("Personal access token").fill("alice-token");
     await inChat.getByRole("button", { name: "Test and save" }).click();
     // Connected in order to use it: it is on.
+    await aliceChat.openTools();
     await expect(
       tools.getByRole("switch", { name: `Use ${name}` })
     ).toBeChecked();
@@ -355,9 +359,8 @@ test.describe("an MCP server where each member brings their own credential", () 
     await save.click();
     await expect(change).toBeHidden();
     await alice.reload();
-    await expect(alice.getByRole("group", { name: "Tools" })).not.toContainText(
-      "needs your credential"
-    );
+    await aliceChat.openTools();
+    await expect(aliceChat.tools).not.toContainText("needs your credential");
 
     await mcp.deleteServer(name);
   });

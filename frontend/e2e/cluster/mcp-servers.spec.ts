@@ -183,13 +183,17 @@ test.describe("MCP servers on the cluster", { tag: "@cluster" }, () => {
     );
     const chat = new ChatPage(page);
     await page.goto("/chat?target=inst-00000000");
+    await chat.openTools();
     await expect(chat.tools).toContainText(name);
+    await chat.openTools();
     await expect(chat.tools).toContainText("needs your credential");
+    await chat.openTools();
     await chat.tools.getByRole("button", { name: `Connect ${name}` }).click();
     const dialog = page.getByRole("dialog", { name: `Connect ${name}` });
     await dialog.getByLabel("Personal access token").fill("tok-bob");
     await dialog.getByRole("button", { name: "Test and save" }).click();
     await expect(dialog).toBeHidden({ timeout: 60_000 });
+    await chat.openTools();
     await expect(
       chat.tools.getByRole("switch", { name: `Use ${name}` })
     ).toBeChecked();

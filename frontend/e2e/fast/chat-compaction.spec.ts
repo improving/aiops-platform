@@ -79,6 +79,7 @@ test.describe("compaction in the playground", () => {
     };
     expect(after.summary).toBeUndefined();
     expect(after.messages[0].parts[0].text).toBe("My cluster is named orion.");
+    await chat.closeSettings();
     await chat.clearButton.click();
   });
 
@@ -108,6 +109,7 @@ test.describe("compaction in the playground", () => {
     );
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
+    await chat.openSettings();
     await page.getByLabel("Compact automatically").click();
 
     await say(chat, "alpha beta gamma delta epsilon", 1);
@@ -135,8 +137,11 @@ test.describe("compaction in the playground", () => {
 
     // The choice is kept for this user.
     await page.reload();
+    await chat.openSettings();
     await expect(page.getByLabel("Compact automatically")).toBeChecked();
+    await chat.openSettings();
     await page.getByLabel("Compact automatically").click();
+    await chat.closeSettings();
     await chat.clearButton.click();
   });
 
@@ -177,11 +182,13 @@ test.describe("compaction in the playground", () => {
     await say(chat, "second", 2);
     await say(chat, "third", 3);
 
+    await chat.closeSettings();
     await page.getByRole("button", { name: "Compact", exact: true }).click();
     // While the summary is written nothing else changes the conversation.
     await expect(
       page.getByRole("button", { name: "Compacting…" })
     ).toBeDisabled();
+    await chat.closeSettings();
     await expect(chat.clearButton).toBeDisabled();
     await expect(chat.sendButton).toBeDisabled();
 
@@ -205,6 +212,7 @@ test.describe("compaction in the playground", () => {
 
     await chat.selectTarget(/Mock model/);
     await expect(chat.assistantMessages).toHaveCount(3);
+    await chat.closeSettings();
     await chat.clearButton.click();
   });
 
@@ -226,11 +234,13 @@ test.describe("compaction in the playground", () => {
       await say(chat, "first", 1);
       await say(chat, "second", 2);
       await say(chat, "third", 3);
+      await chat.closeSettings();
       await page.getByRole("button", { name: "Compact", exact: true }).click();
       await expect(
         page.getByText("The conversation was not compacted").first()
       ).toBeVisible();
       await expect(page.getByTestId("chat-compaction")).toHaveCount(0);
+      await chat.closeSettings();
       await chat.clearButton.click();
     });
   });

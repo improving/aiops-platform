@@ -1,12 +1,8 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { CodeExamplesDialog } from "@/components/instances/CodeExamplesDialog";
-import type { CodeExample } from "@/components/instances/CodeExamplesDialog";
 
 const DEFAULT_TEMPERATURE = "0.7";
 
@@ -22,16 +18,13 @@ export function ChatSettings({
   onTemperatureChange,
   maxTokens,
   onMaxTokensChange,
-  tools,
-  examples,
-  onClear,
-  canClear,
   autoCompact,
   onAutoCompactChange,
   windowKnown,
+  askFirst,
+  onAskFirstChange,
+  toolsBlocked,
 }: {
-  /** The Tools section (`ChatTools`), between the numbers and the actions. */
-  tools?: React.ReactNode;
   system: string;
   onSystemChange: (value: string) => void;
   /** "" is the model's default. */
@@ -40,16 +33,16 @@ export function ChatSettings({
   /** "" is the model's default. */
   maxTokens: string;
   onMaxTokensChange: (value: string) => void;
-  /** Empty without a target. */
-  examples: CodeExample[];
-  onClear: () => void;
-  canClear: boolean;
   /** Compact before a send when the window is nearly full. */
   autoCompact: boolean;
   onAutoCompactChange: (on: boolean) => void;
   /** The target says how large its window is; without that, automatic
       compaction cannot know when to act. */
   windowKnown: boolean;
+  /** Ask before each tool call; null when the tools cannot be used. */
+  askFirst: boolean;
+  onAskFirstChange: (on: boolean) => void;
+  toolsBlocked: boolean;
 }) {
   const ownTemperature = temperature !== "";
   return (
@@ -130,43 +123,28 @@ export function ChatSettings({
           <Label htmlFor="chat-auto-compact">Compact automatically</Label>
         </div>
         <p className="text-xs text-muted-foreground">
-          When the conversation fills three quarters of the model&apos;s window,
-          the older turns are summarized before your next message goes. They
-          stay on the page, and you can undo it.
+          From three quarters of the model&apos;s window on, the older turns are
+          summarized before your next message. You can undo it.
           {autoCompact &&
             !windowKnown &&
             " This target does not say how large its window is, so use Compact under the message field."}
         </p>
       </div>
-      {tools}
-      <div className="flex flex-wrap gap-2">
-        {examples.length > 0 && (
-          <CodeExamplesDialog
-            triggerLabel="View code"
-            examples={examples}
-            title="This request from your own code"
-            description="The same target and settings through the platform API. Replace <API_TOKEN> with a personal API token."
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="chat-ask-first"
+            aria-label="Ask before each tool call"
+            checked={askFirst}
+            disabled={toolsBlocked}
+            onCheckedChange={onAskFirstChange}
           />
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onClear}
-          disabled={!canClear}
-        >
-          Clear conversation
-        </Button>
-      </div>
-      {examples.length > 0 && (
+          <Label htmlFor="chat-ask-first">Ask before each tool call</Label>
+        </div>
         <p className="text-xs text-muted-foreground">
-          API tokens are made on the{" "}
-          <Link href="/settings/tokens" className="underline">
-            API tokens
-          </Link>{" "}
-          page.
+          A tool can change data. You see the call and its input first.
         </p>
-      )}
+      </div>
     </>
   );
 }

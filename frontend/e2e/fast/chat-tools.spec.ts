@@ -29,10 +29,13 @@ test.describe("chat with tools", () => {
   }) => {
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
+    await chat.openTools();
     await expect(chat.tools).toContainText(serverName);
+    await chat.openTools();
     await expect(chat.tools).toContainText("1 tool");
     await expect(chat.toolsOn).toBeHidden();
 
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: `Use ${serverName}` }).click();
     await expect(chat.toolsOn).toContainText("1 tool server on");
 
@@ -61,6 +64,7 @@ test.describe("chat with tools", () => {
       "You said: and now?"
     );
 
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: `Use ${serverName}` }).click();
     await expect(chat.toolsOn).toBeHidden();
   });
@@ -70,6 +74,7 @@ test.describe("chat with tools", () => {
   }) => {
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: `Use ${serverName}` }).click();
     await chat.send("call hi there");
     await expect(chat.toolCalls.first()).toHaveAttribute("data-state", "done");
@@ -86,6 +91,7 @@ test.describe("chat with tools", () => {
     const asked = page.waitForRequest((r) =>
       r.url().endsWith("/api/chat/compact")
     );
+    await chat.closeSettings();
     await page.getByRole("button", { name: "Compact", exact: true }).click();
     const { transcript } = (await asked).postDataJSON() as {
       transcript: string;
@@ -103,6 +109,7 @@ test.describe("chat with tools", () => {
     await expect(
       page.getByTestId("chat-compacted").getByTestId("chat-tool-call")
     ).toHaveCount(1);
+    await chat.closeSettings();
     await chat.clearButton.click();
   });
 
@@ -116,6 +123,7 @@ test.describe("chat with tools", () => {
     await expect(chat.assistantMessages.last()).toContainText("System: (none)");
 
     const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    await chat.openTools();
     await use.click();
     await chat.send("system?");
     await expect(chat.assistantMessages.last()).toContainText(
@@ -123,6 +131,7 @@ test.describe("chat with tools", () => {
     );
 
     // The user's own system prompt is sent as it is.
+    await chat.openSettings();
     await chat.systemPrompt.fill("Answer in French.");
     await chat.send("system?");
     await expect(chat.assistantMessages.last()).toContainText(
@@ -131,6 +140,7 @@ test.describe("chat with tools", () => {
     await expect(chat.assistantMessages.last()).not.toContainText(
       "write nothing before"
     );
+    await chat.openTools();
     await use.click();
   });
 
@@ -140,6 +150,7 @@ test.describe("chat with tools", () => {
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
     const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    await chat.openTools();
     await use.click();
     // The mock tool echoes its argument: 20,000 characters in, 16,000
     // back to the model, and a note about the 4,000 that were left out.
@@ -150,6 +161,7 @@ test.describe("chat with tools", () => {
     await expect(answer).toContainText(
       "The platform cut this tool result: 4,000 more characters"
     );
+    await chat.openTools();
     await use.click();
   });
 
@@ -159,10 +171,13 @@ test.describe("chat with tools", () => {
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
     const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
-    const ask = chat.tools.getByRole("switch", {
+    // In the Settings sheet, with the other rare options.
+    const ask = chat.settings.getByRole("switch", {
       name: "Ask before each tool call",
     });
+    await chat.openTools();
     await use.click();
+    await chat.openSettings();
     await ask.click();
 
     await chat.send("call hi there");
@@ -183,6 +198,7 @@ test.describe("chat with tools", () => {
 
     // The choice outlives a reload; a denied call does not run.
     await page.reload();
+    await chat.openSettings();
     await expect(ask).toBeChecked();
     await chat.send("call again");
     const second = chat.toolCalls.last();
@@ -195,7 +211,9 @@ test.describe("chat with tools", () => {
       "Tool said: again"
     );
 
+    await chat.openSettings();
     await ask.click();
+    await chat.openTools();
     await use.click();
   });
 
@@ -214,23 +232,28 @@ test.describe("chat with tools", () => {
 
     await setApproval("writes");
     await chat.open("inst-mock");
+    await chat.openTools();
     await expect(chat.tools).toContainText("asks before changes");
     const use = chat.tools.getByRole("switch", { name: `Use ${serverName}` });
+    await chat.openTools();
     await use.click();
     await chat.send("call one");
     await expect(chat.toolCalls.last()).toHaveAttribute("data-state", "done");
 
     await setApproval("always");
     await page.reload();
+    await chat.openTools();
     await expect(chat.tools).toContainText("asks first");
+    await chat.openSettings();
     await expect(
-      chat.tools.getByRole("switch", { name: "Ask before each tool call" })
+      chat.settings.getByRole("switch", { name: "Ask before each tool call" })
     ).not.toBeChecked();
     await chat.send("call two");
     const waiting = chat.toolCalls.last();
     await expect(waiting).toHaveAttribute("data-state", "asking");
     await waiting.getByRole("button", { name: "Deny" }).click();
     await expect(waiting).toContainText("not approved");
+    await chat.openTools();
     await use.click();
   });
 
@@ -238,10 +261,12 @@ test.describe("chat with tools", () => {
     const chat = new ChatPage(page);
     await page.goto(`/chat?target=inst-mock&tools=${serverName}`);
     await expect(chat.toolsOn).toContainText("1 tool server on");
+    await chat.openTools();
     await expect(
       chat.tools.getByRole("switch", { name: `Use ${serverName}` })
     ).toBeChecked();
     // Leave the browser's stored choice clean for the other tests.
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: `Use ${serverName}` }).click();
   });
 
@@ -269,9 +294,11 @@ test.describe("chat with tools", () => {
     );
     const chat = new ChatPage(page);
     await page.goto(`/chat?target=inst-abcdef12&tools=${serverName}`);
+    await chat.openTools();
     await expect(chat.tools.getByTestId("tools-blocked")).toContainText(
       "This vLLM instance has Tool calling off."
     );
+    await chat.openTools();
     await expect(
       chat.tools.getByRole("link", { name: "Turn it on in Edit settings" })
     ).toHaveAttribute(
@@ -320,6 +347,7 @@ test.describe("chat when the tools are down", () => {
     expect(bodies[0].toolSources).toHaveLength(1);
     expect(bodies[1].toolSources).toEqual([]);
 
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: `Use ${name}` }).click();
     await page.request.delete(`${SERVERS}/${id}`);
   });
@@ -378,11 +406,13 @@ test.describe("the tools and the model's window", () => {
     const budget = chat.tools.getByTestId("tools-budget");
     await expect(budget).toBeHidden();
 
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: "Use small" }).click();
     await expect(budget).toContainText("2 tools, about");
     await expect(budget).toContainText("% of this model's window");
     await expect(budget).not.toHaveAttribute("role", "alert");
 
+    await chat.openTools();
     await chat.tools.getByRole("switch", { name: "Use big" }).click();
     await expect(budget).toHaveAttribute("role", "alert");
     await expect(budget).toContainText("42 tools");

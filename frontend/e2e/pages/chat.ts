@@ -16,6 +16,9 @@ export class ChatPage extends AppShell {
   readonly speed: Locator;
   readonly toolCalls: Locator;
   readonly tools: Locator;
+  readonly toolsButton: Locator;
+  readonly settings: Locator;
+  readonly settingsButton: Locator;
   readonly toolsOn: Locator;
   readonly contextMeter: Locator;
   readonly starterPrompts: Locator;
@@ -39,7 +42,16 @@ export class ChatPage extends AppShell {
     this.waiting = page.getByRole("status", { name: "Waiting for the model" });
     this.speed = this.conversation.getByTestId("chat-speed");
     this.toolCalls = this.conversation.getByTestId("chat-tool-call");
-    this.tools = page.getByRole("group", { name: "Tools" });
+    // In a popover of the composer's row: `openTools()` first.
+    this.tools = page.getByRole("group", { name: "Tools", exact: true });
+    this.toolsButton = page.getByRole("button", { name: /^Tools/ });
+    // In a sheet: `openSettings()` first, and `closeSettings()` before
+    // anything on the page behind it (`send()` does that itself).
+    this.settings = page.getByRole("dialog", { name: "Settings" });
+    this.settingsButton = page.getByRole("button", {
+      name: "Settings",
+      exact: true,
+    });
     this.toolsOn = page.getByTestId("chat-tools-on");
     this.contextMeter = page.getByTestId("chat-context");
     this.starterPrompts = page
@@ -56,7 +68,40 @@ export class ChatPage extends AppShell {
     await this.page.getByRole("option", { name: label }).click();
   }
 
+  /** The Tools popover of the composer's row, open. */
+  async openTools() {
+    // The sheet is modal: nothing behind it takes a click.
+    await this.closeSettings();
+    if (!(await this.tools.isVisible())) await this.toolsButton.click();
+    await this.tools.waitFor();
+  }
+
+  async closeTools() {
+    if (await this.tools.isVisible()) {
+      await this.page.keyboard.press("Escape");
+      await this.tools.waitFor({ state: "hidden" });
+    }
+  }
+
+  /** The Settings sheet (system prompt, temperature, max tokens, the
+      two switches), open. */
+  async openSettings() {
+    await this.closeTools();
+    if (!(await this.settings.isVisible())) await this.settingsButton.click();
+    await this.settings.waitFor();
+  }
+
+  async closeSettings() {
+    if (await this.settings.isVisible()) {
+      await this.page.keyboard.press("Escape");
+      await this.settings.waitFor({ state: "hidden" });
+    }
+  }
+
   async send(text: string) {
+    // A sheet is modal, and a popover would take the first click.
+    await this.closeSettings();
+    await this.closeTools();
     await this.input.fill(text);
     await this.sendButton.click();
   }

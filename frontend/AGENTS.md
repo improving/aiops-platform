@@ -90,12 +90,12 @@ pnpm e2e:ui                               # Playwright UI mode
   A resolver failure answers 502 `Could not reach the tools: ...` before anything goes to the model, never a silent answer without tools;
   the page maps it and offers "Send without tools", which is `regenerate({ body: { toolSources: [] } })` (`prepareSendMessagesRequest` spreads the request's own `body` last).
   One tool result gives the model at most `MAX_TOOL_RESULT_CHARS` (16,000, about 4,000 tokens) of text: `capToolResult` wraps each tool's `execute`, cuts the text parts in order and appends a note that says how much was left out, so the model and the reader both know (a documentation tool can fill a 16k window with one answer).
-  "Ask before each call" (a switch in the Tools section, kept per user like the server choice): the body carries `approveTools`, the route gives `streamText` `toolApproval: () => "user-approval"`,
+  "Ask before each tool call" (a switch in the Settings sheet, kept per user like the server choice): the body carries `approveTools`, the route gives `streamText` `toolApproval: () => "user-approval"`,
   the step then ends with the tool part in state `approval-requested`, `ToolCallBlock` shows it open as `data-state="asking"` with the input and Approve / Deny (last turn only),
   `addToolApprovalResponse` records the answer, and `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses` sends the conversation back: an approved call runs, a denied one (`output-denied`, shown as failed, "not approved") is told to the model.
   The admin's floor is `McpServer.approval` (`never`, `writes`, `always`; `ApprovalField.tsx` in the Edit tools dialog): `resolveMcp` reads `/v1alpha1/mcp/servers` from the backend with the caller's headers (never from the browser's request)
   and `needsApproval(toolName)` finds the server by `tool_prefix`; `writes` asks for every tool that does not say `read_only: true`; a tool of no known server, or a policy that cannot be read, asks. The member's switch can only add to it.
-  The Tools section says "asks first" or "asks before changes" next to such a server, and a denied call reads "not approved".
+  The Tools popover says "asks first" or "asks before changes" next to such a server, and a denied call reads "not approved".
   `lib/toolBudget.ts` estimates what the definitions of the tools that are on take of the target's window (`McpTool.size` / 3.5 characters a token, 600 characters for a tool listed before sizes were kept), and the Tools section says it (`data-testid="tools-budget"`), as a `role="alert"` from 40% on: the definitions go with every step, and Linear's 66 tools filled a 16k window on the lab.
   Compaction (`lib/compaction.ts`, pure functions; `CompactionMarker.tsx`): a long conversation fills the window, so a compaction asks the target for a summary of the older turns (`POST /api/chat/compact`, one call with no tools and no stream, the platform's own instruction at temperature 0)
   and puts a marker message (`role: "system"`, `metadata.compaction`) in front of the turns that stay. The turns above the last marker stay in the browser, collapsed (`data-testid="chat-compacted"`), and Undo removes the marker;
@@ -115,9 +115,16 @@ pnpm e2e:ui                               # Playwright UI mode
   A function name has no `-`, so it can never be the name of a platform tool (`<alias>-<tool>`); `e2e/fast/chat-functions.spec.ts`.
   The approver is the user whose session sends the request, so the approval is not signed (`experimental_toolApprovalSecret` is for a server that must not trust its client).
   An answer cut at the step limit carries `toolLimit` in its metadata and shows "Stopped after N tool steps" with Continue.
+  Layout (the conversation first, each option where it is used; `e2e/fast/chat-layout.spec.ts`): there is NO side panel and NO bar above: the page starts with the conversation, and everything else is in the row under the message field (`Composer`'s `tools` and `actions` slots; the row wraps on a narrow screen).
+  On the left: the target picker in a compact form (`TargetPicker` `className`, a fixed width, so a long name is cut), then the tools. On the right: the window meter with "Compact", then three icon buttons with their names as `aria-label` and `title`: "View code" (`CodeExamplesDialog` takes a `trigger`), "Settings" (a dot, `data-testid="chat-settings-changed"`, when something is not at its default; its title says when a system prompt is active) and "Clear conversation".
+  The Settings sheet (`ChatSettings.tsx` is its content) has what is needed now and then: system prompt (first, the one used most), temperature, max tokens, "Compact automatically" and "Ask before each tool call".
+  The tools are in the composer's row, where a message is written (`Composer`'s `tools` slot): `ChatTools.tsx` is a button "Tools" with a count (amber while the window warning is on), chips of what is on (`list` "Tools that are on", a "Turn off <name>" button each, "+N" after three), and a popover that holds the `role="group"` "Tools":
+  the window estimate, a search field from six entries on, the servers grouped as On, Available and Needs attention, the Functions group, and "Manage MCP servers". "Connect" and the function dialogs close the popover first. The window meter is a small ring with the numbers, next to "Compact".
+  The conversation's height is `100vh - 18.5rem`: the 18rem shell plus the composer's taller row; an existing spec ("a long conversation scrolls inside the log, not the page") fails when a change of the layout makes the page scroll.
+  Page object: the Tools group and the settings fields are NOT on the page until opened: `chat.openTools()` / `closeTools()`, `chat.openSettings()` / `closeSettings()` (`send()` closes both itself; the sheet is modal, so `openTools()` closes it first). A locator saved from `chat.tools` still needs the popover open at the moment of the click.
   `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),
-  and `ChatTools.tsx` is the Tools section (`role="group"` "Tools", a switch `Use <name>` per server): blocked with the reason when `ChatTarget.tools` is false
-  (a vLLM instance links to its page for Tool calling) or the role is viewer, with the choice kept; `null` allows use with a note. `Composer` says "N tool servers on" (`data-testid="chat-tools-on"`).
+  and `ChatTools.tsx` holds the Tools group (`role="group"` "Tools", a switch `Use <name>` per server): blocked with the reason when `ChatTarget.tools` is false
+  (a vLLM instance links to its page for Tool calling) or the role is viewer, with the choice kept; `null` allows use with a note. the count of servers that are on is said for a screen reader (`data-testid="chat-tools-on"`, "N tool servers on").
   `ToolCallBlock` shows a platform tool name `<server><id8>-<tool>` as `server · tool`. "View code" adds a "Tools (MCP)" example for the API host.
   `e2e/fast/chat-tools.spec.ts` runs the whole loop against the backend mocks (registry, MCP endpoint, a model that calls the first tool on `call ...`).
   `src/components/chat/ChatPanel.tsx` (`/chat`, `?target=<name>` preselects) fetches the targets, lists
@@ -140,7 +147,6 @@ pnpm e2e:ui                               # Playwright UI mode
   `ChatSettings.tsx` (temperature slider behind a "Model default" switch, `Max tokens`, "View code" from `src/lib/playgroundExamples.ts`, which shows the platform API with a personal token, not the instance host)
   and `EmptyConversation.tsx` (starter prompts that fill the field and do not send).
   "Clear conversation" clears at once and offers Undo in the toast. The log is `aria-live="off"`; a hidden status announces a finished answer once.
-  The side panel has the same bound and scrolls in itself (the Tools section can make it taller than the window).
   The conversation section has a bounded height (`h-[calc(100vh-18rem)]`, the 18rem being the shell around it)
   and the log inside it carries `min-h-0` next to `flex-1`: without both, the section grew with the history,
   the log never scrolled and the composer was pushed off the page.

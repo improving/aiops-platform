@@ -13,6 +13,7 @@ test.describe("functions typed in the playground", () => {
     const chat = new ChatPage(page);
     await chat.open("inst-mock");
     const functions = page.getByRole("group", { name: "Functions" });
+    await chat.openTools();
     await functions.getByRole("button", { name: "Add function" }).click();
 
     const dialog = page.getByRole("dialog", { name: "Add function" });
@@ -33,6 +34,7 @@ test.describe("functions typed in the playground", () => {
       })
     );
     await dialog.getByRole("button", { name: "Save function" }).click();
+    await chat.openTools();
     await expect(
       functions.getByRole("switch", { name: "Use function get_weather" })
     ).toBeChecked();
@@ -58,6 +60,7 @@ test.describe("functions typed in the playground", () => {
     const use = functions.getByRole("switch", {
       name: "Use function get_weather",
     });
+    await chat.openTools();
     await expect(use).toBeChecked();
     await use.click();
     await chat.send("call Mumbai");
@@ -66,11 +69,13 @@ test.describe("functions typed in the playground", () => {
     );
 
     // Delete it again.
+    await chat.openTools();
     await functions.getByRole("button", { name: "Edit get_weather" }).click();
     await page
       .getByRole("dialog", { name: "Edit function" })
       .getByRole("button", { name: "Delete function" })
       .click();
+    await chat.openTools();
     await expect(functions).toContainText("Try a function-calling prompt");
   });
 });

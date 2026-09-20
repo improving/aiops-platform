@@ -11,12 +11,15 @@ export function TargetPicker({
   targets,
   selected,
   onSelect,
+  className,
 }: {
   /** Every chat-capable target, ready or not. */
   targets: ChatTarget[];
   /** May be one that is not ready: the trigger then says so. */
   selected?: ChatTarget;
   onSelect: (name: string) => void;
+  /** The trigger's classes; by default it fills its container. */
+  className?: string;
 }) {
   const items: ComboboxItem[] = targets.map((t) => ({
     value: t.name,
@@ -50,7 +53,7 @@ export function TargetPicker({
       items={items}
       placeholder="Search targets"
       emptyText="No target matches."
-      className="w-full min-w-0"
+      className={className ?? "w-full min-w-0"}
       contentClassName="w-[min(28rem,calc(100vw-2rem))]"
     />
   );

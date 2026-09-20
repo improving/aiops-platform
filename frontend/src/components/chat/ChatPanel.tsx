@@ -12,7 +12,15 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { CodeIcon, GearIcon, TrashIcon } from "@radix-ui/react-icons";
+import { CodeExamplesDialog } from "@/components/instances/CodeExamplesDialog";
 import { ToastAction } from "@/components/ui/toast";
 import {
   ChatMessage,
@@ -277,6 +285,9 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   }, [target]);
 
   const [compacting, setCompacting] = useState(false);
+  // The Settings sheet; its first field is the system prompt, the
+  // setting used most.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const busy = status === "submitted" || status === "streaming";
   // While a summary is being written nothing else may change the
   // conversation: it is decided against the turns as they are.
@@ -323,6 +334,14 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
       // The choice then holds for this page only.
     }
   };
+
+  // A dot on the button: something is not at its default.
+  const settingsChanged =
+    system.trim() !== "" ||
+    temperature !== "" ||
+    maxTokens !== "" ||
+    autoCompact ||
+    toolServers.askFirst;
 
   const plan = useMemo(() => planCompaction(messages), [messages]);
   // The page: the turns above the last marker (collapsed), the marker,
@@ -596,7 +615,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
+    <div className="space-y-3">
       {editing !== undefined && (
         <FunctionDialog
           key={editing || "new"}
@@ -618,64 +637,41 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           toolServers.toggle(server.name, true);
         }}
       />
-      {/* The same bound as the conversation: with the Tools section the
-          panel can be taller than the window, and it must scroll in
-          itself, not make the page scroll the composer away. */}
-      <aside className="min-w-0 space-y-4 lg:max-h-[calc(100vh-18rem)] lg:min-h-[24rem] lg:overflow-y-auto lg:pr-1">
-        <div className="space-y-2">
-          <Label>Target</Label>
-          <TargetPicker
-            targets={chatTargets}
-            selected={requested}
-            onSelect={selectTarget}
-          />
-        </div>
-        <ChatSettings
-          system={system}
-          onSystemChange={setSystem}
-          temperature={temperature}
-          onTemperatureChange={setTemperature}
-          maxTokens={maxTokens}
-          onMaxTokensChange={setMaxTokens}
-          autoCompact={autoCompact}
-          onAutoCompactChange={changeAutoCompact}
-          windowKnown={!!selected?.context_length}
-          tools={
-            <ChatTools
-              servers={toolServers.servers}
-              selected={toolServers.selected}
-              active={activeTools}
-              onToggle={toolServers.toggle}
-              targetTools={selected?.tools}
-              engine={selected?.engine}
-              settingsHref={
-                selected?.instance_id
-                  ? `/models/endpoints/${selected.instance_id}`
-                  : undefined
-              }
-              isViewer={isViewer}
-              isAdmin={isAdmin}
-              budget={budget}
-              onConnect={setConnecting}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Settings</SheetTitle>
+            <SheetDescription>
+              They shape the next request. They are kept until you leave the
+              page; the two switches are kept for you.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-5 px-4 pb-6">
+            <ChatSettings
+              system={system}
+              onSystemChange={setSystem}
+              temperature={temperature}
+              onTemperatureChange={setTemperature}
+              maxTokens={maxTokens}
+              onMaxTokensChange={setMaxTokens}
+              autoCompact={autoCompact}
+              onAutoCompactChange={changeAutoCompact}
+              windowKnown={!!selected?.context_length}
               askFirst={toolServers.askFirst}
               onAskFirstChange={toolServers.setAskFirst}
-              functions={typed.functions}
-              onFunctionToggle={typed.toggle}
-              onFunctionEdit={(name) => setEditing(name ?? "")}
+              toolsBlocked={toolsBlocked}
             />
-          }
-          examples={examples}
-          onClear={clear}
-          canClear={messages.length > 0 && !compacting}
-        />
-      </aside>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* A bounded height, not a minimum: with only min-h the section grew
           with the conversation, so the log below never became scrollable
           and the composer was pushed off the bottom of the page. The 18rem
-          is the shell around it (header, title, footer), measured at 274px;
+          is the shell around it (header, title, footer), measured at 274px,
+          and the half rem more is the composer's taller row;
           min-h keeps it usable when the viewport is short. */}
-      <section className="flex h-[calc(100vh-18rem)] min-h-[24rem] min-w-0 flex-col">
+      <section className="flex h-[calc(100vh-18.5rem)] min-h-[24rem] min-w-0 flex-col">
         <div
           ref={logRef}
           onScroll={onLogScroll}
@@ -851,7 +847,95 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
           }
           compacting={compacting}
           contextLength={selected?.context_length}
-          toolServers={activeTools.length}
+          tools={
+            <>
+              {/* The target is what every session needs, so it is the
+                  first thing of the row, as a model picker of a composer
+                  is; the tools are next to it. */}
+              <TargetPicker
+                targets={chatTargets}
+                selected={requested}
+                onSelect={selectTarget}
+                className="h-7 w-56 min-w-0 px-2 text-xs"
+              />
+              <ChatTools
+                servers={toolServers.servers}
+                selected={toolServers.selected}
+                active={activeTools}
+                onToggle={toolServers.toggle}
+                targetTools={selected?.tools}
+                engine={selected?.engine}
+                settingsHref={
+                  selected?.instance_id
+                    ? `/models/endpoints/${selected.instance_id}`
+                    : undefined
+                }
+                isViewer={isViewer}
+                isAdmin={isAdmin}
+                budget={budget}
+                onConnect={setConnecting}
+                functions={typed.functions}
+                onFunctionToggle={typed.toggle}
+                onFunctionEdit={(name) => setEditing(name ?? "")}
+              />
+            </>
+          }
+          actions={
+            <>
+              {examples.length > 0 && (
+                <CodeExamplesDialog
+                  examples={examples}
+                  title="This request from your own code"
+                  description="The same target and settings through the platform API. Replace <API_TOKEN> with a personal API token, which you make on the API tokens page (user menu)."
+                  trigger={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label="View code"
+                      title="View code"
+                    >
+                      <CodeIcon aria-hidden className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="relative h-7 w-7"
+                aria-label="Settings"
+                title={
+                  system.trim()
+                    ? "Settings (a system prompt is active)"
+                    : "Settings"
+                }
+                onClick={() => setSettingsOpen(true)}
+              >
+                <GearIcon aria-hidden className="h-4 w-4" />
+                {settingsChanged && (
+                  <span
+                    data-testid="chat-settings-changed"
+                    className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-primary"
+                  />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label="Clear conversation"
+                title="Clear conversation"
+                onClick={clear}
+                disabled={messages.length === 0 || compacting}
+              >
+                <TrashIcon aria-hidden className="h-4 w-4" />
+              </Button>
+            </>
+          }
         />
       </section>
     </div>
