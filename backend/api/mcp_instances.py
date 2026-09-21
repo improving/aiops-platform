@@ -27,9 +27,7 @@ from sqlalchemy.orm import Session, joinedload
 from api import mcp as registry
 from api.chat import chat_mock_enabled
 from api.instance_inspection import InstanceKind, add_inspection_routes
-from auth.current_user import CurrentUser, get_current_user, require_admin
-from auth.policy import authorize_read, authorize_write
-from auth.roles import ROLE_ADMIN
+from auth.current_user import CurrentUser, get_current_user
 from controller.mcp_server_controller import DeploySpec, McpServerController
 from db.database import get_db
 from logger import setup_logger
@@ -187,12 +185,36 @@ def _find_instance(
         .options(
             joinedload(McpInstance.server), joinedload(McpInstance.catalog)
         )
-        .filter(McpInstance.id == id, McpInstance.org_id == user.org_id)
+        .filter(McpInstance.id == id)
         .first()
     )
-    if instance is None:
+    # Who sees the registry's row sees its workload: the organization's
+    # members, or everybody for a platform server.
+    if instance is None or not scopes.can_see(user, instance.server):
         raise HTTPException(status_code=404, detail="MCP server not found")
     return instance
+
+
+def _find_instance_to_change(
+    db: Session, id: uuid.UUID, user: CurrentUser
+) -> McpInstance:
+    instance = _find_instance(db, id, user)
+    _may_change(user, instance, "MCP server")
+    return instance
+
+
+def _may_change(user: CurrentUser, instance: McpInstance, label: str) -> None:
+    """An organization admin for the organization's server, a platform
+    admin for the platform's (``scopes.can_change``). Not the instance
+    policy of the other kinds: that one reads a row without an
+    organization as the default organization's."""
+    if not scopes.can_change(user, instance.server):
+        platform = instance.server.org_id is None
+        raise HTTPException(
+            status_code=403,
+            detail=f"Only {'a platform' if platform else 'an organization'} "
+            f"admin can change this {label}",
+        )
 
 
 def _controller() -> McpServerController:
@@ -261,6 +283,29 @@ _MOCK_LAUNCH = {
 }
 
 
+def _may_deploy(user: CurrentUser, scope: str) -> None:
+    """No personal scope: a deployed server has no credential of its
+    own and its one door is the proxy, where every key of the
+    organization's team reaches every server of the team (measured on
+    v1.99.1: a member's own key lists the tools of another member's
+    server, and a key's own list can only narrow the team's, an empty
+    one not at all). The owner's settings would serve every member."""
+    if scope not in (scopes.SCOPE_ORGANIZATION, scopes.SCOPE_PLATFORM):
+        raise HTTPException(
+            status_code=422,
+            detail="A server is deployed for the organization or for the "
+            "platform, not for one member",
+        )
+    if not scopes.can_create(user, scope):
+        raise HTTPException(
+            status_code=403,
+            detail="Only a platform admin deploys a server for every "
+            "organization"
+            if scope == scopes.SCOPE_PLATFORM
+            else "Only an organization admin deploys an MCP server",
+        )
+
+
 # --- routes ------------------------------------------------------------
 
 
@@ -268,11 +313,14 @@ _MOCK_LAUNCH = {
 def deploy_server(
     body: McpDeployRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(get_current_user),
 ):
-    """Deploy a catalog entry for the organization. A plain ``def``: no
-    ``await`` stands between a flush and its commit (SQLite), and the
-    Helm call runs to its end in this worker thread."""
+    """Deploy a catalog entry: an organization admin for the
+    organization, a platform admin for every organization. A plain
+    ``def``: no ``await`` stands between a flush and its commit (SQLite),
+    and the Helm call runs to its end in this worker thread."""
+    _may_deploy(user, body.scope)
+    platform = body.scope == scopes.SCOPE_PLATFORM
     if not valid_name(body.name):
         raise HTTPException(
             status_code=400,
@@ -299,7 +347,7 @@ def deploy_server(
             status_code=404, detail=f"No catalog entry named {body.catalog}"
         )
     plain, secret = _split(entry, body.settings)
-    if registry._name_taken(db, user, body.name, scopes.SCOPE_ORGANIZATION):
+    if registry._name_taken(db, user, body.name, body.scope):
         raise HTTPException(
             status_code=409, detail=f"MCP server '{body.name}' already exists"
         )
@@ -308,7 +356,8 @@ def deploy_server(
     # resolved before the first row change (``ensure_org_key`` commits).
     litellm = registry._require_litellm()
     try:
-        registry._team_id(litellm, db, user)
+        if not platform:
+            registry._team_id(litellm, db, user)
         if not mock:
             mcp_instances.proxy_selector()
     except LiteLLMError as e:
@@ -321,7 +370,7 @@ def deploy_server(
     namespace = get_default_namespace()
     server = McpServer(
         id=genid.uuid4(),
-        org_id=user.org_id,
+        org_id=None if platform else user.org_id,
         owner_id=None,
         name=body.name,
         description=body.description,
@@ -346,7 +395,7 @@ def deploy_server(
         id=instance_id,
         server=server,
         catalog_id=entry.id,
-        org_id=user.org_id,
+        org_id=None if platform else user.org_id,
         owner_id=user.id,
         settings=plain,
         secret_settings=sorted(secret),
@@ -425,12 +474,12 @@ def update_settings(
     id: uuid.UUID,
     body: McpInstanceSettingsRequest,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """Replace the settings and roll the pod; the way to rotate an
     upstream token, and to repair a Failed server's wrong setting. A
     secret that is left out keeps its value."""
-    instance = _find_instance(db, id, user)
+    instance = _find_instance_to_change(db, id, user)
     entry = instance.catalog
     schema = instance.startup.get("schema") or []
     kept = frozenset(instance.secret_settings or [])
@@ -467,11 +516,11 @@ def update_settings(
 def upgrade_image(
     id: uuid.UUID,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_admin),
+    user: CurrentUser = Depends(get_current_user),
 ):
     """Move the instance to the catalog entry's current image. Never by
     itself: a running server changes only when an admin says so."""
-    instance = _find_instance(db, id, user)
+    instance = _find_instance_to_change(db, id, user)
     entry = instance.catalog
     if entry.status != STATUS_PUBLISHED:
         raise HTTPException(
@@ -513,19 +562,25 @@ def _admins_read_logs(user: CurrentUser, row, label: str) -> None:
     arguments of the calls it gets: a member must not read there what
     another member asked. Events say nothing of the calls, so they stay
     with everybody who sees the server."""
-    if user.role != ROLE_ADMIN:
+    if not scopes.can_change(user, row.server):
+        platform = row.server.org_id is None
         raise HTTPException(
             status_code=403,
-            detail="Only an organization admin reads the logs of an MCP "
-            "server: they can show what other members asked",
+            detail=f"Only {'a platform' if platform else 'an organization'} "
+            "admin reads the logs of an MCP server: they can show what "
+            "other members asked",
         )
+
+
+def _everybody_who_sees_it(user: CurrentUser, row, label: str) -> None:
+    """``_find_instance`` has decided it (``scopes.can_see``)."""
 
 
 MCP_INSTANCE_KIND = InstanceKind(
     label="MCP server",
     find=_find_instance,
-    authorize_read=authorize_read,
-    authorize_write=authorize_write,
+    authorize_read=_everybody_who_sees_it,
+    authorize_write=_may_change,
     make_controller=lambda db, row: McpServerController(),
     namespace=lambda controller, row: controller.namespace,
     pod_labels=lambda db, controller, row: controller.get_pod_labels(row),
@@ -590,7 +645,14 @@ def _register(db: Session, litellm, instance: McpInstance) -> None:
     tick starts again, which the chosen ``server_id`` makes safe."""
     server = instance.server
     alias = litellm_alias(server.id, server.name)
-    team_id = registration.team_id_for_org(litellm, db, server.org_id)
+    # A platform server is for every organization's key, and no team's
+    # list names it (as for a remote one, ``api/mcp.py``).
+    platform = server.org_id is None
+    team_id = (
+        None
+        if platform
+        else registration.team_id_for_org(litellm, db, server.org_id)
+    )
     body = registration.server_body(
         alias,
         server.url,
@@ -600,6 +662,7 @@ def _register(db: Session, litellm, instance: McpInstance) -> None:
         # and a PATCH skips the proxy while there is no registration.
         server.allowed_tools,
         server.description,
+        all_keys=platform,
         server_id=str(server.id),
     )
     # The connection test first: the readiness probe is a TCP check, so
@@ -611,7 +674,8 @@ def _register(db: Session, litellm, instance: McpInstance) -> None:
     registered = registration.register_once(litellm, body)
     server.litellm_server_id = registered
     db.flush()
-    registration.sync_team_for_org(litellm, db, server.org_id, team_id)
+    if not platform:
+        registration.sync_team_for_org(litellm, db, server.org_id, team_id)
     server.tools_cache = [tool_summary(t) for t in tools]
     server.status = STATUS_CONNECTED
     server.checked_at = datetime.now()

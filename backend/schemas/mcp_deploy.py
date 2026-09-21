@@ -79,6 +79,8 @@ class McpDeployRequest(BaseModel):
     settings: dict[str, str] = Field(default_factory=dict)
     allowed_tools: list[str] | None = None
     approval: str | None = None
+    # "organization" or "platform" (``utils/mcp_scope.py``).
+    scope: str = "organization"
 
 
 class McpInstanceSettingsRequest(BaseModel):

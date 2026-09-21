@@ -22,6 +22,7 @@ import type {
   McpRegistryPreview,
   McpServer,
 } from "@/types/mcp";
+import { SCOPE_LABEL } from "@/types/mcp";
 import { ApprovalField } from "@/components/mcp/ApprovalField";
 import { CatalogReviewDialog } from "@/components/mcp/CatalogReviewDialog";
 import {
@@ -46,16 +47,24 @@ const REACHES: Record<string, string> = {
  * A platform admin also sees drafts here, imports an image entry of the
  * MCP registry as a draft, and reviews and publishes it.
  */
+export type DeployScope = "organization" | "platform";
+
 export function DeployMcpServerDialog({
   open,
   onOpenChange,
   onDeployed,
   isPlatformAdmin,
+  scopes,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeployed: (server: McpServer) => void;
   isPlatformAdmin: boolean;
+  /** Who the caller may deploy for: the organization (its admin), the
+      platform (a platform admin). Never one member: a deployed server
+      has no credential of its own, and every key of the organization
+      reaches it in the proxy. */
+  scopes: DeployScope[];
 }) {
   const { toast } = useToast();
   const { mcpRegistry } = useRuntimeConfig();
@@ -65,6 +74,7 @@ export function DeployMcpServerDialog({
   const [description, setDescription] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [approval, setApproval] = useState<McpApproval>("writes");
+  const [scope, setScope] = useState<DeployScope>(scopes[0] ?? "organization");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reviewId, setReviewId] = useState<string | null>(null);
@@ -96,6 +106,7 @@ export function DeployMcpServerDialog({
       setDescription("");
       setValues({});
       setApproval("writes");
+      setScope(scopes[0] ?? "organization");
       setError(null);
       setQuery("");
       setFound(null);
@@ -146,6 +157,7 @@ export function DeployMcpServerDialog({
         description: description.trim() || undefined,
         settings: values,
         approval,
+        scope,
       });
       toast({
         title: "Success",
@@ -358,10 +370,37 @@ export function DeployMcpServerDialog({
                   setValues((current) => ({ ...current, [key]: value }))
                 }
               />
+              {scopes.length > 1 && (
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium">
+                    Who can use it
+                  </legend>
+                  {scopes.map((value) => (
+                    <div key={value} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        id={`mcp-deploy-scope-${value}`}
+                        name="mcp-deploy-scope"
+                        checked={scope === value}
+                        onChange={() => setScope(value)}
+                      />
+                      <Label htmlFor={`mcp-deploy-scope-${value}`}>
+                        {SCOPE_LABEL[value]}
+                      </Label>
+                    </div>
+                  ))}
+                </fieldset>
+              )}
+              {scopes.length === 1 && scope === "platform" && (
+                <p className="text-xs text-muted-foreground">
+                  Every organization of the platform can use this server.
+                </p>
+              )}
               {entry.settings.some((s) => s.secret) && (
                 <p className="text-xs text-muted-foreground">
-                  Every member&apos;s model acts with these credentials through
-                  the tools.
+                  {scope === "platform"
+                    ? "The model of every member of every organization acts with these credentials through the tools."
+                    : "Every member\u2019s model acts with these credentials through the tools."}
                 </p>
               )}
               <ApprovalField

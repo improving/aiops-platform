@@ -110,6 +110,13 @@ export function usable(server: McpServer): boolean {
   );
 }
 
+/** Who a server is for, as the add and the deploy dialog say it. */
+export const SCOPE_LABEL: Record<McpScope, string> = {
+  organization: "Every member of this organization",
+  personal: "Only me",
+  platform: "Every organization of the platform",
+};
+
 /** A deployed server that is still on its way: worth polling for. */
 export function isStarting(server: McpServer): boolean {
   const deploy = server.deploy;

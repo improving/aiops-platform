@@ -221,6 +221,35 @@ export function summaryTokens(window: number | null | undefined): number {
   return Math.min(4000, Math.max(700, Math.floor(window / 4)));
 }
 
+/**
+ * The tokens of the summary's own text. A reasoning model's output count
+ * holds its thinking too (measured on the lab: 2,651 for a summary of
+ * about 400), and the thinking never comes back with a request. So: the
+ * text count when the model reports it, else the output less the
+ * reasoning, else an estimate from the text (3.5 characters a token, as
+ * `toolBudget.ts`), never more than the output. Without thinking the
+ * output count is exact.
+ */
+export function summaryTextTokens(
+  summary: string,
+  usage: {
+    outputTokens?: number;
+    outputTokenDetails?: { textTokens?: number; reasoningTokens?: number };
+  },
+  thought: boolean
+): number {
+  const output = usage.outputTokens;
+  const text = usage.outputTokenDetails?.textTokens;
+  if (text !== undefined && text > 0) return text;
+  if (!thought && output !== undefined) return output;
+  const reasoning = usage.outputTokenDetails?.reasoningTokens;
+  if (output !== undefined && reasoning && reasoning < output) {
+    return output - reasoning;
+  }
+  const estimate = Math.ceil(summary.length / 3.5);
+  return output !== undefined ? Math.min(output, estimate) : estimate;
+}
+
 /** Room for the transcript: half of the window, at 3 characters a token
     (the other half is the instructions, the summary and a margin). */
 export function transcriptBudget(window: number | null | undefined): number {

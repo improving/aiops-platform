@@ -41,7 +41,10 @@ import {
 import { usePolling } from "@/hooks/usePolling";
 import { ErrorBanner } from "@/components/instances/ErrorBanner";
 import { LaunchProgress } from "@/components/instances/LaunchProgress";
-import { DeployMcpServerDialog } from "@/components/mcp/DeployMcpServerDialog";
+import {
+  DeployMcpServerDialog,
+  type DeployScope,
+} from "@/components/mcp/DeployMcpServerDialog";
 import { TableSkeleton } from "@/components/LoadingState";
 import { ConnectCredentialDialog } from "@/components/mcp/ConnectCredentialDialog";
 import { AddMcpServerDialog } from "@/components/mcp/AddMcpServerDialog";
@@ -121,6 +124,13 @@ export default function McpServersPage() {
     ...(isPlatformAdmin ? (["platform"] as const) : []),
   ];
   const canAdd = addScopes.length > 0;
+  // A server is deployed for the organization or for the platform, never
+  // for one member (the backend says why).
+  const deployScopes: DeployScope[] = [
+    ...(isAdmin ? (["organization"] as const) : []),
+    ...(isPlatformAdmin ? (["platform"] as const) : []),
+  ];
+  const canDeploy = deployScopes.length > 0;
   const [connectServer, setConnectServer] = useState<McpServer | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,9 +282,10 @@ export default function McpServersPage() {
           {canAdd &&
             !litellmError &&
             servers.length > 0 &&
-            (isAdmin ? (
-              // Only an organization admin deploys, so only they get the
-              // choice; the trigger keeps the button's name.
+            (canDeploy ? (
+              // Only an admin (of the organization, or of the platform)
+              // deploys, so only they get the choice; the trigger keeps
+              // the button's name.
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <Button type="button">
@@ -319,7 +330,7 @@ export default function McpServersPage() {
                     <Button type="button" onClick={() => openAdd()}>
                       + Add MCP server
                     </Button>
-                    {isAdmin && (
+                    {canDeploy && (
                       <Button
                         type="button"
                         variant="outline"
@@ -552,6 +563,7 @@ export default function McpServersPage() {
         open={deployOpen}
         onOpenChange={setDeployOpen}
         isPlatformAdmin={isPlatformAdmin}
+        scopes={deployScopes}
         onDeployed={(server) => setServers((prev) => [...prev, server])}
       />
 

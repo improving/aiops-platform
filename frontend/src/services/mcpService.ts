@@ -84,6 +84,8 @@ export const mcpService = {
     description?: string;
     settings: Record<string, string>;
     approval?: McpApproval;
+    /** "organization" (the default) or "platform"; never "personal". */
+    scope?: McpScope;
   }) => (await api.post<McpServer>(INSTANCES, body)).data,
 
   getInstance: async (id: string) =>

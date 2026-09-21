@@ -1,4 +1,4 @@
-import { test, expect, shortId } from "../fixtures";
+import { test, expect, shortId, FAILED_RESOURCE } from "../fixtures";
 import { McpServersPage } from "../pages/mcp-servers";
 
 // MCP servers the platform deploys. With AIOPS_CHAT_MOCK the backend
@@ -209,5 +209,63 @@ test.describe("the deploy catalog of a platform admin", () => {
     await expect(
       dialog.getByRole("list", { name: "Catalog" })
     ).not.toContainText("midplane");
+  });
+});
+
+// A server is deployed for the organization or for the platform. The
+// request is answered here, not by the backend: a real platform server
+// would show in every organization of every test that runs at this time.
+test.describe("who a deployed server is for", () => {
+  test.use({ allowedConsoleErrors: [FAILED_RESOURCE] });
+
+  test("a platform admin chooses; an organization admin deploys for the organization", async ({
+    page,
+    asUser,
+  }) => {
+    let sent: { scope?: string } | undefined;
+    await page.route("**/api/v1alpha1/mcp/instances", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      sent = route.request().postDataJSON();
+      await route.fulfill({
+        status: 409,
+        json: { detail: "Answered by the test" },
+      });
+    });
+    const mcp = new McpServersPage(page);
+    await mcp.open();
+    await mcp.waitForLoaded();
+    const dialog = await mcp.openDeployDialog();
+    await dialog.getByRole("button", { name: "Choose Grafana" }).click();
+    await expect(
+      dialog.getByRole("radio", { name: "Every member of this organization" })
+    ).toBeChecked();
+    // Never for one member: every key of the organization reaches a
+    // deployed server in the proxy.
+    await expect(dialog.getByRole("radio", { name: "Only me" })).toHaveCount(0);
+    await dialog
+      .getByRole("radio", { name: "Every organization of the platform" })
+      .check();
+    await expect(dialog).toContainText(
+      "every member of every organization acts with these credentials"
+    );
+    await dialog.getByLabel("Name", { exact: true }).fill(`plat_${shortId()}`);
+    await dialog.getByLabel("Grafana URL *").fill("http://grafana:3000");
+    await dialog.getByRole("button", { name: "Deploy" }).click();
+    await expect(dialog.getByRole("alert")).toContainText(
+      "Answered by the test"
+    );
+    expect(sent?.scope).toBe("platform");
+
+    const ctx = await asUser("orgadmin");
+    const adminPage = await ctx.newPage();
+    const admin = new McpServersPage(adminPage);
+    await admin.open();
+    await admin.waitForLoaded();
+    const theirs = await admin.openDeployDialog();
+    await theirs.getByRole("button", { name: "Choose Grafana" }).click();
+    await expect(theirs.getByLabel("Name", { exact: true })).toBeVisible();
+    await expect(
+      theirs.getByRole("group", { name: "Who can use it" })
+    ).toHaveCount(0);
   });
 });

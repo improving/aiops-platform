@@ -3,6 +3,7 @@ import { backendHeaders, chatProvider } from "@/lib/chatBackend";
 import {
   COMPACTION_INSTRUCTIONS,
   MAX_TRANSCRIPT_CHARS,
+  summaryTextTokens,
   summaryTokens,
 } from "@/lib/compaction";
 
@@ -69,10 +70,11 @@ export async function POST(req: Request) {
         failure = error;
       },
     });
-    const [text, usage, finishReason] = await Promise.all([
+    const [text, usage, finishReason, finalStep] = await Promise.all([
       result.text,
       result.usage,
       result.finishReason,
+      result.finalStep,
     ]).catch((error: unknown) => {
       // The stream's own error says why; the promise only says "no output".
       throw failure ?? error;
@@ -92,7 +94,12 @@ export async function POST(req: Request) {
     }
     return Response.json({
       summary,
-      summaryTokens: usage.outputTokens,
+      // The text alone: the thinking does not come back with a request.
+      summaryTokens: summaryTextTokens(
+        summary,
+        usage,
+        !!finalStep.reasoningText
+      ),
       inputTokens: usage.inputTokens,
     });
   } catch (error) {

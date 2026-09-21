@@ -22,6 +22,7 @@ import type {
   McpTool,
   McpTransport,
 } from "@/types/mcp";
+import { SCOPE_LABEL } from "@/types/mcp";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RegistrySearch } from "@/components/mcp/RegistrySearch";
 import { useRuntimeConfig } from "@/lib/runtimeConfig";
@@ -46,12 +47,6 @@ interface AddMcpServerDialogProps {
       ["organization", "personal", ...], a member ["personal"]. */
   scopes: McpScope[];
 }
-
-const SCOPE_LABEL: Record<McpScope, string> = {
-  organization: "Every member of this organization",
-  personal: "Only me",
-  platform: "Every organization of the platform",
-};
 
 export function AddMcpServerDialog({
   open,

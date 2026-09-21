@@ -574,6 +574,95 @@ def test_an_entry_in_use_cannot_be_deleted_and_a_deployed_row_is_never_personal(
     assert _server(client, server["id"], OUTSIDER) is None
 
 
+def test_a_platform_server_is_deployed_by_a_platform_admin_for_everybody(
+    env, monkeypatch
+):
+    client, litellm = env
+    # An organization admin is not enough, and nobody deploys for one
+    # member: every key of the team would reach that server.
+    refused = _deploy(client, ORGADMIN, scope="platform")
+    assert refused.status_code == 403
+    assert "platform admin" in refused.json()["detail"]
+    personal = _deploy(client, scope="personal")
+    assert personal.status_code == 422
+    assert "not for one member" in personal.json()["detail"]
+
+    server = _deploy(client, scope="platform").json()
+    assert server["scope"] == "platform"
+    instance_id = server["deploy"]["instance_id"]
+    db = get_db_direct()
+    try:
+        row = db.get(McpServer, uuid.UUID(server["id"]))
+        assert row.org_id is None and row.owner_id is None
+        assert row.instance.org_id is None
+    finally:
+        db.close()
+
+    # No team is asked for and none is synced: the proxy serves the
+    # server to every organization's key.
+    def no_team(*args):
+        raise AssertionError("a platform server has no team")
+
+    monkeypatch.setattr("utils.mcp_registration.team_id_for_org", no_team)
+    _tick(litellm, instance_id, READY)
+    body = litellm.register_mcp_server.call_args.args[0]
+    assert body["allow_all_keys"] is True
+    assert body["server_id"] == server["id"]
+    litellm.set_team_mcp_servers.assert_not_called()
+
+    # Another organization's member sees and uses it, and changes nothing.
+    seen = _server(client, server["id"], OUTSIDER)
+    assert seen["deploy"]["usable"] is True and seen["can_change"] is False
+    base = f"{INSTANCES}/{instance_id}"
+    assert client.get(base, headers=OUTSIDER).status_code == 200
+    for headers in (OUTSIDER, ORGADMIN):
+        change = client.put(
+            f"{base}/settings",
+            json={"settings": {"GRAFANA_URL": "http://other"}},
+            headers=headers,
+        )
+        assert change.status_code == 403, headers
+        assert "platform admin" in change.json()["detail"]
+        assert (
+            client.post(f"{base}/upgrade", headers=headers).status_code == 403
+        )
+        assert (
+            client.post(f"{base}/restart", headers=headers).status_code == 403
+        )
+        assert (
+            client.delete(
+                f"{SERVERS}/{server['id']}", headers=headers
+            ).status_code
+            == 403
+        )
+    # The logs of a platform server: not an organization's admin either.
+    monkeypatch.setattr(
+        "api.instance_inspection.pod_logs",
+        lambda *args, **kwargs: {"pods": []},
+    )
+    assert client.get(f"{base}/logs").status_code == 200
+    refused = client.get(f"{base}/logs", headers=ORGADMIN)
+    assert refused.status_code == 403
+    assert "platform admin" in refused.json()["detail"]
+    assert client.delete(f"{SERVERS}/{server['id']}").status_code == 204
+
+
+def test_an_organizations_server_is_not_another_organizations(env):
+    client, _ = env
+    server = _deploy(client).json()
+    base = f"{INSTANCES}/{server['deploy']['instance_id']}"
+    assert client.get(base, headers=OUTSIDER).status_code == 404
+    assert client.get(f"{base}/events", headers=OUTSIDER).status_code == 404
+    # A member reads it and changes nothing.
+    assert client.get(base, headers=ALICE).status_code == 200
+    change = client.put(
+        f"{base}/settings", json={"settings": {}}, headers=ALICE
+    )
+    assert change.status_code == 403
+    assert "organization admin" in change.json()["detail"]
+    assert client.post(f"{base}/restart", headers=ALICE).status_code == 403
+
+
 def test_only_an_admin_reads_the_logs_of_a_deployed_server(env, monkeypatch):
     """The logs can repeat the arguments of other members' tool calls."""
     client, _ = env
