@@ -66,11 +66,11 @@ export default function Develop() {
   }
 
   return (
-    // A bounded height, as on the chat page: the shell around this page
-    // (header, title, footer) is the 18rem, and the editor takes the rest
-    // (flex-1 with min-h-0, or the frame keeps its own height and the
-    // panel above pushes it below the fold).
-    <div className="flex h-[calc(100vh-18rem)] min-h-[24rem] flex-col gap-2">
+    // All the height the window has left, as on the chat page (a `fill`
+    // Dashboard): the editor takes the rest (flex-1 with min-h-0, or the
+    // frame keeps its own height and the panel above pushes it below
+    // the fold).
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <OrganizationPanel
         provision={provision}
         problem={problem}

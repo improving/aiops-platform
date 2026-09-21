@@ -32,7 +32,10 @@ export function EmptyConversation({
     ? CODING_PROMPTS
     : GENERAL_PROMPTS;
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+    // flex-1, not h-full: the parent has a MINIMUM height (it grows with
+    // the conversation), and a percentage of that is nothing, so h-full
+    // left this block at the top of an empty conversation.
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
       <div>
         <p className="font-medium">{target.label}</p>
         <p className="text-sm text-muted-foreground">

@@ -114,7 +114,7 @@ export default function Header() {
           >
             AI Hub
           </Link>
-          <NavigationMenu className="hidden md:flex">
+          <NavigationMenu className="hidden xl:flex">
             <NavigationMenuList>
               {menuItems.map((item) => (
                 <NavigationMenuItem key={item.label}>
@@ -178,10 +178,12 @@ export default function Header() {
           </NavigationMenu>
         </div>
         <div className="flex items-center space-x-4">
-          <div className="hidden items-center md:flex md:ml-4">
+          {/* The whole navigation needs about 1,190 px: below xl (1280) it
+              is the menu button. At md it pushed every page 420 px wide. */}
+          <div className="hidden items-center xl:ml-4 xl:flex">
             <ThemeDropdown setTheme={setTheme} />
           </div>
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-2 xl:hidden">
             <ThemeDropdown setTheme={setTheme} />
             <MobileNav menuItems={menuItems} isActive={isActive} />
           </div>

@@ -16,7 +16,7 @@ function ChatWithSession() {
 
 export default function ChatRoute() {
   return (
-    <Dashboard title="Chat">
+    <Dashboard title="Chat" fill>
       <Suspense>
         {AUTH_DISABLED ? <ChatPanel userKey="dev" /> : <ChatWithSession />}
       </Suspense>

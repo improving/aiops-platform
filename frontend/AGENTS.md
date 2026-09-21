@@ -120,7 +120,9 @@ pnpm e2e:ui                               # Playwright UI mode
   The Settings sheet (`ChatSettings.tsx` is its content) has what is needed now and then: system prompt (first, the one used most), temperature, max tokens, "Compact automatically" and "Ask before each tool call".
   The tools are in the composer's row, where a message is written (`Composer`'s `tools` slot): `ChatTools.tsx` is a button "Tools" with a count (amber while the window warning is on), chips of what is on (`list` "Tools that are on", a "Turn off <name>" button each, "+N" after three), and a popover that holds the `role="group"` "Tools":
   the window estimate, a search field from six entries on, the servers grouped as On, Available and Needs attention, the Functions group, and "Manage MCP servers". "Connect" and the function dialogs close the popover first. The window meter is a small ring with the numbers, next to "Compact".
-  The conversation's height is `100vh - 18.5rem`: the 18rem shell plus the composer's taller row; an existing spec ("a long conversation scrolls inside the log, not the page") fails when a change of the layout makes the page scroll.
+  The chat and the Develop page are `fill` pages (`<Dashboard fill>`): the root is a column of the window's height (`h-dvh`, a minimum of 32rem), the title is small, the footer compact, and the content's root is `flex min-h-0 flex-1`, so the conversation (or the editor) takes ALL the height that is left.
+  No height is computed from a guess of the shell any more: `100vh - 18rem` left 85 px unused on a large screen. `min-h-0` down the chain is what makes the log scroll in itself; "a long conversation scrolls inside the log, not the page" fails when that breaks.
+  An empty conversation is centered in the log (`EmptyConversation` is `flex-1`, not `h-full`: a percentage of a parent that has only a minimum height is nothing).
   Page object: the Tools group and the settings fields are NOT on the page until opened: `chat.openTools()` / `closeTools()`, `chat.openSettings()` / `closeSettings()` (`send()` closes both itself; the sheet is modal, so `openTools()` closes it first). A locator saved from `chat.tools` still needs the popover open at the moment of the click.
   `components/chat/useToolServers.ts` keeps the user's choice in `localStorage` (`aiops.chat.tools.<user>`, across targets; `?tools=a,b` adds to it, which is what "Try in chat" links use),
   and `ChatTools.tsx` holds the Tools group (`role="group"` "Tools", a switch `Use <name>` per server): blocked with the reason when `ChatTarget.tools` is false
@@ -147,7 +149,7 @@ pnpm e2e:ui                               # Playwright UI mode
   `ChatSettings.tsx` (temperature slider behind a "Model default" switch, `Max tokens`, "View code" from `src/lib/playgroundExamples.ts`, which shows the platform API with a personal token, not the instance host)
   and `EmptyConversation.tsx` (starter prompts that fill the field and do not send).
   "Clear conversation" clears at once and offers Undo in the toast. The log is `aria-live="off"`; a hidden status announces a finished answer once.
-  The conversation section has a bounded height (`h-[calc(100vh-18rem)]`, the 18rem being the shell around it)
+  The conversation section has a bounded height (it is the flexible part of a `fill` page, see Layout above)
   and the log inside it carries `min-h-0` next to `flex-1`: without both, the section grew with the history,
   the log never scrolled and the composer was pushed off the page.
   The log follows the newest message unless the reader has scrolled up (a `pinned` ref, never state, so
@@ -192,7 +194,7 @@ pnpm e2e:ui                               # Playwright UI mode
   The Logs tab of a deployed server shows for an admin only (the backend answers a member 403).
   `usable()` also needs `deploy.usable`, so Chat shows such a server as "starting" or "failed" and keeps it off. `e2e/fast/mcp-import.spec.ts`, `e2e/fast/mcp-deploy.spec.ts` (logs are stubbed), `e2e/cluster/mcp-deploy.spec.ts` (real Helm and poller on kind, the closed Service).
   A `Link` inside a `DropdownMenuItem asChild` needs `prefetch={false}`, as in `UserMenu.tsx`.
-  The nav label is "MCP", short on purpose: one more long label wraps the header to a second line at 1280 px, and the chat page's bounded height (`100vh-18rem`) counts on one line.
+  The nav label is "MCP", short on purpose: one more long label wraps the header to a second line at 1280 px.
   The page object's `openActions` waits until the previous menu has left the DOM: a click on the trigger while a menu animates out opens one that closes at once.
 - Usage: `/usage` (`UsagePage.tsx`, `src/services/usageService.ts`) reads
   `GET /v1alpha1/organizations/current/usage?days=` (a "Period" combobox, "Last 7 days"/"Last 30 days") and
@@ -211,7 +213,8 @@ pnpm e2e:ui                               # Playwright UI mode
   `src/app/globals.css`). `button.tsx` carries local `loading`, `loadingIcon` and `icon` props and passes a single
   child through when `asChild` is set; re-apply that after a `shadcn add --overwrite`. The `toast` component is
   deprecated upstream but still used.
-- `Header.tsx` builds the navigation from one `menuItems` array shared with `MobileNav.tsx` (a `Sheet` below `md`).
+- `Header.tsx` builds the navigation from one `menuItems` array shared with `MobileNav.tsx` (a `Sheet` below `xl`, 1280 px: the full bar needs about 1,190 px, and at `md` it made every page 420 px too wide on a tablet).
+  `e2e/fast/responsive.spec.ts` holds the rule for every page: the PAGE never scrolls sideways at 390, 768 and 1024 px (a wide table scrolls inside its own wrapper); add a new page to its list.
   Top-level links use `NavigationMenuLink asChild` with `flex-row`, never `Link legacyBehavior`.
 - Loading placeholders come from `src/components/LoadingState.tsx` (`CardGridSkeleton`, `DetailSkeleton`,
   `TableSkeleton`), each wrapped in `role="status" aria-label="Loading"`; specs wait with
@@ -279,7 +282,7 @@ pnpm e2e:ui                               # Playwright UI mode
   manages, a "Models (N)" `Combobox` (the search matches the name and the label, selecting an `option` copies
   the name through `useCopy()` from `CopyButton.tsx`), a "Sync again" button and an "Open in a new tab" link,
   plus the failure detail in a `role="alert"`; the names stay behind the picker so the editor keeps the page
-  (`h-[calc(100vh-18rem)]` like the chat page, the iframe `flex-1 min-h-0`). The sync keeps an in-flight ref:
+  (a `fill` page like the chat page, the iframe `flex-1 min-h-0`). The sync keeps an in-flight ref:
   strict mode in `next dev` mounts twice, and two concurrent creates of one Langflow variable fail.
 - `src/components/ui/combobox.tsx` `Combobox` is the one searchable dropdown (a `role="combobox"` trigger with
   `aria-expanded`, a `Popover` holding a `Command` list that closes on select; `items` carry `value`,

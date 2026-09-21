@@ -615,7 +615,7 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col">
       {editing !== undefined && (
         <FunctionDialog
           key={editing || "new"}
@@ -665,13 +665,13 @@ export default function ChatPanel({ userKey }: { userKey: string }) {
         </SheetContent>
       </Sheet>
 
-      {/* A bounded height, not a minimum: with only min-h the section grew
-          with the conversation, so the log below never became scrollable
-          and the composer was pushed off the bottom of the page. The 18rem
-          is the shell around it (header, title, footer), measured at 274px,
-          and the half rem more is the composer's taller row;
-          min-h keeps it usable when the viewport is short. */}
-      <section className="flex h-[calc(100vh-18.5rem)] min-h-[24rem] min-w-0 flex-col">
+      {/* All the height the window has left: the page is a `fill`
+          Dashboard (a column of the window's height), and this section is
+          its flexible part. No height is computed from a guess of what the
+          shell takes; that left 85 px unused on a large screen. min-h-0
+          down the chain is what lets the log below scroll in itself and
+          not push the composer away. */}
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           ref={logRef}
           onScroll={onLogScroll}
