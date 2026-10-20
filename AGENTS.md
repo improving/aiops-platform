@@ -125,7 +125,7 @@ and why deployed instances no longer need a `LoadBalancer` IP.
 
 ## Packaging
 
-`charts/aiops-platform` (version 0.3.8) is the umbrella chart that installs the platform (`docs/install.md`):
+`charts/aiops-platform` (version 0.3.9) is the umbrella chart that installs the platform (`docs/install.md`):
 the backend and frontend templates live in the chart,
 Postgres, Keycloak and LiteLLM are conditional dependencies (`<name>.enabled`, `<name>.external.*`) with fixed names
 (`aiops-postgresql`, `aiops-keycloak`, `aiops-litellm`) so the subchart values can reference each other literally,
@@ -138,6 +138,8 @@ and `hack/chart-smoke.sh` checks the API, the realm and the login page through t
 The UI reads Grafana, Langflow and Jaeger URLs at runtime from `GET /v1alpha1/config/ui` (`backend/api/config.py`, backend env `GRAFANA_URL`, `LANGFLOW_URL`, `JAEGER_URL`),
 falling back to the build-time `NEXT_PUBLIC_*` values (`frontend/src/lib/runtimeConfig.ts`).
 `backend.hfCache.create` renders the `hf-cache` claim the GPU engine controllers mount by that fixed name (off by default).
+`viz.enabled` serves the AI Factory Explorer (a static image published from `ai-platform-sre-training/viz`) on `viz.<parentDomain>`;
+its `viz.image.tag` is separate from `global.imageTag` and defaults to `main`.
 The lab's GPU node is a single k3s node that also carries a dormant Platform9 PCD install, not the kubespray lab under `infra/kubernetes/`:
 `infra/lab/README.md` has its measured facts, what it reuses (the node's cert-manager and MetalLB) and the install order,
 `test/values-lab.yaml` is the chart fixture, and `hack/lab-dry-run.sh` checks all of it against the node without changing it.

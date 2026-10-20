@@ -191,6 +191,17 @@ so a post-install and post-upgrade hook Job (`<release>-policy-check`) waits unt
 on the workloads policy and on Langflow's, and fails the release otherwise;
 `kubectl -n <namespace> get securitypolicy -o jsonpath='{.items[*].status.ancestors[0].conditions}'` shows the reason.
 
+## The AI Factory Explorer
+
+`viz.enabled=true` deploys the AI Factory Explorer
+(`ghcr.io/infracloudio/ai-factory-explorer`, built from `viz/` in the `infracloudio/ai-platform-sre-training` repository)
+at `https://viz.<parent domain>`.
+The app is one static file served by unprivileged nginx: it has no backend, no database and no login,
+and the gateway routes the host to its Service without a `SecurityPolicy`.
+`viz.image.tag` is the explorer's own tag (`main`, or the seven-character commit SHA the image workflow publishes);
+it is not `global.imageTag`, which belongs to the backend and the UI.
+The chart defaults `viz.enabled` to `false`, so an install that does not need the explorer pulls no image.
+
 ## MCP servers and the proxy's outgoing connections
 
 Organization admins register remote MCP servers by URL (`/mcp-servers`).

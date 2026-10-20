@@ -130,12 +130,20 @@ postgresql://{{ include "aiops-platform.databaseHost" . }}:{{ if .Values.postgre
 {{ include "aiops-platform.fullname" . }}-frontend
 {{- end }}
 
+{{- define "aiops-platform.vizFullname" -}}
+{{ include "aiops-platform.fullname" . }}-viz
+{{- end }}
+
 {{- define "aiops-platform.backendImage" -}}
 {{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Values.global.imageTag }}
 {{- end }}
 
 {{- define "aiops-platform.frontendImage" -}}
 {{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag | default .Values.global.imageTag }}
+{{- end }}
+
+{{- define "aiops-platform.vizImage" -}}
+{{ .Values.viz.image.repository }}:{{ .Values.viz.image.tag }}
 {{- end }}
 
 {{- define "aiops-platform.backendServiceAccountName" -}}

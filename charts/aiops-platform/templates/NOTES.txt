@@ -9,6 +9,9 @@ Set it to the DNS suffix that reaches your Gateway and upgrade the release.
 Hosts (behind Gateway {{ include "aiops-platform.gatewayName" . }} in {{ include "aiops-platform.gatewayNamespace" . }}):
   UI    https://{{ include "aiops-platform.host" (dict "root" . "label" .Values.gateway.hosts.ui) }}/
   API   https://{{ include "aiops-platform.host" (dict "root" . "label" .Values.gateway.hosts.api) }}/health
+{{- if .Values.viz.enabled }}
+  Explorer  https://{{ include "aiops-platform.host" (dict "root" . "label" .Values.gateway.hosts.viz) }}/
+{{- end }}
 {{- if .Values.langflow.enabled }}
   Langflow  https://{{ include "aiops-platform.langflowHost" . }}/  (signed in as the platform user)
 {{- end }}
@@ -20,7 +23,8 @@ Hosts (behind Gateway {{ include "aiops-platform.gatewayName" . }} in {{ include
 {{- else }}
 
 gateway.enabled is false: the API and the UI are ClusterIP Services only
-({{ include "aiops-platform.backendFullname" . }}:8000, {{ include "aiops-platform.frontendFullname" . }}:80).
+({{ include "aiops-platform.backendFullname" . }}:8000, {{ include "aiops-platform.frontendFullname" . }}:80){{ if .Values.viz.enabled }},
+and so is the Explorer ({{ include "aiops-platform.vizFullname" . }}:80){{ end }}.
 {{- end }}
 
 Credentials live in Secret {{ .Values.secrets.name }}.

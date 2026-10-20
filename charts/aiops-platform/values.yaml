@@ -140,6 +140,41 @@ frontend:
   nodeSelector: {}
   tolerations: []
 
+viz:
+  # The AI Factory Explorer (ai-platform-sre-training/viz): one static file
+  # served by nginx on viz.<parentDomain>. It has no backend and no login;
+  # the gateway routes the host to this Service and nothing else. Off by
+  # default, so an install that does not need the explorer pulls no image.
+  enabled: false
+  image:
+    repository: ghcr.io/infracloudio/ai-factory-explorer
+    # The explorer is published from its own repository, so this tag is not
+    # global.imageTag: :main or a seven-character commit SHA.
+    tag: main
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+  # nginxinc/nginx-unprivileged runs as uid/gid 101 and listens on 8080.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    # nginx writes its pid and cache under the image's root file system.
+    readOnlyRootFilesystem: false
+  nodeSelector: {}
+  tolerations: []
+
 secrets:
   # The one Secret the platform and the subcharts read. The name is fixed
   # because the subchart values below reference it literally.
@@ -177,6 +212,7 @@ gateway:
     api: api
     auth: auth
     sso: sso
+    viz: viz
     # Langflow's host is langflow.<parentDomain>, not a knob: the backend's
     # ext-authz and the realm's callback name that label.
   tls:
