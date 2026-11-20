@@ -1,0 +1,22 @@
+AIOps Platform
+Copyright 2026 Improving
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It bundles and adapts work from the following projects.
+Each remains under its own license, and the upstream repository is named in
+the `sources` field of the relevant `charts/<name>/Chart.yaml`.
+
+- Helm charts under `charts/` for vLLM, Hugging Face text-generation-inference,
+  text-embeddings-inference, Ollama, ChromaDB, the OPEA GenAIComps services
+  and Kubeflow notebooks.
+- Grafana dashboards under `charts/infracloud-dashboards/grafana-dashboards/`,
+  forked from community dashboards for NVIDIA DCGM, vLLM, TGI and TEI, with
+  local changes; the LiteLLM dashboard is written for this project.
+- The model catalog under `backend/raw_data/models.yaml` describes models
+  published by their own authors. The catalog is metadata; no model weights
+  are distributed here.
+
+Container images referenced by the charts and by the platform are pulled
+from their own registries at deploy time and are not distributed with this
+repository.

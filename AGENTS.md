@@ -166,12 +166,17 @@ Its Bitnami and LiteLLM dependencies are OCI references and need no `helm repo a
   or `frontend/playwright/.auth/` (saved Keycloak login state for the Playwright cluster tier);
   both are git-ignored on purpose.
 - Markdown in this repository uses semantic line breaks (one sentence or clause per line).
+- The repository is public under the Apache License 2.0 (`LICENSE`, `NOTICE`).
+  `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md` are the files a contributor reads first;
+  keep them accurate when a command or a convention changes.
 
 ## CI
 
 Workflows in `.github/workflows/` are path-filtered: `backend-ci.yml`, `frontend-ci.yml` and `charts-release.yml`
 (lint and package only on push) run on `main` and pull requests; `frontend-e2e.yml` runs the fast Playwright tier on
-pull requests. The image workflows (`*-image.yml`) publish `ghcr.io/improving/aiops-backend` and `aiops-frontend`
+pull requests, and `codeql.yml` scans Python and TypeScript on pull requests, on push to `main` and weekly.
+`dependabot.yml` groups weekly updates for uv, pnpm, GitHub Actions and the two Dockerfiles.
+The image workflows (`*-image.yml`) publish `ghcr.io/improving/aiops-backend` and `aiops-frontend`
 on every push to `main` that changes `backend/` or `frontend/`, tagged `main` and the seven-character commit SHA,
 and build without pushing on pull requests.
 Both workflows share one path list on purpose: the chart pins both images through the single `global.imageTag`,
