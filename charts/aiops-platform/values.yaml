@@ -141,16 +141,15 @@ frontend:
   tolerations: []
 
 viz:
-  # An optional static site served by nginx on viz.<parentDomain>: one HTML
-  # file or a small bundle, with no backend and no login. The gateway routes
-  # the host to this Service and nothing else. Off by default, and it brings
-  # no image of its own: set viz.image.repository to yours.
+  # The AI Factory Explorer (improving/ai-factory-explorer): one static file
+  # served by nginx on viz.<parentDomain>. It has no backend and no login;
+  # the gateway routes the host to this Service and nothing else. Off by
+  # default, so an install that does not need it pulls no image.
   enabled: false
   image:
-    # Required when viz.enabled is true. Any image that serves its files on
-    # port 8080 as a non-root user works (nginxinc/nginx-unprivileged is one).
-    repository: ""
-    # The site's own tag, not global.imageTag.
+    repository: ghcr.io/improving/ai-factory-explorer
+    # The explorer is published from its own repository, so this tag is not
+    # global.imageTag: :main or a seven-character commit SHA.
     tag: main
     pullPolicy: IfNotPresent
   replicas: 1
