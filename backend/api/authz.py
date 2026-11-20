@@ -6,7 +6,7 @@ request to a workload host (``nb-<id8>``, ``vdb-<id8>``, ``vdb-<id8>-api``,
 gateway copies to the upstream, 403 when the user may not use the
 instance (or, on the Langflow host, is not a person), 404 when the host
 is neither, and 401 without a valid token (the dependency).
-See docs/superpowers/plans/2026-09-04-authentication.md, Task 9.
+See ADR 0002.
 """
 
 from collections.abc import Callable

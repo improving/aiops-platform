@@ -50,11 +50,6 @@ prereqs: ## Check required local tools are installed
 			missing=1; \
 		fi; \
 	done; \
-	if command -v kubeconform >/dev/null 2>&1; then \
-		printf "  [ok]      kubeconform (optional, hack/lab-dry-run.sh)\n"; \
-	else \
-		printf "  [info]    kubeconform not found (optional, only hack/lab-dry-run.sh needs it)\n"; \
-	fi; \
 	if command -v colima >/dev/null 2>&1; then \
 		if colima status >/dev/null 2>&1; then \
 			printf "  [ok]      colima is running\n"; \

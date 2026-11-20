@@ -3,7 +3,6 @@
 `charts/aiops-platform` installs the control plane on a Kubernetes cluster:
 the backend API, the UI, the gateway objects,
 and Postgres, Keycloak and LiteLLM as dependencies that can each be replaced by an external system.
-The raw manifests under `infra/aiops/` remain for the lab until the chart is verified there.
 
 ## Prerequisites
 
@@ -291,11 +290,10 @@ on kind `make chart-uninstall` deletes the namespace and the certificate Secret.
 The chart renders no `GatewayClass` and no `EnvoyProxy`, and a cluster without the kind stack needs both:
 the `EnvoyProxy` must order the `oauth2` filter before `ext_authz` (login fails without it)
 and expose the Envoy Service as a `LoadBalancer`.
-`infra/lab/` holds these objects, a CA issuer, monitoring and GPU operator values and the install order for the lab's k3s GPU node,
-with `charts/aiops-platform/test/values-lab.yaml` as the chart fixture.
+`charts/aiops-platform/test/values-gpu-node.yaml` is the fixture for that shape:
+one node, a `GatewayClass` of your own, a private CA and a model cache on a node-local StorageClass.
 Check what the cluster runs already before installing cluster-level components:
 `make gateway-up` installs cert-manager and must not run against a cluster that has one.
-`hack/lab-dry-run.sh` automates that check for the lab node.
 
 ## Known limitations
 
@@ -315,10 +313,8 @@ Check what the cluster runs already before installing cluster-level components:
   Both images carry the same tag, and a commit that changes only charts or docs publishes none,
   so the newest tag is what `make image-tag` prints on an up-to-date `main`
   (the last commit that touched `backend/`, `frontend/` or the two image workflows), not `HEAD`.
-- The chart is verified on kind and, since 2026-09-18, on the lab's k3s GPU node (chart 0.3.0, image tag `1f87e31`):
-  `infra/lab/README.md` has the install order and what that first run showed, and `hack/chart-smoke.sh --skip-install` passed there.
-  GPU engines launched from the UI are not verified there yet.
-  The legacy `infra/aiops/` manifests describe the retired kubespray lab and can now be retired (`infra/aiops/README.md`).
+- The chart is verified on kind, and on a single-node k3s GPU cluster through the `values-gpu-node.yaml` fixture.
+  GPU engines launched from the UI are not verified on such a cluster yet.
 - The post-install policy check waits `gateway.policyCheck.timeoutSeconds` (10 minutes) for the gateway controller to accept the policies,
   which it does only once the backend and Keycloak pods are ready. If a first install on a slow registry still fails there,
   run the same `helm upgrade --install` again when the pods are ready.

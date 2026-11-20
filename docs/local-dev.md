@@ -117,7 +117,7 @@ Delete those two secrets yourself
 `make auth-up` runs Keycloak 26.7.3 in namespace `auth` behind the gateway
 at `https://auth.127.0.0.1.nip.io/`, with the dev realm `aiops` imported
 from `infra/local/auth/realm-aiops.json` -- Keycloak is the only identity
-source for the stack (`docs/superpowers/plans/2026-09-04-authentication.md`).
+source for the stack (ADR 0001).
 
 ```
 make kind-up      # cluster + the 80/443 port mappings, if not already done
@@ -227,8 +227,7 @@ apply the same migrations without starting the API with `make db-migrate`.
 
 The Develop page embeds Langflow.
 Langflow runs in the kind cluster behind the gateway
-(`infra/local/langflow/langflow.yaml`), on platform identity (ADR 0002,
-design `docs/superpowers/specs/2026-09-08-langflow-native-identity-design.md`):
+(`infra/local/langflow/langflow.yaml`), on platform identity (ADR 0002):
 the gateway logs the browser in against Keycloak,
 asks the backend whether this member may open Langflow (ext-authz, the `langflow` host rule),
 and forwards the access token;
@@ -563,8 +562,7 @@ When a stream still breaks, the backend ends it with an OpenAI-style error event
 
 ## Workload access
 
-Every route above is protected at the gateway
-(`docs/superpowers/plans/2026-09-04-authentication.md`, Task 10);
+Every route above is protected at the gateway (ADR 0002);
 the objects are Envoy Gateway `SecurityPolicy`s that the controllers
 create next to the `HTTPRoute`s, through `backend/utils/gateway.py`.
 

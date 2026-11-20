@@ -157,7 +157,7 @@ The gateway still protects everything the platform deploys.
 | Inference endpoints (vLLM, TGI, NIM) | 3 | Per-instance API key set on the server (`--api-key`, `VLLM_API_KEY`) and enforced again at the gateway, because vLLM documents that its flag protects only `/v1`. |
 | Fine-tune jobs | 1 | Owned rows; logs and deletion go through the API only. |
 
-The full Kubeflow distribution on the lab cluster (`infra/charts/kubeflow`) brings its own Dex, oauth2-proxy and Istio.
+The full Kubeflow distribution brings its own Dex, oauth2-proxy and Istio.
 The platform's stack is independent of it and does not reuse Dex;
 both can coexist as long as Kubeflow's Istio gateway does not claim the platform's notebook routes.
 Kubeflow's `Notebook` v1 CRD is in maintenance with end of life expected late 2026 (Notebooks 2.0 `Workspace` replaces it);

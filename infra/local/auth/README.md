@@ -69,9 +69,7 @@ Keycloak 26.7.3 does not glob-match a `*` placed before a literal path in
 a redirect URI (confirmed live during the Task 0 spike),
 and Envoy Gateway names its OIDC cookies with a suffix derived from the
 `SecurityPolicy`, so only the policy that started a login can finish it
-(Task 10 spike; both in
-`docs/superpowers/plans/2026-09-04-authentication-gateway-notes.md`
-under "Spike results").
+(both confirmed by a spike).
 Therefore `aiops-gateway` has exactly one redirect URI,
 `https://sso.127.0.0.1.nip.io/oauth2/callback`,
 and one `SecurityPolicy`, `aiops-workloads-oidc` in `ai-stack`

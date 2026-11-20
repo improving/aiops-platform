@@ -9,16 +9,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A control plane that onboards AI infrastructure and deploys AI services on Kubernetes through Helm:
 inference engines (Ollama on CPU, Hugging Face TGI/TEI, vLLM, NVIDIA NIM, OPEA), vector databases (ChromaDB, Milvus, Qdrant),
 Kubeflow notebooks, LoRA adapters and fine-tune jobs, plus a chat page that streams answers from a deployed model.
-It is a monorepo assembled from four former repositories with their history (`MIGRATION.md`).
+It is a monorepo: the control plane, the UI, the charts and the local dev stack live together.
 
 | Directory | Contents |
 | --- | --- |
 | `backend/` | FastAPI control plane (Python 3.13, uv, SQLAlchemy 2, pyhelm3) |
 | `frontend/` | Next.js 16 UI (React 19, Tailwind 4, shadcn/ui, pnpm) plus the Playwright e2e suite |
 | `charts/<name>/` | Helm charts published to <https://infracloudio.github.io/charts> |
-| `infra/` | Bare-metal lab setup and install notes, imported as is; `infra/local/` holds the kind, gateway, Keycloak, Langflow, LiteLLM, monitoring and compose config; `infra/lab/` the manifests, values and install order for the lab's k3s GPU node |
+| `infra/local/` | The kind cluster, gateway, Keycloak, Langflow, LiteLLM, monitoring and compose config for local development |
 | `hack/` | `e2e-smoke.sh`, the API-level smoke test against the local stack |
-| `docs/` | `local-dev.md`, `testing.md`, migration commit maps |
+| `docs/` | `local-dev.md`, `testing.md`, `install.md`, `api.md`, the ADRs and the design notes |
 
 ## How the pieces fit
 
@@ -90,7 +90,7 @@ It is a monorepo assembled from four former repositories with their history (`MI
 
 10. **Tools come from MCP servers, registered per organization and reached through one platform endpoint.**
     An organization admin registers remote MCP servers (`backend/api/mcp.py`, page `/mcp-servers`): a URL and at most one shared credential in a Secret,
-    registered in the LiteLLM MCP gateway and scoped to the organization's LiteLLM team (ADR 0010, `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`).
+    registered in the LiteLLM MCP gateway and scoped to the organization's LiteLLM team (ADR 0010).
     Every client reaches the tools through `/v1alpha1/mcp` on the platform API (MCP over streamable HTTP):
     it authenticates the caller, refuses viewers, selects servers (`X-Mcp-Servers`), resolves the caller's credentials and relays to LiteLLM `/mcp`, which stays inside the cluster.
     The chat playground runs the tool loop in its route handler (`frontend/src/lib/toolSources.ts`) as an MCP client of that endpoint;
@@ -138,12 +138,10 @@ and `hack/chart-smoke.sh` checks the API, the realm and the login page through t
 The UI reads Grafana, Langflow and Jaeger URLs at runtime from `GET /v1alpha1/config/ui` (`backend/api/config.py`, backend env `GRAFANA_URL`, `LANGFLOW_URL`, `JAEGER_URL`),
 falling back to the build-time `NEXT_PUBLIC_*` values (`frontend/src/lib/runtimeConfig.ts`).
 `backend.hfCache.create` renders the `hf-cache` claim the GPU engine controllers mount by that fixed name (off by default).
-`viz.enabled` serves the AI Factory Explorer (a static image published from `ai-platform-sre-training/viz`) on `viz.<parentDomain>`;
+`viz.enabled` serves the AI Factory Explorer (a static site) on `viz.<parentDomain>`;
 its `viz.image.tag` is separate from `global.imageTag` and defaults to `main`.
-The lab's GPU node is a single k3s node that also carries a dormant Platform9 PCD install, not the kubespray lab under `infra/kubernetes/`:
-`infra/lab/README.md` has its measured facts, what it reuses (the node's cert-manager and MetalLB) and the install order,
-`test/values-lab.yaml` is the chart fixture, and `hack/lab-dry-run.sh` checks all of it against the node without changing it.
-Never run `make gateway-up` against that node; it would install a second cert-manager.
+`charts/aiops-platform/test/values-gpu-node.yaml` is the fixture for a single GPU node that already carries cert-manager and a load balancer:
+never run `make gateway-up` against such a cluster, because it installs a second cert-manager.
 `charts-release.yml` lints the chart with every other chart, but only on push to `main`, not on pull requests;
 `make chart-lint` is the pre-PR check.
 Its Bitnami and LiteLLM dependencies are OCI references and need no `helm repo add`.
@@ -159,8 +157,8 @@ Its Bitnami and LiteLLM dependencies are OCI references and need no `helm repo a
   keep it committed. Playwright fixtures fail a test on any console error.
 - Charts: umbrella charts (`ai-stack`, `guardrails-usvc`) use `file://../<chart>` dependencies; bump the chart
   `version` whenever templates or `appVersion` change.
-- Kubernetes secrets live in a git-ignored `config.yaml` created from `backend/manifests/config.example.yaml`
-  or `infra/aiops/backend/config.example.yaml`. Real tokens were purged from history once; do not add any.
+- Kubernetes secrets live in a git-ignored `config.yaml` created from `backend/manifests/config.example.yaml`.
+  Never commit a credential; the history is scrubbed before every public release.
 - `AUTH_MODE=disabled` is a real security bypass, not a convenience flag:
   the backend refuses it outright unless `TEST_MODE=true` is also set,
   and it must never be set that way anywhere the real stack runs.

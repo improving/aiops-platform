@@ -1,11 +1,10 @@
 # Small models on kind, chat, providers and a managed model registry
 
-Status: accepted (PR #3).
-Phase 1: `docs/superpowers/plans/2026-09-05-models-chat-phase1.md` (PR #4).
-Phase 2a (LiteLLM for deployed instances): `docs/superpowers/plans/2026-09-05-models-chat-phase2a-litellm.md`.
-Phase 2b (hosted providers, budgets, Providers page): `docs/superpowers/plans/2026-09-05-models-chat-phase2b-providers.md` (same branch and PR as 2a).
-Phase 3 (registry, importers, export): `docs/superpowers/plans/2026-09-05-models-chat-phase3-registry.md` (branch `feat/models-registry`).
-Phase 4 (lab GPU engines, Envoy AI Gateway) stays lab-only.
+Status: accepted.
+Phase 1 shipped the chat page on kind.
+Phase 2a added LiteLLM for deployed instances.
+Phase 2b added hosted providers, budgets and the Providers page.
+Phase 3 added the registry, its importers and the export.
 Decisions extracted from this document live in `docs/adr/0005` to `0007`.
 Facts were checked on 2026-09-05; items marked *unverified* come from documentation, not from a test on this stack.
 
@@ -178,5 +177,4 @@ Requests forwarded to LiteLLM carry the platform user, so spend and tokens are a
 a Usage page reads the aggregated spend logs (members their own, admins the organization);
 and the kind stack gets Prometheus and Grafana (`make monitoring-up`) with a LiteLLM dashboard that the endpoint pages embed
 for every instance, including Ollama and hosted models, which expose no metrics of their own.
-Plan: `docs/superpowers/plans/2026-09-05-usage-and-metrics.md`.
 

@@ -5,18 +5,14 @@ inference engines (Hugging Face TGI and TEI, vLLM, NVIDIA NIM, OPEA),
 vector databases (ChromaDB, Milvus, Qdrant),
 Kubeflow notebooks, LoRA adapters and fine-tune jobs.
 
-This monorepo combines four former repositories with their full commit history.
-See `MIGRATION.md` for the mapping and for what was removed from history.
-
 | Directory | Contents |
 |---|---|
 | `backend/` | FastAPI control plane API (Python 3.13, uv, SQLAlchemy 2, pyhelm3) |
 | `frontend/` | Next.js 16 web UI (React 19, Tailwind 4, shadcn, pnpm) |
 | `charts/` | Helm charts published to <https://infracloudio.github.io/charts> |
-| `infra/` | Bare-metal lab setup, cluster bring-up and platform install notes |
-| `infra/local/` | kind cluster and Postgres config for local development |
+| `infra/local/` | kind cluster, gateway, Keycloak, Langflow, LiteLLM and Postgres config for local development |
 | `hack/` | Repository-level scripts, including the end-to-end smoke test |
-| `docs/` | Local development guide and migration commit maps |
+| `docs/` | Local development guide, install guide, API reference, ADRs and design notes |
 
 ## Quick start (local, no GPU)
 

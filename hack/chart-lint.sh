@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lint and render checks for charts/aiops-platform (make chart-lint):
-#   helm lint --strict with the default values and the external and lab fixtures,
-#   helm template with the default, external, kind and lab values, and
+#   helm lint --strict with the default values and the external and gpu-node fixtures,
+#   helm template with the default, external, kind and gpu-node values, and
 #   assertions on what each render must and must not contain.
 # Requires: helm (and network for helm dependency build).
 set -euo pipefail
@@ -23,12 +23,12 @@ reject() { if printf '%s' "$3" | grep -E -- "$2" >/dev/null; then fail "$1"; els
 helm dependency build "$CHART" >/dev/null
 helm lint --strict "$CHART"
 helm lint --strict "$CHART" -f "$CHART/test/values-external.yaml"
-helm lint --strict "$CHART" -f "$CHART/test/values-lab.yaml"
+helm lint --strict "$CHART" -f "$CHART/test/values-gpu-node.yaml"
 
 default=$(helm template aiops-platform "$CHART" -n aiops-platform)
 external=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-external.yaml")
 kind_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-kind.yaml")
-lab_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-lab.yaml")
+gpu_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-gpu-node.yaml")
 # test/values-kind.yaml is also the make chart-install fixture and keeps
 # Langflow off (a second 2 GB image next to the dev Langflow); this render
 # turns it on the way chart-install would.
@@ -130,27 +130,26 @@ expect "kind Certificate lives in the gateway namespace" 'namespace: envoy-gatew
 expect "kind realm carries the dev users" '"username": "alice"' "$kind_render"
 expect "kind routes attach to the dev Gateway" 'name: aiops$' "$kind_render"
 
-# --- lab fixture (the bare-metal k3s GPU node, infra/lab) -----------------------
+# --- gpu-node fixture: one node, own GatewayClass, private CA, model cache ------
 reject "default renders no hf-cache claim" 'name: hf-cache$' "$default"
-expect "lab renders the hf-cache claim" 'name: hf-cache$' "$lab_render"
-expect "lab hf-cache claim uses the node's StorageClass" 'storageClassName: "local-path"' "$lab_render"
-expect "lab hf-cache claim survives uninstall" 'helm.sh/resource-policy: keep' "$lab_render"
-expect "lab renders a Gateway" '^kind: Gateway$' "$lab_render"
-expect "lab Gateway uses the aiops GatewayClass" 'gatewayClassName: "?aiops"?$' "$lab_render"
-expect "lab Gateway terminates with the lab wildcard Secret" 'name: "?aiops-lab-wildcard-tls"?$' "$lab_render"
-expect "lab Certificate is issued by the lab CA" 'name: aiops-lab-ca$' "$lab_render"
-expect "lab routes the ui host" '"ui\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
-expect "lab mounts the CA Secret" 'secretName: "?aiops-lab-ca"?$' "$lab_render"
-expect "lab backend pins GitHub's download hosts" '^ +- release-assets\.githubusercontent\.com$' "$lab_render"
-expect "lab serves the Grafana URL to the UI" 'GRAFANA_URL: "https://grafana\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
-expect "lab deploys Langflow" 'name: aiops-platform-langflow$' "$lab_render"
-expect "lab UI embeds the bundled Langflow" 'LANGFLOW_URL: "https://langflow\.aiops\.192\.168\.4\.181\.nip\.io"' "$lab_render"
-expect "lab API pod reads the model cache" 'MODEL_CACHE_DIR: "/model-cache"' "$lab_render"
-expect "lab mounts the model cache read-only" 'claimName: hf-cache' "$lab_render"
+expect "gpu-node renders the hf-cache claim" 'name: hf-cache$' "$gpu_render"
+expect "gpu-node hf-cache claim uses the node's StorageClass" 'storageClassName: "local-path"' "$gpu_render"
+expect "gpu-node hf-cache claim survives uninstall" 'helm.sh/resource-policy: keep' "$gpu_render"
+expect "gpu-node renders a Gateway" '^kind: Gateway$' "$gpu_render"
+expect "gpu-node Gateway uses its own GatewayClass" 'gatewayClassName: "?aiops"?$' "$gpu_render"
+expect "gpu-node Gateway terminates with the wildcard Secret" 'name: "?aiops-wildcard-tls"?$' "$gpu_render"
+expect "gpu-node Certificate is issued by the private CA" 'name: aiops-ca$' "$gpu_render"
+expect "gpu-node routes the ui host" '"ui\.aiops\.example\.com"' "$gpu_render"
+expect "gpu-node mounts the CA Secret" 'secretName: "?aiops-ca"?$' "$gpu_render"
+expect "gpu-node serves the Grafana URL to the UI" 'GRAFANA_URL: "https://grafana\.aiops\.example\.com"' "$gpu_render"
+expect "gpu-node deploys Langflow" 'name: aiops-platform-langflow$' "$gpu_render"
+expect "gpu-node UI embeds the bundled Langflow" 'LANGFLOW_URL: "https://langflow\.aiops\.example\.com"' "$gpu_render"
+expect "gpu-node API pod reads the model cache" 'MODEL_CACHE_DIR: "/model-cache"' "$gpu_render"
+expect "gpu-node mounts the model cache read-only" 'claimName: hf-cache' "$gpu_render"
 reject "default API pod has no model cache mount" 'model-cache' "$default"
-expect "lab sets the short vLLM liveness delay" 'VLLM_LIVENESS_INITIAL_DELAY_SECONDS: "60"' "$lab_render"
-reject "lab realm has no dev users" '"username": "alice"' "$lab_render"
-expect "lab limits the proxy's outgoing connections" 'name: aiops-litellm-egress$' "$lab_render"
+expect "gpu-node sets the short vLLM liveness delay" 'VLLM_LIVENESS_INITIAL_DELAY_SECONDS: "60"' "$gpu_render"
+reject "gpu-node realm has no dev users" '"username": "alice"' "$gpu_render"
+expect "gpu-node limits the proxy's outgoing connections" 'name: aiops-litellm-egress$' "$gpu_render"
 
 # --- Langflow ------------------------------------------------------------------
 reject "the default render has no Langflow" 'aiops-platform-langflow' "$default"
@@ -189,7 +188,7 @@ expect "hook script is embedded" 'apply_secret aiops-gateway-oidc' "$default"
 expect "hook script patches missing keys into an existing Secret" 'kubectl.*patch secret' "$default"
 
 # --- never a credential in a render -------------------------------------------
-reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render$langflow_render$lab_render"
+reject "no dev literal in any render" 'dev-gateway-secret|dev-automation-secret|sk-dev-litellm-master|dev-auth-secret-change-me|changeme' "$default$external$kind_render$langflow_render$gpu_render"
 
 # --- charts/mcp-server: one MCP server the platform deploys ---------------------
 MCP_CHART=charts/mcp-server

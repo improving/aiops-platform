@@ -1,6 +1,7 @@
 {{- if .Values.backend.rbac.create }}
-# infra/aiops/backend/rbac.yaml plus the gateway objects backend/utils/gateway.py
-# creates (HTTPRoute, SecurityPolicy, BackendTrafficPolicy, ReferenceGrant).
+# The ClusterRole the backend needs, including the gateway objects
+# backend/utils/gateway.py creates (HTTPRoute, SecurityPolicy,
+# BackendTrafficPolicy, ReferenceGrant).
 # pods/log and events, plus the apps-group get/list/watch on deployments and
 # statefulsets, back the instance Logs and Events tabs (#15, the operations
 # stream): backend/utils/pod_inspection.py reads them with

@@ -304,7 +304,7 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   so the caller says whether Langflow still has the variable; a new one is minted only when it does not or the token has under 30 days left,
   and the old rows are deleted, not revoked, because this runs on every Develop page load. Langflow keeps one variable for the user whatever the organization, so "the holder has it" also needs the newest `langflow` token of the user to be this organization's; after a provision in another organization a new one is minted here. `mint_token` is the one mint path, shared with `api/tokens.py`.
 
-- MCP servers (`api/mcp.py` is the registry, `api/mcp_endpoint.py` the `/v1alpha1/mcp` endpoint, `utils/mcp_mock.py` the test doubles of `AIOPS_CHAT_MOCK`; the endpoint takes `litellm_client` and `org_key` through `api.mcp`, so tests patch them there for both; routes in docs/api.md, design in `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`, ADR 0010):
+- MCP servers (`api/mcp.py` is the registry, `api/mcp_endpoint.py` the `/v1alpha1/mcp` endpoint, `utils/mcp_mock.py` the test doubles of `AIOPS_CHAT_MOCK`; the endpoint takes `litellm_client` and `org_key` through `api.mcp`, so tests patch them there for both; routes in docs/api.md, ADR 0010):
   an admin registers a remote MCP server, the hosted-provider way (row, Secret, LiteLLM, commit; a failure undoes the earlier steps, 502).
   `models/mcp_server.py` has `McpServer` and `McpCredential`; the credential is a table of its own (`user_id` NULL = the organization's shared one,
   two partial unique indexes because NULLs are distinct), so a member's own credential is a new row and not a new column.
@@ -347,7 +347,7 @@ shared fixtures (`oidc_client`, `tokens`, `notebook_controller`, `other_org`); n
   Names (`_name_taken`, three partial unique indexes, migration `0014`): unique among the shared servers and among one member's own; `scopes.by_name` picks the nearer server where a caller sees two.
   `delete_for_user` also deletes what a leaver stored for platform servers when this was their last membership.
   The mock (`mock_oauth_metadata`, code `mock`) points the authorization URL at the UI's own callback page. `test_mcp_oauth.py`.
-  Import and deploy (ADR 0011, `docs/superpowers/specs/2026-09-20-deployed-mcp-servers-design.md`):
+  Import and deploy (ADR 0011):
   `registry/mcp_registry.py` reads the official MCP registry like `huggingface.py` reads its source (`parse_server` is pure and tested against `test_fixtures/mcp_registry.json`, recorded from the real registry; `search`/`fetch` stream under a byte cap and a deadline, `fetch` needs `/v0/servers/<url-encoded name>/versions/latest`).
   A remote entry only fills the add dialog (`api/mcp_registry.py`, every writer, cached 60 s; `oauth-probe` is the hint after a refused test, one 5 s deadline, never an error, because `discover` never sees a 401: the proxy answers 200 with `error: true`).
   An image entry becomes a `draft` of `mcp_catalog` that only a platform admin sees, reviews and publishes (`api/mcp_catalog.py`); `runtimeArguments` are docker options and are refused, a loopback bind address becomes `0.0.0.0`, port and path come from the transport URL's placeholders, `latest` is refused, a secret's default is dropped, and a sync that changes what runs returns the entry to `draft`.

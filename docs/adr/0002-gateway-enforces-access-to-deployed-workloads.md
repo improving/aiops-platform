@@ -132,5 +132,3 @@ Langflow accepts an https JWKS URL only, so the pod fetches the keys from the pu
 (`hostAliases` plus the local CA bundled into `SSL_CERT_FILE`) rather than from the in-cluster Service;
 and a `SecurityPolicy` the controller rejects is not applied at all, which leaves its route open,
 so the policy's status must be checked after every change.
-The design and its measurements are in
-`docs/superpowers/specs/2026-09-08-langflow-native-identity-design.md`.

@@ -185,7 +185,7 @@ LiteLLM logs them like model requests with no tokens; they are not in `totals`, 
 ## MCP servers and the MCP endpoint
 
 An organization admin registers remote MCP servers; every member with a writer role uses their tools
-(ADR 0010, `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`). Needs the LiteLLM proxy: without it the writes and the endpoint answer 503.
+(ADR 0010). Needs the LiteLLM proxy: without it the writes and the endpoint answer 503.
 
 | Route | Who | What |
 | --- | --- | --- |

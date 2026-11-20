@@ -1,5 +1,4 @@
-# Langflow on platform identity (ADR 0002, design
-# docs/superpowers/specs/2026-09-08-langflow-native-identity-design.md).
+# Langflow on platform identity (ADR 0002).
 # The gateway logs the browser in against Keycloak, asks the control
 # plane whether this user may open Langflow (ext-authz), and forwards
 # the access token; Langflow verifies that token itself

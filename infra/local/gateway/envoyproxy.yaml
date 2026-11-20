@@ -2,9 +2,8 @@
 # managed Envoy Service as a NodePort pinned to 30080/30443 (matching
 # infra/local/kind-config.yaml's extraPortMappings), and reorder the OIDC
 # filter ahead of ext-authz so a first-time login has already produced the
-# bearer token that ext-authz needs (see
-# docs/superpowers/plans/2026-09-04-authentication-gateway-notes.md
-# section 4 -- the default chain runs ext_authz before oauth2).
+# bearer token that ext-authz needs (the default chain runs ext_authz
+# before oauth2).
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:

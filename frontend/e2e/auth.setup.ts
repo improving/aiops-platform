@@ -23,9 +23,8 @@ for (const { name, password } of USERS) {
     await page.goto("/login");
     await page.getByRole("button", { name: "Sign in with Keycloak" }).click();
 
-    // Keycloak's own login form, not the app's; selectors per
-    // docs/superpowers/plans/2026-09-04-authentication-identity-notes.md
-    // section 5 (confirmed against Keycloak 26.7.3's login.ftl).
+    // Keycloak's own login form, not the app's (confirmed against
+    // Keycloak 26.7.3's login.ftl).
     await page.locator("#username").fill(name);
     await page.locator("#password").fill(password);
     await page.locator("#kc-login").click();

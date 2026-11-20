@@ -1,5 +1,5 @@
-# The MCP servers the platform can deploy (docs/superpowers/specs/
-# 2026-09-20-deployed-mcp-servers-design.md). An entry is here only after
+# The MCP servers the platform can deploy (ADR 0011). An entry is here
+# only after
 # its image was measured: it speaks streamable HTTP by itself, it runs
 # under the hardened pod of charts/mcp-server, and the proxy lists its
 # tools through the chart's network policy.

@@ -2,8 +2,7 @@
 
 Every function here is a no-op (returns None, or does nothing) when
 AIOPS_PARENT_DOMAIN is unset, so the stack behaves exactly as it did before
-the gateway existed unless the T1 env contract is present. See
-docs/superpowers/plans/2026-09-04-authentication.md, Tasks 2 and 10.
+the gateway existed unless the T1 env contract is present. See ADR 0002.
 
 Browser hosts (``nb-<id8>``, ``vdb-<id8>``) are protected by ONE shared
 OIDC ``SecurityPolicy`` per namespace, ``aiops-workloads-oidc``, whose

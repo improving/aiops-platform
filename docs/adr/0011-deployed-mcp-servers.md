@@ -35,5 +35,3 @@ Another image enters the catalog only through import from the official MCP regis
   Accepted for version 1: it is stricter than every other workload kind (none has a NetworkPolicy, and a notebook runs the user's own code), the image is the catalog's, and the pod has no identity in the cluster. An entry that names its targets is the refinement.
 - What was reviewed is what runs: an image is pinned (never `latest`), a sync that changes what runs sends a published entry back to draft, and a running server moves to a new image only when an admin says so.
 - Organization or platform scope, never one member's (every key of the organization's team reaches every server of the team in the proxy, and a deployed server has no credential of its own), and one pod for each server: an MCP server can keep sessions in memory, so replicas are not a number to turn up.
-
-The design, with its measurements and two review lists, is `docs/superpowers/specs/2026-09-20-deployed-mcp-servers-design.md`.

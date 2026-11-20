@@ -46,5 +46,3 @@ The tool loop of the chat playground runs in the UI's route handler with the Ver
   and `/mcp-rest/test/tools/list` to list the tools of a server that is not saved yet. The direct-connection fallback is not necessary.
 - Tool names reach the model as `<alias>-<tool>`, so the alias must be unique across organizations and short.
 - Forwarding a member's own credential through the proxy is not measured yet; it decides only how Phase 5 reaches the upstream server.
-
-The full design is `docs/superpowers/specs/2026-09-19-tools-and-mcp-design.md`.
