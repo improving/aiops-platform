@@ -38,10 +38,11 @@ langflow_render=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$C
 # Langflow of the operator's own, embedded and provisioned through its public address.
 external_langflow=$(helm template aiops-platform "$CHART" -n aiops-platform -f "$CHART/test/values-external.yaml" \
   --set ui.langflowUrl=https://langflow.example.com)
-# The AI Factory Explorer is off by default; render it on, and once without
+# The optional static site is off by default; render it on, and once without
 # the gateway (the Service and the Deployment do not need a route).
-viz_render=$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true)
-viz_no_gateway=$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true --set gateway.enabled=false)
+VIZ_IMAGE=example.com/explorer
+viz_render=$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true --set viz.image.repository=$VIZ_IMAGE)
+viz_no_gateway=$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true --set gateway.enabled=false --set viz.image.repository=$VIZ_IMAGE)
 
 # --- default values: everything bundled -------------------------------------
 expect "default renders the backend Deployment" 'name: aiops-platform-backend$' "$default"
@@ -93,17 +94,19 @@ reject "default OIDC policy carries no namespace of its own" '^  namespace:' "$(
 expect "default OIDC policy targets the sso route first" 'name: sso$' "$(printf '%s' "$oidc_policy" | grep -A3 -- 'targetRefs:')"
 expect "default backend runs in the release namespace" 'AIOPS_NAMESPACE: "aiops-platform"' "$default"
 
-# --- the AI Factory Explorer (viz.enabled) --------------------------------------
+# --- the optional static site (viz.enabled) -------------------------------------
 reject "default renders no explorer" 'name: aiops-platform-viz$' "$default"
 expect "viz renders its Deployment and Service" 'name: aiops-platform-viz$' "$viz_render"
-expect "viz serves the explorer image" 'image: "ghcr\.io/infracloudio/ai-factory-explorer:main"' "$viz_render"
+expect "viz serves the configured image" 'image: "example\.com/explorer:main"' "$viz_render"
 expect "viz runs the unprivileged nginx port" 'containerPort: 8080' "$viz_render"
 expect "viz routes the viz host" '"viz\.aiops\.example\.com"' "$viz_render"
 expect "viz is a ClusterIP Service" 'type: ClusterIP' "$viz_render"
 reject "viz without the gateway renders no route" '"viz\.aiops\.example\.com"' "$viz_no_gateway"
 expect "viz without the gateway still deploys" 'name: aiops-platform-viz$' "$viz_no_gateway"
-expect "viz takes its own image tag" 'image: "ghcr\.io/infracloudio/ai-factory-explorer:abc1234"' \
-  "$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true --set viz.image.tag=abc1234)"
+expect "viz takes its own image tag" 'image: "example\.com/explorer:abc1234"' \
+  "$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true --set viz.image.repository=$VIZ_IMAGE --set viz.image.tag=abc1234)"
+expect "viz refuses to render without an image" 'viz\.image\.repository is required' \
+  "$(helm template aiops-platform "$CHART" -n aiops-platform --set viz.enabled=true 2>&1 || true)"
 
 # --- external fixture: every dependency off ----------------------------------
 reject "external renders no Postgres" 'name: aiops-postgresql' "$external"

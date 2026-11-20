@@ -16,7 +16,7 @@ spec:
         app: aiops-frontend
     spec:
       containers:
-      - image: ghcr.io/infracloudio/aiops-frontend:main
+      - image: ghcr.io/improving/aiops-frontend:main
         name: aiops-frontend
         imagePullPolicy: Always
         ports:

@@ -296,11 +296,11 @@ chart-lint: ## Lint the platform chart and check its renders with the default, e
 	./hack/chart-lint.sh
 
 chart-images: ## Build the backend and frontend images from this checkout and load them into kind
-	docker build -t ghcr.io/infracloudio/aiops-backend:$(CHART_IMAGE_TAG) backend
-	docker build -t ghcr.io/infracloudio/aiops-frontend:$(CHART_IMAGE_TAG) frontend
+	docker build -t ghcr.io/improving/aiops-backend:$(CHART_IMAGE_TAG) backend
+	docker build -t ghcr.io/improving/aiops-frontend:$(CHART_IMAGE_TAG) frontend
 	kind load docker-image --name $(CLUSTER_NAME) \
-		ghcr.io/infracloudio/aiops-backend:$(CHART_IMAGE_TAG) \
-		ghcr.io/infracloudio/aiops-frontend:$(CHART_IMAGE_TAG)
+		ghcr.io/improving/aiops-backend:$(CHART_IMAGE_TAG) \
+		ghcr.io/improving/aiops-frontend:$(CHART_IMAGE_TAG)
 
 chart-install: chart-deps ## Install the platform chart on kind (namespace aiops-platform, parent domain platform.127.0.0.1.nip.io); run chart-images first
 	@test -s $(CA_CRT) || { echo "$(CA_CRT) is missing: run 'make gateway-up ca-export' first"; exit 1; }

@@ -26,7 +26,7 @@ and Postgres, Keycloak and LiteLLM as dependencies that can each be replaced by 
   A first start downloads the model, which can take long on a slow link, and a killed download starts again from zero.
   `charts/vllm` 0.4.1 has a startup probe of two hours for that; on an older published chart the backend stretches the liveness delay instead
   (`VLLM_LIVENESS_INITIAL_DELAY_SECONDS` through `backend.env`, two hours by default; lower it, for example to `60`, once the chart in use renders the startup probe).
-- Images: `ghcr.io/infracloudio/aiops-backend` and `aiops-frontend` (`global.imageTag`, default `main`).
+- Images: `ghcr.io/improving/aiops-backend` and `aiops-frontend` (`global.imageTag`, default `main`).
   The `*-image.yml` workflows publish both on every push to `main` that changes `backend/` or `frontend/`,
   tagged `main` and the first seven characters of the commit SHA;
   `make chart-images` builds the same tag locally for kind.
@@ -190,16 +190,15 @@ so a post-install and post-upgrade hook Job (`<release>-policy-check`) waits unt
 on the workloads policy and on Langflow's, and fails the release otherwise;
 `kubectl -n <namespace> get securitypolicy -o jsonpath='{.items[*].status.ancestors[0].conditions}'` shows the reason.
 
-## The AI Factory Explorer
+## An optional static site on its own host
 
-`viz.enabled=true` deploys the AI Factory Explorer
-(`ghcr.io/infracloudio/ai-factory-explorer`, built from `viz/` in the `infracloudio/ai-platform-sre-training` repository)
-at `https://viz.<parent domain>`.
-The app is one static file served by unprivileged nginx: it has no backend, no database and no login,
-and the gateway routes the host to its Service without a `SecurityPolicy`.
-`viz.image.tag` is the explorer's own tag (`main`, or the seven-character commit SHA the image workflow publishes);
-it is not `global.imageTag`, which belongs to the backend and the UI.
-The chart defaults `viz.enabled` to `false`, so an install that does not need the explorer pulls no image.
+`viz.enabled=true` serves a static site of your own at `https://viz.<parent domain>`.
+The chart ships no image for it: set `viz.image.repository` and `viz.image.tag` to an image that serves its files
+on port 8080 as a non-root user (`nginxinc/nginx-unprivileged` is one), and the release fails at render time if you
+enable the feature without one.
+The site has no backend, no database and no login, and the gateway routes the host to its Service without a `SecurityPolicy`.
+`viz.image.tag` is the site's own tag; it is not `global.imageTag`, which belongs to the backend and the UI.
+The chart defaults `viz.enabled` to `false`, so an install that does not use it pulls no image.
 
 ## MCP servers and the proxy's outgoing connections
 

@@ -5,19 +5,19 @@ description: |
   optionally, Postgres, Keycloak and LiteLLM. Every dependency can be turned
   off and replaced by an external system (docs/install.md).
 type: application
-version: 0.3.9
+version: 0.3.10
 appVersion: "main"
 keywords:
   - aiops
   - control-plane
   - keycloak
   - litellm
-home: https://github.com/infracloudio/aiops-platform
+home: https://github.com/improving/aiops-platform
 maintainers:
-  - name: infracloudio
-    url: https://github.com/infracloudio
+  - name: improving
+    url: https://github.com/improving
 sources:
-  - https://github.com/infracloudio/aiops-platform
+  - https://github.com/improving/aiops-platform
 
 dependencies:
   - name: postgresql

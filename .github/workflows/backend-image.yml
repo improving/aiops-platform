@@ -1,6 +1,6 @@
 name: Backend image
 
-# Publishes ghcr.io/infracloudio/aiops-backend on every push to main that changes the
+# Publishes ghcr.io/improving/aiops-backend on every push to main that changes the
 # application. Both image workflows share one path list on purpose: the chart
 # takes both image tags from the single global.imageTag, so every application
 # commit must publish the same <sha7> tag for the backend and the frontend.
@@ -29,7 +29,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: infracloudio/aiops-backend
+  IMAGE_NAME: improving/aiops-backend
   PUSH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
 
 jobs:

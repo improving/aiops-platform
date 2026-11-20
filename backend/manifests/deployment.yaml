@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: aiops-backend
-        image: ghcr.io/infracloudio/aiops-backend:main
+        image: ghcr.io/improving/aiops-backend:main
         imagePullPolicy: Always
         env:
         - name: HF_API_TOKEN

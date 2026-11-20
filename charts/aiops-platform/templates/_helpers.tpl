@@ -143,7 +143,7 @@ postgresql://{{ include "aiops-platform.databaseHost" . }}:{{ if .Values.postgre
 {{- end }}
 
 {{- define "aiops-platform.vizImage" -}}
-{{ .Values.viz.image.repository }}:{{ .Values.viz.image.tag }}
+{{- required "viz.image.repository is required when viz.enabled is true: point it at your own explorer image" .Values.viz.image.repository }}:{{ .Values.viz.image.tag }}
 {{- end }}
 
 {{- define "aiops-platform.backendServiceAccountName" -}}

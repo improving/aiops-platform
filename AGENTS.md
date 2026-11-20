@@ -138,7 +138,7 @@ and `hack/chart-smoke.sh` checks the API, the realm and the login page through t
 The UI reads Grafana, Langflow and Jaeger URLs at runtime from `GET /v1alpha1/config/ui` (`backend/api/config.py`, backend env `GRAFANA_URL`, `LANGFLOW_URL`, `JAEGER_URL`),
 falling back to the build-time `NEXT_PUBLIC_*` values (`frontend/src/lib/runtimeConfig.ts`).
 `backend.hfCache.create` renders the `hf-cache` claim the GPU engine controllers mount by that fixed name (off by default).
-`viz.enabled` serves the AI Factory Explorer (a static site) on `viz.<parentDomain>`;
+`viz.enabled` serves a static site of your own on `viz.<parentDomain>`, and the chart ships no image for it;
 its `viz.image.tag` is separate from `global.imageTag` and defaults to `main`.
 `charts/aiops-platform/test/values-gpu-node.yaml` is the fixture for a single GPU node that already carries cert-manager and a load balancer:
 never run `make gateway-up` against such a cluster, because it installs a second cert-manager.
@@ -171,7 +171,7 @@ Its Bitnami and LiteLLM dependencies are OCI references and need no `helm repo a
 
 Workflows in `.github/workflows/` are path-filtered: `backend-ci.yml`, `frontend-ci.yml` and `charts-release.yml`
 (lint and package only on push) run on `main` and pull requests; `frontend-e2e.yml` runs the fast Playwright tier on
-pull requests. The image workflows (`*-image.yml`) publish `ghcr.io/infracloudio/aiops-backend` and `aiops-frontend`
+pull requests. The image workflows (`*-image.yml`) publish `ghcr.io/improving/aiops-backend` and `aiops-frontend`
 on every push to `main` that changes `backend/` or `frontend/`, tagged `main` and the seven-character commit SHA,
 and build without pushing on pull requests.
 Both workflows share one path list on purpose: the chart pins both images through the single `global.imageTag`,
