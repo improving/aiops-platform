@@ -4,6 +4,6 @@ metadata:
   name: aiops-frontend-configmap
 data:
   NEXT_PUBLIC_AIOPS_BACKEND_URL: http://aiops-backend.aiops.svc.cluster.local:8000
-  NEXT_PUBLIC_LANGFLOW_URL: http://192.0.2.211:8080
-  NEXT_PUBLIC_GRAFANA_URL: http://192.0.2.202
-  NEXT_PUBLIC_JAEGER_URL: http://192.0.2.208:16686
+  NEXT_PUBLIC_LANGFLOW_URL: http://langflow.example.com
+  NEXT_PUBLIC_GRAFANA_URL: http://grafana.example.com
+  NEXT_PUBLIC_JAEGER_URL: http://jaeger.example.com:16686

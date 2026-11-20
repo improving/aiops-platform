@@ -31,5 +31,3 @@ spec:
         envFrom:
         - configMapRef:
             name: aiops-frontend-configmap
-      nodeSelector:
-        kubernetes.io/hostname: gpu-node-4
