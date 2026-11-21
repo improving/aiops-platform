@@ -30,6 +30,31 @@ and Postgres, Keycloak and LiteLLM as dependencies that can each be replaced by 
   The `*-image.yml` workflows publish both on every push to `main` that changes `backend/` or `frontend/`,
   tagged `main` and the first seven characters of the commit SHA;
   `make chart-images` builds the same tag locally for kind.
+  Both packages are private while the improving organisation keeps container packages private,
+  so a cluster that cannot authenticate to the registry must use its own copies; see below.
+
+### Building the images yourself
+
+Build both from the checkout and put them where your cluster can reach them:
+
+```bash
+TAG=$(make image-tag)          # the tag the chart expects
+docker build -t "$REGISTRY/aiops-backend:$TAG" backend
+docker build -t "$REGISTRY/aiops-frontend:$TAG" frontend
+docker push "$REGISTRY/aiops-backend:$TAG"
+docker push "$REGISTRY/aiops-frontend:$TAG"
+```
+
+Then point the release at those copies:
+
+```bash
+helm upgrade --install aiops-platform infracloud-charts/aiops-platform \
+  --set backend.image.repository="$REGISTRY/aiops-backend" \
+  --set frontend.image.repository="$REGISTRY/aiops-frontend" \
+  --set global.imageTag="$TAG"
+```
+
+On kind nothing has to be pushed: `make chart-images` builds both images and loads them into the cluster.
 
 ## Values you must set
 
