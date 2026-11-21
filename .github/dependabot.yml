@@ -1,55 +1,63 @@
 version: 2
 
 updates:
+  # Routine updates go out as one pull request per ecosystem and majors as
+  # another, so a week of dependency bumps is two PRs to read, not nine.
+  # Majors stay separate because they want a look before they merge.
   - package-ecosystem: uv
     directory: /backend
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     groups:
       backend-minor:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      backend-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     groups:
       frontend-minor:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      frontend-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     groups:
       actions:
         patterns: ["*"]
 
-  # Base-image majors break the build more often than they help: Python 3.15
-  # has no psycopg2-binary wheel yet, and a new Node major moves the toolchain
-  # under the frontend. Propose them by hand, after a local build.
+  # Both Dockerfiles in one block: one PR for a base-image bump across both.
+  # Majors are left out on purpose, since they break the build more often than
+  # they help: Python 3.15 has no psycopg2-binary wheel yet, so the backend
+  # image builds it from source and fails, and a new Node major moves the
+  # frontend toolchain. Take those by hand, after a local build.
   - package-ecosystem: docker
-    directory: /backend
+    directories: ["/backend", "/frontend"]
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 2
+    groups:
+      docker:
+        patterns: ["*"]
     ignore:
       - dependency-name: python
         update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: docker
-    directory: /frontend
-    schedule:
-      interval: weekly
-      day: monday
-    ignore:
       - dependency-name: node
         update-types: ["version-update:semver-major"]
