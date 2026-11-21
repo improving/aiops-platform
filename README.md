@@ -13,12 +13,20 @@ without hand-writing a values file or a route again.
 
 ![The platform dashboard](docs/images/ui-home.png)
 
+Chat answers stream through the control plane, which records tokens and spend per user:
+
+![Chat streaming an answer](docs/images/ui-chat.gif)
+
 <details>
 <summary>More of the UI</summary>
 
 ![The model catalog](docs/images/ui-model-catalog.png)
 
 ![The model registry](docs/images/ui-model-registry.png)
+
+![MCP servers](docs/images/ui-mcp-servers.png)
+
+![The vector database catalog](docs/images/ui-vector-databases.png)
 
 </details>
 
