@@ -99,9 +99,9 @@ def _delete_secret(
     except ApiException as e:
         if e.status != 404:
             raise
-        logger.info("Secret %s/%s is already gone", namespace, name)
+        logger.info("Secret in %s is already gone", namespace)
         return
-    logger.info("Deleted Secret %s/%s", namespace, name)
+    logger.info("Deleted Secret from %s", namespace)
 
 
 def find_credential(

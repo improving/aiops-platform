@@ -961,9 +961,7 @@ def ensure_gateway_client_secret(
             data=source.data,
         ),
     )
-    logger.info(
-        "Copied Secret %s into %s", GATEWAY_CLIENT_SECRET_NAME, namespace
-    )
+    logger.info("Copied the gateway OIDC client Secret into %s", namespace)
 
 
 def secret_exists(

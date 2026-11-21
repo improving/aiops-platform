@@ -27,10 +27,7 @@ test.describe("runtime UI configuration", () => {
     const develop = new DevelopPage(page);
     await develop.open();
     await expect(develop.notConfigured).toHaveCount(0);
-    await expect(develop.iframe).toHaveAttribute(
-      "src",
-      new RegExp(`^${langflowUrl.replace(/[.]/g, "\\.")}`)
-    );
+    await develop.expectEmbeddedFrom(langflowUrl);
     // The managed fast backend runs with AIOPS_CHAT_MOCK, so provisioning
     // answers with the canned organization and the mock model; the names
     // live behind the "Models" picker so the editor keeps the page, the

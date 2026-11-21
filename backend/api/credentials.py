@@ -91,7 +91,9 @@ def get_credential(
     try:
         value = read_credential_value(credential)
     except ApiException as e:
-        logger.exception("Cannot read Secret %s", credential.secret_name)
+        logger.exception(
+            "Cannot read the credential Secret of %s %s", kind, resource_id
+        )
         raise HTTPException(
             status_code=503,
             detail=f"Kubernetes is not reachable; try again later ({e.reason})",

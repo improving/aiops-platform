@@ -168,13 +168,15 @@ class NIMController(Controller):
                 self.namespace,
                 secret,
             )
-            self.logger.info(f"Secret '{secret_name}' created successfully")
+            self.logger.info(f"Image pull Secret created in {self.namespace}")
         except ApiException as e:
             if e.status == 409:
-                self.logger.info(f"Secret '{secret_name}' already exists")
+                self.logger.info(
+                    f"Image pull Secret already exists in {self.namespace}"
+                )
             else:
                 self.logger.exception(
-                    f"Failed to create secret '{secret_name}': {str(e)}"
+                    f"Failed to create the image pull Secret: {e}"
                 )
                 raise
 
@@ -208,13 +210,15 @@ class NIMController(Controller):
                 self.namespace,
                 secret,
             )
-            self.logger.info(f"Secret '{secret_name}' created successfully")
+            self.logger.info(f"NGC API Secret created in {self.namespace}")
         except ApiException as e:
             if e.status == 409:
-                self.logger.info(f"Secret '{secret_name}' already exists")
+                self.logger.info(
+                    f"NGC API Secret already exists in {self.namespace}"
+                )
             else:
                 self.logger.exception(
-                    f"Failed to create secret '{secret_name}': {str(e)}"
+                    f"Failed to create the NGC API Secret: {e}"
                 )
                 raise
 
@@ -247,13 +251,9 @@ class NIMController(Controller):
                 self.core_v1_api.delete_namespaced_secret(
                     secret_name, self.namespace
                 )
-                self.logger.info(
-                    f"Secret '{secret_name}' deleted successfully"
-                )
+                self.logger.info(f"Secret deleted from {self.namespace}")
             except ApiException as e:
-                self.logger.exception(
-                    f"Failed to delete secret '{secret_name}': {str(e)}"
-                )
+                self.logger.exception(f"Failed to delete a Secret: {e}")
                 raise
 
     async def uninstall(self, instance: InferenceInstanceSchema):

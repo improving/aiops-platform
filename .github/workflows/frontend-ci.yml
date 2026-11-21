@@ -8,6 +8,9 @@ on:
     paths: ["frontend/**", ".github/workflows/frontend-ci.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: frontend-ci-${{ github.ref }}
   cancel-in-progress: true
