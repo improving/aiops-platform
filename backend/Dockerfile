@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.15-slim
 
 ARG TARGETARCH
 ARG HELM_VERSION=4.2.4
