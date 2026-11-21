@@ -55,10 +55,7 @@ test.describe("login and logout", { tag: "@cluster" }, () => {
     await develop.open();
     await develop.expectHeading("Interactively Develop AI Applications");
     await expect(develop.notConfigured).toHaveCount(0);
-    await expect(develop.iframe).toHaveAttribute(
-      "src",
-      new RegExp(`^${LANGFLOW_URL.replace(/[.]/g, "\\.")}`)
-    );
+    await develop.expectEmbeddedFrom(LANGFLOW_URL);
 
     // Sign out ends the Keycloak session and lands on /login; the home
     // page needs a login again.

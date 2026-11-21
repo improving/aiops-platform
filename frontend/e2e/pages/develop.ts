@@ -1,5 +1,10 @@
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { AppShell } from "./app-shell";
+
+/** The value with every regex metacharacter escaped, for a prefix match. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 /** The Develop page: a Langflow iframe, or a "not configured" card. */
 export class DevelopPage extends AppShell {
@@ -28,5 +33,13 @@ export class DevelopPage extends AppShell {
 
   async open() {
     await this.goto("/develop");
+  }
+
+  /** The iframe embeds Langflow from the given gateway host. */
+  async expectEmbeddedFrom(url: string) {
+    await expect(this.iframe).toHaveAttribute(
+      "src",
+      new RegExp(`^${escapeRegExp(url)}`)
+    );
   }
 }
