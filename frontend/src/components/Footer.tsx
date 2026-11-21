@@ -11,7 +11,7 @@ export default function Footer({ compact = false }: { compact?: boolean }) {
         <p>
           &copy;{" "}
           <span suppressHydrationWarning>{new Date().getFullYear()}</span>{" "}
-          InfraCloud Technologies. All rights reserved.
+          Improving. Licensed under Apache-2.0.
         </p>
       </div>
     </footer>

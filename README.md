@@ -11,9 +11,22 @@ It onboards your clusters and deploys inference engines, vector databases and no
 Every one of them gets an identity-protected endpoint, a chat surface and a spend meter,
 without hand-writing a values file or a route again.
 
-<!-- Screenshot: drop a picture of the UI at docs/images/ui.png and uncomment.
-![The platform UI](docs/images/ui.png)
--->
+![The platform dashboard](docs/images/ui-home.png)
+
+<details>
+<summary>More of the UI</summary>
+
+![The model catalog](docs/images/ui-model-catalog.png)
+
+![The model registry](docs/images/ui-model-registry.png)
+
+</details>
+
+## Demo
+
+[AI Hub Product Demo](https://www.youtube.com/watch?v=0BB2aSgnccY) walks through an earlier version of the UI,
+recorded before the platform moved to the improving organisation.
+The screenshots above show the current one.
 
 ## What it does
 
