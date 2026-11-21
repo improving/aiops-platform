@@ -33,14 +33,23 @@ updates:
       actions:
         patterns: ["*"]
 
+  # Base-image majors break the build more often than they help: Python 3.15
+  # has no psycopg2-binary wheel yet, and a new Node major moves the toolchain
+  # under the frontend. Propose them by hand, after a local build.
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /frontend
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
