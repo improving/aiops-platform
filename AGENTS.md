@@ -138,7 +138,7 @@ and `hack/chart-smoke.sh` checks the API, the realm and the login page through t
 The UI reads Grafana, Langflow and Jaeger URLs at runtime from `GET /v1alpha1/config/ui` (`backend/api/config.py`, backend env `GRAFANA_URL`, `LANGFLOW_URL`, `JAEGER_URL`),
 falling back to the build-time `NEXT_PUBLIC_*` values (`frontend/src/lib/runtimeConfig.ts`).
 `backend.hfCache.create` renders the `hf-cache` claim the GPU engine controllers mount by that fixed name (off by default).
-`viz.enabled` serves a static site of your own on `viz.<parentDomain>` and ships no image for it;
+`viz.enabled` serves the AI Factory Explorer (`ghcr.io/improving/ai-factory-explorer-oss`) on `viz.<parentDomain>`;
 its `viz.image.tag` is separate from `global.imageTag` and defaults to `main`.
 `charts/aiops-platform/test/values-gpu-node.yaml` is the fixture for a single GPU node that already carries cert-manager and a load balancer:
 never run `make gateway-up` against such a cluster, because it installs a second cert-manager.
