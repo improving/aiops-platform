@@ -5,11 +5,11 @@ description = "FastAPI control plane that deploys AI services on Kubernetes via 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.141.1,<0.142",
-    "uvicorn[standard]>=0.52.4,<0.53",
+    "fastapi>=0.141.1,<0.164",
+    "uvicorn[standard]>=0.52.4,<0.55",
     "pydantic>=2.13.5,<3",
-    "sqlalchemy>=2.0.52,<2.1",
-    "kubernetes>=36.0.3,<37",
+    "sqlalchemy>=2.0.52,<2.2",
+    "kubernetes>=36.0.3,<38",
     "apscheduler>=3.11.3,<4",
     "pyhelm3>=0.5.5,<0.6",
     "jinja2>=3.1.6,<4",
@@ -26,7 +26,7 @@ dev = [
     "pytest>=9.1.1,<10",
     "pytest-asyncio>=1.4.0,<2",
     "pytest-snapshot>=0.9.0,<1",
-    "ruff>=0.16.6,<0.17",
+    "ruff>=0.16.6,<0.18",
 ]
 
 [tool.uv]
