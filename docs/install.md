@@ -190,18 +190,34 @@ so a post-install and post-upgrade hook Job (`<release>-policy-check`) waits unt
 on the workloads policy and on Langflow's, and fails the release otherwise;
 `kubectl -n <namespace> get securitypolicy -o jsonpath='{.items[*].status.ancestors[0].conditions}'` shows the reason.
 
-## The AI Factory Explorer
+## An optional static site on its own host
 
-`viz.enabled=true` deploys the AI Factory Explorer
-(`ghcr.io/improving/ai-factory-explorer`, built from the `improving/ai-factory-explorer` repository)
-at `https://viz.<parent domain>`.
-The app is one static file served by unprivileged nginx: it has no backend, no database and no login,
+`viz.enabled=true` serves a static site at `https://viz.<parent domain>`.
+The site has no backend, no database and no login,
 and the gateway routes the host to its Service without a `SecurityPolicy`.
-`viz.image.tag` is the explorer's own tag (`main`, or the seven-character commit SHA its image workflow publishes);
-it is not `global.imageTag`, which belongs to the backend and the UI.
-Any image that serves its files on port 8080 as a non-root user can replace it through `viz.image.repository`,
-and the release fails at render time if that value is emptied.
-The chart defaults `viz.enabled` to `false`, so an install that does not need the explorer pulls no image.
+`viz.image.tag` is the site's own tag; it is not `global.imageTag`, which belongs to the backend and the UI.
+The chart ships no image: set `viz.image.repository` to one that serves its files on port 8080 as a non-root user
+(`nginxinc/nginx-unprivileged` is one), and the release fails at render time if you enable the feature without it.
+The chart defaults `viz.enabled` to `false`, so an install that does not use it pulls no image.
+
+### The AI Factory Explorer as that site
+
+The AI Factory Explorer (<https://github.com/improving/ai-factory-explorer>) is one HTML file in an nginx image,
+so it fits `viz` as it is.
+Its container package is private, because the organisation that publishes it keeps container packages private,
+so no anonymous cluster can pull it.
+Every release attaches the image as a tarball, which is the supported way to get one:
+
+```bash
+VERSION=v0.1.1
+curl -LO "https://github.com/improving/ai-factory-explorer/releases/download/${VERSION}/ai-factory-explorer-${VERSION}-image.tar.gz"
+docker load -i "ai-factory-explorer-${VERSION}-image.tar.gz"        # ai-factory-explorer:v0.1.1
+docker tag "ai-factory-explorer:${VERSION}" "$REGISTRY/ai-factory-explorer:${VERSION}"
+docker push "$REGISTRY/ai-factory-explorer:${VERSION}"
+```
+
+Then install with `--set viz.enabled=true --set viz.image.repository=$REGISTRY/ai-factory-explorer --set viz.image.tag=$VERSION`.
+The release also carries the same page as `ai-factory-explorer-<version>.html` for offline use.
 
 ## MCP servers and the proxy's outgoing connections
 
