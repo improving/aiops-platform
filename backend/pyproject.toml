@@ -5,7 +5,7 @@ description = "FastAPI control plane that deploys AI services on Kubernetes via 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.141.1,<0.164",
+    "fastapi>=0.141.1,<0.166",
     "uvicorn[standard]>=0.52.4,<0.55",
     "pydantic>=2.13.5,<3",
     "sqlalchemy>=2.0.52,<2.2",
