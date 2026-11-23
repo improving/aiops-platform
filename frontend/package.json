@@ -16,11 +16,11 @@
   "dependencies": {
     "@ai-sdk/mcp": "2.0.101",
     "@ai-sdk/openai-compatible": "3.0.93",
-    "@ai-sdk/react": "4.0.180",
+    "@ai-sdk/react": "4.0.181",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-icons": "^1.3.2",
     "@radix-ui/react-toast": "^1.3.1",
-    "ai": "7.0.176",
+    "ai": "7.0.177",
     "axios": "^1.21.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
